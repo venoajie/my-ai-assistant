@@ -1,0 +1,94 @@
+# ai_assistant/config.py
+
+import os
+import yaml
+from pathlib import Path
+from typing import Dict, Any, Optional, List
+from pydantic import BaseModel, Field
+from . import default_config
+
+# --- Pydantic Models for Type-Safe Configuration ---
+
+
+class ModelSelectionConfig(BaseModel):
+    planning: str
+    synthesis: str
+    
+class GeneralConfig(BaseModel):
+    personas_directory: str
+    sessions_directory: str
+
+class ContextOptimizerConfig(BaseModel):
+    max_tokens: int
+
+class GitToolConfig(BaseModel):
+    branch_prefix: str
+
+class ToolsConfig(BaseModel):
+    git: GitToolConfig
+
+class DeepSeekDiscountConfig(BaseModel):
+    start_hour: int
+    start_minute: int
+    end_hour: int
+    end_minute: int
+
+class GenerationParams(BaseModel):
+    temperature: float
+    topP: Optional[float] = None
+    topK: Optional[int] = None
+
+class GenerationConfig(BaseModel):
+    planning: GenerationParams
+    synthesis: GenerationParams
+
+class ProviderConfig(BaseModel):
+    api_key_env: str
+    models: List[str]
+    api_endpoint: Optional[str] = None
+    api_endpoint_template: Optional[str] = None
+
+class AIConfig(BaseModel):
+    model_selection: ModelSelectionConfig
+    default_provider: str
+    general: GeneralConfig
+    context_optimizer: ContextOptimizerConfig
+    tools: ToolsConfig
+    deepseek_discount: DeepSeekDiscountConfig
+    generation_params: GenerationConfig
+    providers: Dict[str, ProviderConfig]
+
+# --- Configuration Loading Logic (unchanged) ---
+def load_ai_settings() -> AIConfig:
+    """Loads and merges config from package defaults, user config, and project config"""
+    # 1. Load package defaults
+    config_data = yaml.safe_load(default_config.DEFAULT_CONFIG)
+    
+    # 2. Load user config overrides
+    user_config_path = Path.home() / ".config" / "ai_assistant" / "config.yml"
+    if user_config_path.exists():
+        with open(user_config_path, 'r') as f:
+            user_config = yaml.safe_load(f)
+        config_data = deep_merge(config_data, user_config)
+    
+    # 3. Load project config overrides
+    project_config_path = Path.cwd() / ".ai_config.yml"
+    if project_config_path.exists():
+        with open(project_config_path, 'r') as f:
+            project_config = yaml.safe_load(f)
+        config_data = deep_merge(config_data, project_config)
+    
+    return AIConfig.model_validate(config_data)
+
+def deep_merge(base: Dict, update: Dict) -> Dict:
+    """Deep merge two dictionaries"""
+    for key, value in update.items():
+        if isinstance(value, dict) and key in base and isinstance(base[key], dict):
+            base[key] = deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+# --- Global Singleton Instance ---
+ai_settings = load_ai_settings()

@@ -1,0 +1,40 @@
+<!-- FILENAME: ai_assistant/default_config.yml -->
+model_selection:
+  planning: "deepseek-coder"
+  synthesis: "gemini-2.5-pro"
+default_provider: "gemini"
+general:
+  personas_directory: "personas"
+  sessions_directory: ".ai_sessions"
+context_optimizer:
+  max_tokens: 8000
+tools:
+  git:
+    branch_prefix: "ai"
+deepseek_discount:
+  start_hour: 16
+  start_minute: 30
+  end_hour: 0
+  end_minute: 30
+generation_params:
+  planning:
+    temperature: 0.05
+    max_tokens: 512
+  synthesis:
+    temperature: 0.015
+    topP: 0.95
+    topK: 40
+    max_tokens: 2048
+providers:
+  gemini:
+    api_key_env: "GEMINI_API_KEY"
+    api_endpoint_template: "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    models:
+      - "gemini-2.5-pro"
+  deepseek:
+    api_key_env: "DEEPSEEK_API_KEY"
+    api_endpoint: "https://api.deepseek.com/chat/completions"
+    models:
+      - "deepseek-reasoner"
+      - "deepseek-coder"
+      - "deepseek-chat"
