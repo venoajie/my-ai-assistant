@@ -5,11 +5,9 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
-from . import default_config
+from importlib import resources
 
 # --- Pydantic Models for Type-Safe Configuration ---
-
-
 class ModelSelectionConfig(BaseModel):
     planning: str
     synthesis: str
@@ -58,11 +56,18 @@ class AIConfig(BaseModel):
     generation_params: GenerationConfig
     providers: Dict[str, ProviderConfig]
 
-# --- Configuration Loading Logic (unchanged) ---
+
+# --- Configuration Loading Logic
 def load_ai_settings() -> AIConfig:
     """Loads and merges config from package defaults, user config, and project config"""
-    # 1. Load package defaults
-    config_data = yaml.safe_load(default_config.DEFAULT_CONFIG)
+    # 1. Load package defaults using the correct resource loading mechanism
+    try:
+        default_config_text = resources.files('ai_assistant').joinpath('default_config.yml').read_text(encoding='utf-8')
+        config_data = yaml.safe_load(default_config_text)
+    except (FileNotFoundError, yaml.YAMLError) as e:
+        print(f"FATAL: Could not load or parse the default package configuration. Error: {e}")
+        # This is a fatal error, as the application cannot run without its base config.
+        exit(1)
     
     # 2. Load user config overrides
     user_config_path = Path.home() / ".config" / "ai_assistant" / "config.yml"

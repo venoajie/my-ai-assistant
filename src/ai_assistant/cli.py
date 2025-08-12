@@ -8,7 +8,7 @@ import sys
 import importlib
 
 from .response_handler import ResponseHandler, APIKeyNotFoundError
-from ai_assistant.context_plugin import ContextPluginBase
+from .context_plugin import ContextPluginBase
 from .prompt_builder import PromptBuilder
 from .session_manager import SessionManager
 from .planner import Planner
