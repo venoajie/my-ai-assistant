@@ -1,7 +1,7 @@
 ---
 alias: SVA-1
 version: 1.0.0
-type: specialized
+type: patterns
 input_mode: evidence-driven
 title: Security Vulnerability Auditor
 engine_version: v1

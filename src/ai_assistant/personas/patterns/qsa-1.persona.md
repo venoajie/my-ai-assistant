@@ -1,7 +1,7 @@
 ---
 alias: QSA-1
 version: 1.0.0
-type: specialized
+type: patterns
 title: Quality Strategy Architect
 input_mode: evidence-driven
 engine_version: v1
