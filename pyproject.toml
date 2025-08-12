@@ -4,15 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "my-ai-assistant"
-version = "1.1.1"
+version = "1.1.2"
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "requests",
-    "pyyaml",
-    "pydantic>=2.0"
-]
+      "aiohttp",
+      "requests",
+      "pyyaml",
+      "pydantic>=2.0",
+      ]
 
 [project.scripts]
 ai = "ai_assistant.cli:main"

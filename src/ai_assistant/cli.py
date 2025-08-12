@@ -2,6 +2,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import asyncio
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import sys
@@ -71,7 +72,7 @@ def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBas
         print(f"   - ❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}", file=sys.stderr)
         return None
 
-def main():
+async def async_main():
     
     try:
         ResponseHandler().check_api_keys()
@@ -116,13 +117,25 @@ def main():
         history = session_manager.load_session(session_id) or []
     
     if args.interactive:
-        run_interactive_session(history, session_id, args.persona, args.autonomous, args.files)
+        run_interactive_session(
+            history, 
+            session_id, 
+            args.persona, 
+            args.autonomous, 
+            args.files,
+            )
     else:
         if not query.strip() and not args.files:
             parser.error("The 'query' argument is required in one-shot mode.")
-        run_one_shot(query, history, session_id, args.persona, args.autonomous, args.files)
+        run_one_shot(
+            query, 
+            history, 
+            session_id,
+            args.persona, 
+            args.autonomous, 
+            args.files,
+            )
 
-# ... (run_one_shot, run_interactive_session, orchestrate_agent_run functions remain unchanged) ...
 
 def run_one_shot(
     query: str,
@@ -147,7 +160,14 @@ def run_one_shot(
         SessionManager().save_session(session_id, history)
         print(f"💾 Session {session_id} saved.")
 
-def run_interactive_session(history: List, session_id: str, persona_alias: str, is_autonomous: bool, files: Optional[List[str]] = None):
+def run_interactive_session(
+    history: List, 
+    session_id: str, 
+    persona_alias: str, 
+    is_autonomous: bool, 
+    files: Optional[List[str]] = None,
+    ):
+    
     print("Entering interactive mode. Type 'exit' or 'quit' to end the session.")
     if persona_alias: print(f"👤 Embodying persona: {persona_alias}")
     if is_autonomous: print("🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨")
@@ -259,4 +279,8 @@ def orchestrate_agent_run(
     return final_response
 
 if __name__ == "__main__":
-    main()
+
+    try:
+        asyncio.run(async_main())
+    except KeyboardInterrupt:
+        print("\n👋 Exiting.")
