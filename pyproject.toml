@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "my-ai-assistant"
-version = "1.0.7"
+version = "1.0.9"
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.9"
