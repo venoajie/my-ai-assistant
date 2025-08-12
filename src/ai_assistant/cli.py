@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import sys
 import importlib
+from importlib import metadata
 
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from .context_plugin import ContextPluginBase
@@ -77,6 +78,12 @@ def main():
     except APIKeyNotFoundError as e:
         print(f"\n❌ CONFIGURATION ERROR: {e}", file=sys.stderr)
         sys.exit(1)
+    
+    parser.add_argument(
+        '--version',
+        action='version',
+        version=f'%(prog)s {metadata.version("my-ai-assistant")}'
+    )
     
     parser = argparse.ArgumentParser(description='AI Assistant - Interactive Agent')
     parser.add_argument('query', nargs='*', help='Your initial question or request for the agent. Required for one-shot mode.')
