@@ -16,36 +16,21 @@ class TradingContextPlugin(ContextPluginBase):
         self.project_root = project_root
         self.services_map = self._build_services_map()
     
-    def get_context(self, query: str, files: List[str]) -> str:
-        """
-        Analyzes the query for trading-related keywords and returns a
-        context string if a match is found.
-        """
-        trading_keywords = [
-            "order", "position", "risk", "pnl", "strategy", "market", 
-            "price", "volume", "execution", "latency", "backtest", 
-            "exchange", "receiver", "executor", "distributor"
-        ]
-        
-        if any(kw in query.lower() for kw in trading_keywords):
-            return """
-<TradingDomainKnowledge>
-System Architecture:
-- Receiver: Manages WebSocket connections to exchanges (e.g., Binance, Deribit) for raw data ingestion.
-- Distributor: Processes real-time data, aggregates it into OHLCV bars, and distributes to other services.
-- Executor: Handles order lifecycle management (creation, submission, cancellation) and strategy execution.
-- Analyzer: Performs technical analysis, generates trading signals, and runs backtests.
-- Janitor: Responsible for data maintenance, cleanup, and archival.
 
-Key Concepts:
-- Data Flow: Market data flows unidirectionally: Receiver → Distributor → Executor/Analyzer.
-- Risk Management: Integrated at the Executor level to check margin and position limits before placing orders.
-- Position Tracking: Real-time PnL and position state are maintained across all active strategies.
-- Multi-Exchange: The system uses a unified interface to abstract away differences between exchanges.
-</TradingDomainKnowledge>
-"""
-        return ""
-    
+        self.project_root = project_root
+
+    def get_context(self, query: str, files: List[str]) -> str:
+        context = ""
+        trading_config_path = self.project_root / "trading-config.yml"
+        
+        if trading_config_path.exists():
+            context += "<TradingContext>\n"
+            context += f"Found trading configuration at: {trading_config_path}\n"
+            # You could even read and inject parts of the config here
+            context += "</TradingContext>\n\n"
+        
+        return context
+        
     def _build_services_map(self) -> Dict:
         """
         Loads service definitions from the project's .ai_config.yml file.

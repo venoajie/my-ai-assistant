@@ -18,11 +18,13 @@ from .tools import TOOL_REGISTRY
 from .persona_loader import PersonaLoader
 from .config import ai_settings
 
+
 def build_file_context(files: List[str]) -> str:
     """Reads multiple files and formats them into a single context string."""
     if not files:
         return ""
     
+    MAX_FILE_SIZE = 5 * 1024 * 1024 # 5MB
     context_str = ""
     print("📎 Attaching files to context...")
     for file_path_str in files:
@@ -30,6 +32,13 @@ def build_file_context(files: List[str]) -> str:
         if not path.exists():
             print(f"   - ⚠️  Warning: File not found, skipping: {file_path_str}")
             continue
+        
+        # --- ADD THIS CHECK ---
+        if path.stat().st_size > MAX_FILE_SIZE:
+            print(f"   - ⚠️  Warning: File exceeds 5MB limit, skipping: {file_path_str}")
+            continue
+        # --- END OF CHECK ---
+
         try:
             content = path.read_text(encoding='utf-8')
             context_str += f"<AttachedFile path=\"{file_path_str}\">\n{content}\n</AttachedFile>\n\n"
@@ -39,24 +48,34 @@ def build_file_context(files: List[str]) -> str:
             
     return context_str
 
+def list_available_plugins() -> List[str]:
+    """Dynamically discovers available plugins via entry points."""
+    discovered_plugins = []
+    # Use importlib.metadata to find registered entry points
+    entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
+    for entry in entry_points:
+        discovered_plugins.append(entry.name)
+    return sorted(discovered_plugins)
+
+    
 def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBase]:
-    """Dynamically discovers and loads a context plugin."""
+    """Dynamically loads a context plugin using its registered entry point."""
     if not plugin_name:
         return None
 
+    print(f"🔌 Loading context plugin: {plugin_name}...")
     try:
-        module_name = f"plugins.{plugin_name.lower()}_plugin"
-        class_name = f"{plugin_name.capitalize()}ContextPlugin"
-        print(f"🔌 Loading context plugin: {plugin_name}...")
-        plugin_module = importlib.import_module(module_name)
-        plugin_class = getattr(plugin_module, class_name)
+        # Find the specific entry point by name
+        entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
+        plugin_entry = next((ep for ep in entry_points if ep.name == plugin_name.lower()), None)
+
+        if not plugin_entry:
+            print(f"   - ❌ Error: Plugin '{plugin_name}' is not a registered entry point.", file=sys.stderr)
+            return None
+
+        # Load the class from the entry point and instantiate it
+        plugin_class = plugin_entry.load()
         return plugin_class(project_root=Path.cwd())
-    except ImportError:
-        print(f"   - ❌ Error: Could not find plugin module for '{plugin_name}'.", file=sys.stderr)
-        return None
-    except AttributeError:
-        print(f"   - ❌ Error: Module for '{plugin_name}' found, but class '{class_name}' is missing.", file=sys.stderr)
-        return None
     except Exception as e:
         print(f"   - ❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}", file=sys.stderr)
         return None
@@ -70,7 +89,7 @@ def main():
 
 async def async_main():
     """The core asynchronous logic of the application."""
-    # UNCHANGED: Pre-flight check for API keys is critical.
+    # Pre-flight check for API keys is critical.
     try:
         ResponseHandler().check_api_keys()
     except APIKeyNotFoundError as e:
@@ -78,7 +97,8 @@ async def async_main():
         sys.exit(1)
     
     parser = argparse.ArgumentParser(description='AI Assistant - Interactive Agent')
-    parser.add_argument('--version', action='version', version=f'%(prog)s {metadata.version("my-ai-assistant")}')
+    parser.add_argument('--version', action='version', version=f'%(prog)s {metadata.version("my-ai-assistant")} (Config: v{ai_settings.config_version})')
+    parser.add_argument('--list-personas', action='store_true', help='List available personas')
     parser.add_argument('query', nargs='*', help='Your initial question or request for the agent. Required for one-shot mode.')
     parser.add_argument('-f', '--file', dest='files', action='append', help='Attach a file to the context. Can be used multiple times.')
     parser.add_argument('--persona', help='The alias of the persona to use (e.g., core/SA-1).')
@@ -87,9 +107,20 @@ async def async_main():
     parser.add_argument('--context', help='The name of the context plugin to use (e.g., Trading).')
     session_group = parser.add_mutually_exclusive_group()
     session_group.add_argument('--session', help='Continue an existing session by ID.')
-    session_group.add_argument('--new-session', action='store_true', help='Start a new session.')
+    session_group.add_argument('--new-session', action='store_true', help='Start a new session.')    
+    parser.add_argument('--list-plugins', action='store_true', help='List available context plugins')
+    
     args = parser.parse_args()
     
+    if args.list_plugins:
+        print("Available Context Plugins:")
+        plugins = list_available_plugins()
+        if not plugins:
+            print("  No plugins found.")
+        for p in plugins:
+            print(f"  - {p}")
+        sys.exit(0)
+        
     session_manager = SessionManager()
     session_id = args.session
     context_plugin = load_context_plugin(args.context)
@@ -99,7 +130,13 @@ async def async_main():
         print("   - ✅ Plugin loaded successfully.")
         context_str = context_plugin.get_context(query, args.files or [])
         query = context_str + query
-    
+        
+    if args.list_personas:
+        print("Built-in Personas:")
+        for p in PersonaLoader().list_builtin_personas():
+            print(f" - {p}")
+        sys.exit(0) 
+        
     history = []
     if args.new_session or (args.interactive and not args.session):
         session_id = session_manager.start_new_session()
