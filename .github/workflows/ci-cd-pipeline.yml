@@ -46,7 +46,7 @@ jobs:
       - name: Run Unit Tests
         run: python -m unittest discover tests
 
-  # This job builds and publishes the package to PyPI.
+  # This job builds and publishes the package to PyPI.#
   # It ONLY runs if the 'test-and-validate' job succeeds AND a new release tag is created.
   publish-to-pypi:
     name: Publish to PyPI
