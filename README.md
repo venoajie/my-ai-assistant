@@ -106,10 +106,6 @@ For example, to create a new persona `my-patterns/DBA-1`, you would create the f
 `~/.config/ai_assistant/personas/my-patterns/DBA-1.persona.md`
 
 The application will **always check your user directory first**, allowing you to override bundled personas or add your own without modifying the installed package.
-```
-
-
----
 
 ## Getting Started: A Step-by-Step Workflow
 
