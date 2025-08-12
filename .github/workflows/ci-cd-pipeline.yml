@@ -1,0 +1,79 @@
+# .github/workflows/ci-cd-pipeline.yml
+name: Python Package CI/CD
+
+# --- Trigger Conditions ---
+# This workflow runs on every push to the 'main' branch and on every pull request.
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# --- Job Definitions ---
+jobs:
+  # This job runs all tests and validation checks.
+  test-and-validate:
+    name: Test and Validate
+    # Run on the latest version of Ubuntu
+    runs-on: ubuntu-latest
+    # Define a matrix to test against multiple Python versions for compatibility
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      # 1. Check out the repository code
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      # 2. Set up the specified Python version from the matrix
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[test] # Install the package in editable mode with test extras
+
+      # 4. Run Persona Validation (CRITICAL STEP)
+      - name: Validate Persona Standards
+        run: python scripts/validate_personas.py
+
+      # 5. Run the main test suite (e.g., unittest)
+      - name: Run Unit Tests
+        run: python -m unittest discover tests
+
+  # This job builds and publishes the package to PyPI.
+  # It ONLY runs if the 'test-and-validate' job succeeds AND a new release tag is created.
+  publish-to-pypi:
+    name: Publish to PyPI
+    # This job depends on the successful completion of the test job
+    needs: test-and-validate
+    # This condition ensures the job only runs when a new tag starting with 'v' is pushed
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out the repository code
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      # 2. Set up Python for the build process
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # 3. Build the package
+      - name: Build package
+        run: python -m build
+
+      # 4. Publish the package to PyPI
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # This uses a secret token to authenticate with PyPI
+          password: ${{ secrets.PYPI_API_TOKEN }}

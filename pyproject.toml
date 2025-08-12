@@ -31,3 +31,9 @@ ai_assistant = [
     "personas/**/*.md",
     "personas/**/*.py"
 ]
+
+
+[project.optional-dependencies]
+test = [
+    "unittest-xml-reporting", 
+]
