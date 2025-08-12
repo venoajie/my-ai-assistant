@@ -23,7 +23,7 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["ai_assistant*", "plugins*"]
+include = ["ai_assistant*"]
 
 [tool.setuptools.package-data]
 ai_assistant = [
@@ -33,7 +33,7 @@ ai_assistant = [
 ]
 
 [project.entry-points."ai_assistant.context_plugins"]
-trading = "plugins.trading_plugin:TradingContextPlugin"
+trading = "ai_assistant.plugins.trading_plugin:TradingContextPlugin"
 
 [project.optional-dependencies]
 test = [

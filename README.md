@@ -30,6 +30,9 @@ cd my-ai-assistant
 
 # Install in editable mode
 pip install -e .
+
+# Install in experimental mode
+pip install git+https://github.com/venoajie/my-ai-assistance.git@develop
 ```
 
 ---

@@ -17,6 +17,7 @@ from .planner import Planner
 from .tools import TOOL_REGISTRY
 from .persona_loader import PersonaLoader
 from .config import ai_settings
+from .context_optimizer import ContextOptimizer
 
 
 def build_file_context(files: List[str]) -> str:
@@ -199,14 +200,26 @@ async def run_interactive_session(history: List, session_id: str, persona_alias:
             session_manager.save_session(session_id, history)
     print("👋 Exiting interactive session.")
 
-async def orchestrate_agent_run(query: str, history: List[Dict[str, Any]], persona_alias: Optional[str] = None, is_autonomous: bool = False):
+async def orchestrate_agent_run(
+    query: str, 
+    history: List[Dict[str, Any]], 
+    persona_alias: Optional[str] = None, 
+    is_autonomous: bool = False,
+    ):
+    
     persona_content = None
     if persona_alias:
         loader = PersonaLoader() 
         persona_content = loader.load_persona_content(persona_alias)
 
+    # Add this block
+    optimizer = ContextOptimizer()
+    optimized_query = optimizer.trim_to_limit(query) # Use trim_to_limit on the combined query/context
+    if len(optimized_query) < len(query):
+        print(f"ℹ️  Context has been truncated to fit the token limit.")
+
     planner = Planner()
-    plan = await planner.create_plan(query, history, persona_content)
+    plan = await planner.create_plan(optimized_query, history, persona_content)
 
     is_no_op_plan = not plan or all(not step.get("tool_name") for step in plan)
 
