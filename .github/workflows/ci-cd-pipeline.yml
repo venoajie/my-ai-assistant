@@ -33,10 +33,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[test]
-
+      
+      # 4. Run Persona Validation
       - name: Validate Persona Standards
-        run: python scripts/validate_personas.py
-
+        run: |
+          # Use the GITHUB_WORKSPACE variable to provide an absolute path to the config file.
+          # This is the robust way to handle paths in GitHub Actions.
+          python scripts/validate_personas.py --config ${{ github.workspace }}/persona_config.yml
+      
+      # 5. Run the main test suite (e.g., unittest)
       - name: Run Unit Tests
         run: python -m unittest discover tests
 

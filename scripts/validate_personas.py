@@ -4,6 +4,7 @@ import yaml
 import sys
 from pathlib import Path
 from typing import Dict, Any, List
+import argparse 
 
 # --- Third-party Imports ---
 # Ensure 'pydantic' is in your requirements.txt
@@ -92,6 +93,11 @@ def validate_persona_file(
 
 def main(config: Dict[str, Any]) -> int:
     """Main validation function."""
+    
+    if not config: # ADDED: A check for a valid config object
+        print(f"{RED}FATAL: Configuration object is empty or None. Cannot proceed.{NC}", file=sys.stderr)
+        return 1
+    
     active_stati = config.get("validation_rules", {}).get("active_stati", ["active"])
     persona_type_rules = config.get("persona_types", {})
     body_schemas_by_type = config.get("body_schemas_by_type", {})
@@ -144,6 +150,22 @@ def main(config: Dict[str, Any]) -> int:
     return error_count
 
 if __name__ == "__main__":
-    loaded_config = load_config(CONFIG_FILE)
+    
+    parser = argparse.ArgumentParser(description="Validate persona files based on a config.")
+    parser.add_argument(
+        '--config',
+        type=Path,
+        default=ROOT_DIR / "persona_config.yml",
+        help="Path to the persona configuration YAML file."
+    )
+    args = parser.parse_args()
+
+    config_path = args.config.resolve()
+    if not config_path.exists():
+        print(f"{RED}FATAL: Config file not found at specified path: {config_path}{NC}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"{BLUE}--- Loading config from: {config_path} ---{NC}")
+    loaded_config = load_config(config_path)
     final_error_count = main(loaded_config)
     sys.exit(1 if final_error_count > 0 else 0)
