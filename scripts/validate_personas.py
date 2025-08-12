@@ -82,7 +82,15 @@ def validate_persona_file(
         )
         # Parse the body and validate it against the dynamic model.
         parsed_body = parse_persona_body(body)
+        
+        # --- CHECK ---
+        for section_name, section_content in parsed_body.items():
+            if "[REFACTOR_NOTE:" in section_content:
+                return False, f"Body Content: Section '{section_name}' contains a placeholder REFACTOR_NOTE."
+        # --- END OF CHECK ---
+    
         PersonaBodyModel(**parsed_body)
+        
     except ValidationError as e:
         # Pydantic provides detailed, human-readable error messages.
         return False, f"Body Schema: Validation failed for type '{persona_type}'.\n       └─ {str(e).replace('__root__', '')}"
@@ -118,20 +126,31 @@ def main(config: Dict[str, Any]) -> int:
     for persona_path in all_persona_paths:
         relative_path = persona_path.relative_to(ROOT_DIR)
         try:
+            # 1. Read the file and create 'parts' FIRST.
             content = persona_path.read_text(encoding="utf-8")
             parts = content.split("---")
             if len(parts) < 3:
                 raise ValueError("File does not contain valid YAML frontmatter.")
 
+            # 2. Now that 'parts' exists, parse the frontmatter.
             frontmatter_data = yaml.safe_load(parts[1])
             if not isinstance(frontmatter_data, dict):
                 raise ValueError("YAML frontmatter is not a valid dictionary.")
 
+            # 3. Perform the filename vs. alias check.
+            expected_alias = persona_path.stem.replace('.persona', '')
+            actual_alias = frontmatter_data.get("alias")
+            # Compare both as lowercase to enforce the standard but allow flexibility in the file.
+            if actual_alias.lower() != expected_alias.lower():
+                raise ValueError(f"Filename-Alias Mismatch: File is '{expected_alias}.persona.md' but alias is '{actual_alias}'.")
+
+            # 4. Perform the status check.
             if frontmatter_data.get("status") not in active_stati:
                 print(f"{GRAY}[SKIP]{NC} {relative_path} (status: '{frontmatter_data.get('status')}')")
                 skipped_count += 1
                 continue
 
+            # 5. Perform the full validation.
             persona_body = "---".join(parts[2:])
             is_valid, message = validate_persona_file(
                 frontmatter_data, persona_body, persona_type_rules, body_schemas_by_type
@@ -141,7 +160,8 @@ def main(config: Dict[str, Any]) -> int:
                 print(f"{GREEN}[PASS]{NC} {relative_path}")
                 success_count += 1
             else:
-                raise ValueError(message)
+                raise ValueError(message) # Raise the specific error from the validator
+
         except (ValueError, yaml.YAMLError) as e:
             print(f"{RED}[FAIL]{NC} {relative_path}\n     └─ {YELLOW}Reason: {e}{NC}")
             error_count += 1

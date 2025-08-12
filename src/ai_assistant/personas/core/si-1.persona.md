@@ -1,7 +1,7 @@
 ---
 alias: SI-1
 version: 4.1.0
-type: specialized
+type: core
 title: Session Initiator
 status: active
 inherits_from: bcaa-1

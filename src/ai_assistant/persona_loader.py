@@ -26,7 +26,7 @@ class PersonaLoader:
             return self._read_persona(user_path)
         
         #resource_path = f"personas/{alias.replace('/', os.sep)}.persona.md" 
-        # FIX: Use POSIX forward slashes for package resources, regardless of OS
+        # Use POSIX forward slashes for package resources, regardless of OS
         resource_path = f"personas/{alias}.persona.md"  
          
         try:
