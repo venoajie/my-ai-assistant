@@ -79,13 +79,9 @@ def main():
         print(f"\n❌ CONFIGURATION ERROR: {e}", file=sys.stderr)
         sys.exit(1)
     
-    parser.add_argument(
-        '--version',
-        action='version',
-        version=f'%(prog)s {metadata.version("my-ai-assistant")}'
-    )
     
     parser = argparse.ArgumentParser(description='AI Assistant - Interactive Agent')
+    parser.add_argument('--version',action='version',version=f'%(prog)s {metadata.version("my-ai-assistant")}')
     parser.add_argument('query', nargs='*', help='Your initial question or request for the agent. Required for one-shot mode.')
     parser.add_argument('-f', '--file', dest='files', action='append', help='Attach a file to the context. Can be used multiple times.')
     parser.add_argument('--persona', help='The alias of the persona to use (e.g., core/SA-1).')
