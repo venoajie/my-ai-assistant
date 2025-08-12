@@ -21,6 +21,8 @@ persona_types:
       - "version"
       - "type"
       - "title"
+  utility:
+    required_keys: [ "alias", "version", "type", "title" ]
 
 # Defines the canonical schema for the body of a persona file, based on its type.
 # Types with an empty list [] will skip body validation.
@@ -40,6 +42,7 @@ body_schemas_by_type:
     - "PRIMARY_DIRECTIVE"
     - "OPERATIONAL_PROTOCOL"
     - "OUTPUT_CONTRACT"
+  utility: []
 
 # Defines which persona statuses the validation script should process.
 validation_rules:

@@ -1,7 +1,7 @@
 ---
 alias: PBA-1
 version: 1.0.0
-type: specialized
+type: patterns
 title: Performance Bottleneck Analyst
 input_mode: evidence-driven
 engine_version: v1
