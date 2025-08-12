@@ -1,0 +1,47 @@
+# persona_config.yml
+# This file is the single source of truth for persona architectural rules.
+
+# Defines valid persona types and their validation rules for the frontmatter.
+persona_types:
+  core:
+    required_keys:
+      - "alias"
+      - "version"
+      - "type"
+      - "title"
+  patterns:
+    required_keys:
+      - "alias"
+      - "version"
+      - "type"
+      - "title"
+  domains:
+    required_keys:
+      - "alias"
+      - "version"
+      - "type"
+      - "title"
+
+# Defines the canonical schema for the body of a persona file, based on its type.
+# Types with an empty list [] will skip body validation.
+body_schemas_by_type:
+  core:
+    - "CORE_PHILOSOPHY"
+    - "PRIMARY_DIRECTIVE"
+    - "OPERATIONAL_PROTOCOL"
+    - "OUTPUT_CONTRACT"
+  patterns:
+    - "CORE_PHILOSOPHY"
+    - "PRIMARY_DIRECTIVE"
+    - "OPERATIONAL_PROTOCOL"
+    - "OUTPUT_CONTRACT"
+  domains:
+    - "CORE_PHILOSOPHY"
+    - "PRIMARY_DIRECTIVE"
+    - "OPERATIONAL_PROTOCOL"
+    - "OUTPUT_CONTRACT"
+
+# Defines which persona statuses the validation script should process.
+validation_rules:
+  active_stati:
+    - "active"
