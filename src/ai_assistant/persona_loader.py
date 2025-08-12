@@ -3,6 +3,7 @@ import os
 import yaml
 from pathlib import Path
 from typing import Optional
+# MODIFIED: 'resources' is the only import needed from importlib
 from importlib import resources
 
 class PersonaLoader:
@@ -16,19 +17,24 @@ class PersonaLoader:
         if user_path.exists():
             return self._read_persona(user_path)
         
-        # Check package resources
+        # MODIFIED: Use the modern `files()` API to correctly handle nested directories.
+        # This is the definitive fix for the ValueError.
         resource_path = f"personas/{alias}.persona.md"
         try:
-            with resources.open_text("ai_assistant", resource_path) as f:
-                return f.read()
+            # This returns a traversable object for the package data
+            traversable = resources.files("ai_assistant").joinpath(resource_path)
+            return traversable.read_text(encoding="utf-8")
         except FileNotFoundError:
             return None
 
     def _read_persona(self, path: Path) -> str:
         try:
             content = path.read_text(encoding="utf-8")
-            parts = content.split("---")
-            return "---".join(parts[2:]).strip() if len(parts) >= 3 else content
+            # This logic to strip YAML frontmatter is incorrect. It should be removed
+            # as the persona content is the entire file.
+            # parts = content.split("---")
+            # return "---".join(parts[2:]).strip() if len(parts) >= 3 else content
+            return content
         except Exception as e:
             print(f"Error reading persona: {e}")
             return None
