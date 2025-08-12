@@ -1,0 +1,82 @@
+# .github/workflows/ci-cd-pipeline.yml
+name: Python Package CI/CD
+
+# --- Trigger Conditions (MODIFIED) ---
+# This workflow now runs on pushes and PRs to BOTH 'develop' and 'main'
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+# --- Job Definitions ---
+jobs:
+  # This job runs all tests and validation checks. It runs for both branches.
+  test-and-validate:
+    name: Test and Validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      # (No changes to the steps in this job)
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[test]
+      
+      # 4. Run Persona Validation
+      - name: Validate Persona Standards
+        run: |
+          # Use the GITHUB_WORKSPACE variable to provide an absolute path to the config file.
+          # This is the robust way to handle paths in GitHub Actions.
+          python scripts/validate_personas.py --config ${{ github.workspace }}/persona_config.yml
+      
+      # 5. Run the main test suite (e.g., unittest)
+      - name: Run Unit Tests
+        run: python -m unittest discover tests
+
+  # This job builds and publishes the package to PyPI.
+  # It has a more specific trigger condition now.
+  publish-to-pypi:
+    name: Publish to PyPI
+    needs: test-and-validate
+    
+    # --- Trigger Condition (MODIFIED) ---
+    # This job ONLY runs if:
+    # 1. The event is a 'push' (not a PR).
+    # 2. The push is to the 'main' branch.
+    # 3. The push includes a new tag that starts with 'v'.
+    if: |
+      github.event_name == 'push' && 
+      github.ref_type == 'tag' &&
+      startsWith(github.ref, 'refs/tags/v')
+
+    runs-on: ubuntu-latest
+
+    steps:
+      # (No changes to the steps in this job)
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build package
+        run: python -m build
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}

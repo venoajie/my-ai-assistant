@@ -11,7 +11,7 @@ class SessionManager:
     
     def __init__(self, session_dir: Path = None):
         # Use Path.cwd() to ensure the path is relative to the project root, not user's home
-        self.session_dir = session_dir or Path.cwd() / ai_settings.general.sessions_directory
+        self.session_dir = Path(ai_settings.general.sessions_directory).resolve()
         self.session_dir.mkdir(parents=True, exist_ok=True)
         
     def _get_session_path(self, session_id: str) -> Path:

@@ -1,7 +1,7 @@
 ---
 alias: DPA-1
 version: 1.0.0
-type: specialized
+type: core
 input_mode: evidence-driven
 title: Deployment Process Architect
 engine_version: v1

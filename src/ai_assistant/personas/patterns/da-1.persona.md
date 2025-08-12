@@ -1,7 +1,7 @@
 ---
 alias: DA-1
 version: 1.0.0
-type: specialized
+type: patterns
 title: Debugging Analyst
 engine_version: v1
 inherits_from: BTAA-1

@@ -4,15 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "my-ai-assistant"
-version = "1.1.1"
+version = "1.1.5"
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "requests",
-    "pyyaml",
-    "pydantic>=2.0"
-]
+      "aiohttp",
+      "requests",
+      "pyyaml",
+      "pydantic>=2.0",
+      ]
 
 [project.scripts]
 ai = "ai_assistant.cli:main"
@@ -29,4 +30,12 @@ ai_assistant = [
     "default_config.yml",
     "personas/**/*.md",
     "personas/**/*.py"
+]
+
+[project.entry-points."ai_assistant.context_plugins"]
+trading = "plugins.trading_plugin:TradingContextPlugin"
+
+[project.optional-dependencies]
+test = [
+    "unittest-xml-reporting", 
 ]

@@ -47,6 +47,7 @@ class ProviderConfig(BaseModel):
     api_endpoint_template: Optional[str] = None
 
 class AIConfig(BaseModel):
+    config_version: str
     model_selection: ModelSelectionConfig
     default_provider: str
     general: GeneralConfig

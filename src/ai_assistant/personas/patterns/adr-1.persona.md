@@ -1,7 +1,7 @@
 ---
 alias: ADR-1
 version: 1.0.0
-type: specialized
+type: patterns
 input_mode: evidence-driven
 title: Architectural Decision Analyst
 engine_version: v1

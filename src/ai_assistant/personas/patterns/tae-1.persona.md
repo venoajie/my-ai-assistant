@@ -1,7 +1,7 @@
 ---
 alias: TAE-1
 version: 1.0.0
-type: specialized
+type: patterns
 title: Test Automation Engineer
 input_mode: evidence-driven
 engine_version: v1

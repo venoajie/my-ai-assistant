@@ -1,4 +1,4 @@
-# ai_assistant/planner.py
+# src/ai_assistant/planner.py (Corrected and Complete)
 import json
 import re
 from typing import List, Dict, Any, Optional
@@ -13,7 +13,8 @@ class Planner:
         self.prompt_builder = PromptBuilder()
         self.response_handler = ResponseHandler()
 
-    def create_plan(
+    # MODIFIED: Converted to an async method
+    async def create_plan(
         self, query: str, history: List[Dict[str, Any]] = None, persona_content: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         print("🤔 Generating execution plan...")
@@ -26,7 +27,8 @@ class Planner:
         if "deepseek" in planning_model:
             planning_generation_config["response_format"] = {"type": "json_object"}
 
-        response_text = self.response_handler.call_api(
+        # MODIFIED: Added 'await' to correctly call the async function
+        response_text = await self.response_handler.call_api(
             prompt,
             model=planning_model,
             generation_config=planning_generation_config
@@ -47,6 +49,7 @@ class Planner:
     def _extract_and_validate_plan(self, response_text: str) -> List[Dict[str, Any]]:
         """Extracts, sanitizes, repairs, and validates a JSON plan from raw LLM text."""
         
+        # This function remains synchronous as it performs CPU-bound string operations.
         response_text = response_text.strip()
         if len(response_text) > 50000:
             print("⚠️  Warning: LLM response exceeds maximum length and will be truncated.")
@@ -82,7 +85,6 @@ class Planner:
         return None
 
     def _extract_from_json_key(self, text: str) -> Optional[List[Dict[str, Any]]]:
-        """Extracts a plan if it's nested inside a JSON object under a specific key."""
         try:
             data = json.loads(text)
             if isinstance(data, dict):
@@ -107,7 +109,6 @@ class Planner:
         return None
 
     def _intelligent_repair(self, text: str) -> Optional[List[Dict[str, Any]]]:
-        """Attempts to repair common LLM formatting errors."""
         if text.startswith('{'):
             try:
                 data = json.loads(text)
@@ -123,7 +124,6 @@ class Planner:
         return None
 
     def _manual_json_repair(self, text: str) -> Optional[List[Dict[str, Any]]]:
-        """A state-machine-based parser to extract JSON objects from malformed text."""
         objects = []
         buffer = ""
         brace_count = 0
@@ -168,7 +168,6 @@ class Planner:
             if not isinstance(step, dict): return False
             if not required_keys.issubset(step.keys()): return False
             if step.get("tool_name") is not None and not isinstance(step.get("tool_name"), str): return False
-            # MODIFIED: Allow 'args' to be a dictionary OR None.
             if not (isinstance(step.get("args"), dict) or step.get("args") is None): return False
             if not isinstance(step.get("thought"), str): return False
             tool_name = step["tool_name"]

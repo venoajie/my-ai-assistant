@@ -1,7 +1,7 @@
 ---
 alias: QSA-1
 version: 1.0.0
-type: specialized
+type: patterns
 title: Quality Strategy Architect
 input_mode: evidence-driven
 engine_version: v1
@@ -42,5 +42,4 @@ To analyze a complete system architecture and codebase structure, and then produ
     </Step>
 </SECTION:OPERATIONAL_PROTOCOL>
 <SECTION:OUTPUT_CONTRACT>
-[REFACTOR_NOTE: This section was missing and requires manual review.]
 </SECTION:OUTPUT_CONTRACT>

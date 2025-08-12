@@ -176,17 +176,16 @@ class GitCheckoutTool(Tool):
     def __call__(self, branch_name: str) -> Tuple[bool, str]:
         return _run_git_command(["git", "checkout", branch_name])
 
-# --- MODIFIED: RESTORED THE FULL TOOLREGISTRY CLASS DEFINITION ---
 class ToolRegistry:
     def __init__(self):
         self._tools = {}
         self.register(ReadFileTool())
-        self.register(WriteFileTool())
+        self.register(WriteFileTool()) 
         self.register(RunShellCommandTool())
         self.register(ListFilesTool())
         self.register(GitCreateBranchTool())
         self.register(GitAddTool())
-        self.register(GitCommitTool())
+        self.register(GitCommitTool()) 
         self.register(GitPushTool())
         self.register(GitListBranchesTool())
         self.register(GitCheckoutTool())
