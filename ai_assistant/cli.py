@@ -4,7 +4,8 @@
 import argparse
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-import sys 
+import sys
+import importlib
 
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from ai_assistant.context_plugin import ContextPluginBase
@@ -36,6 +37,39 @@ def build_file_context(files: List[str]) -> str:
             
     return context_str
 
+def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBase]:
+    """Dynamically discovers and loads a context plugin."""
+    if not plugin_name:
+        return None
+
+    try:
+        # Standardize plugin module and class names
+        module_name = f"plugins.{plugin_name.lower()}_plugin"
+        class_name = f"{plugin_name.capitalize()}ContextPlugin"
+        
+        print(f"🔌 Loading context plugin: {plugin_name}...")
+        
+        # Dynamically import the module
+        plugin_module = importlib.import_module(module_name)
+        
+        # Get the plugin class from the module
+        plugin_class = getattr(plugin_module, class_name)
+        
+        # Instantiate and return the plugin
+        # Pass the project root for context-aware plugins
+        return plugin_class(project_root=Path.cwd())
+
+    except ImportError:
+        print(f"   - ❌ Error: Could not find plugin module for '{plugin_name}'. "
+              f"Ensure 'plugins/{plugin_name.lower()}_plugin.py' exists.", file=sys.stderr)
+        return None
+    except AttributeError:
+        print(f"   - ❌ Error: Module for '{plugin_name}' found, but class '{class_name}' is missing.", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"   - ❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}", file=sys.stderr)
+        return None
+
 def main():
     
     try:
@@ -44,10 +78,10 @@ def main():
         print(f"\n❌ CONFIGURATION ERROR: {e}", file=sys.stderr)
         sys.exit(1)
     
-    parser = argparse.ArgumentParser(description='Trading AI Assistant - Interactive Agent')
+    parser = argparse.ArgumentParser(description='AI Assistant - Interactive Agent')
     parser.add_argument('query', nargs='*', help='Your initial question or request for the agent. Required for one-shot mode.')
     parser.add_argument('-f', '--file', dest='files', action='append', help='Attach a file to the context. Can be used multiple times.')
-    parser.add_argument('--persona', help='The alias of the PEL persona to use (e.g., CSA-1).')
+    parser.add_argument('--persona', help='The alias of the persona to use (e.g., core/SA-1).')
     parser.add_argument('--autonomous', action='store_true', help='Run in autonomous mode.')
     parser.add_argument('--interactive', action='store_true', help='Start an interactive chat session.')
     parser.add_argument('--context', help='The name of the context plugin to use (e.g., Trading).')
@@ -58,14 +92,15 @@ def main():
     session_manager = SessionManager()
     session_id = args.session
     
-    # Load context plugin
-    context_plugin = None
-    if args.context == "Trading":
-        from plugins.trading_plugin import TradingContextPlugin
-        context_plugin = TradingContextPlugin(Path.cwd())
+    # Dynamically load the specified context plugin
+    context_plugin = load_context_plugin(args.context)
     
-    # Add context to query
+    # Join query parts into a single string
+    query = ' '.join(args.query)
+
+    # Prepend context to the query if a plugin was successfully loaded
     if context_plugin:
+        print("   - ✅ Plugin loaded successfully.")
         context_str = context_plugin.get_context(query, args.files or [])
         query = context_str + query
     
@@ -76,13 +111,15 @@ def main():
     elif session_id:
         print(f"🔄 Continuing session: {session_id}")
         history = session_manager.load_session(session_id) or []
+    
     if args.interactive:
         run_interactive_session(history, session_id, args.persona, args.autonomous, args.files)
     else:
-        if not args.query:
+        if not query.strip() and not args.files:
             parser.error("The 'query' argument is required in one-shot mode.")
-        query = ' '.join(args.query)
         run_one_shot(query, history, session_id, args.persona, args.autonomous, args.files)
+
+# ... (run_one_shot, run_interactive_session, orchestrate_agent_run functions remain unchanged) ...
 
 def run_one_shot(
     query: str,
@@ -151,13 +188,12 @@ def orchestrate_agent_run(
     """Orchestrates the Plan-Execute-Synthesize loop for the agent."""
     persona_content = None
     if persona_alias:
-        loader = PersonaLoader(root_dir=Path.cwd()) 
+        loader = PersonaLoader() 
         persona_content = loader.load_persona_content(persona_alias)
 
     planner = Planner()
     plan = planner.create_plan(query, history, persona_content)
 
-    # MODIFIED: Check if the plan is empty OR contains only no-op steps.
     is_no_op_plan = not plan or all(not step.get("tool_name") for step in plan)
 
     if is_no_op_plan:
@@ -175,7 +211,6 @@ def orchestrate_agent_run(
 
     for i, step in enumerate(plan):
         tool_name = step.get("tool_name")
-        # Use .get() with a default for args to handle cases where it's null
         args = step.get("args") or {}
         
         print(f"  - Executing Step {i+1}: {tool_name}({args})")

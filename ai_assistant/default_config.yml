@@ -1,4 +1,4 @@
-<!-- FILENAME: ai_assistant/default_config.yml -->
+# ai_assistant/default_config.yml
 model_selection:
   planning: "deepseek-coder"
   synthesis: "gemini-2.5-pro"
