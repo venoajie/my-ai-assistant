@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "my-ai-assistant"
-version = "1.0.2" # Incrementing version for this packaging fix
+version = "1.0.6" # The final version for this definitive fix
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -17,14 +17,11 @@ dependencies = [
 [project.scripts]
 ai = "ai_assistant.cli:main"
 
-# --- HATCH CONFIGURATION (Corrected) ---
-[tool.hatch.build.targets.wheel]
-# This tells Hatch to include both packages from the 'src' directory.
-packages = ["src/ai_assistant", "src/plugins"]
-
+# This section ensures all non-code data files are included in the build.
+# By removing all other [tool.hatch] configuration, we allow Hatch
+# to use its default, correct behavior for a src-layout.
 [tool.hatch.build]
-# This section ensures all non-code data files are included.
 include = [
     "src/ai_assistant/default_config.yml",
-    "src/ai_assistant/personas/**/*.md",
+    "src/ai_assistant/personas",
 ]
