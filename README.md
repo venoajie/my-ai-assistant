@@ -140,14 +140,6 @@ ai "Compare these two service implementations and suggest which pattern is bette
 
 ## Advanced Workflows
 
-### Using Personas for Expert Results
-Personas are key to getting high-quality, structured output.
-```bash
-# Ask the Systems Architect to design a Dockerfile
-ai --persona core/SA-1 "Create a multi-stage Dockerfile for a Python FastAPI application."
-```
-*You can explore all available personas in the `src/ai_assistant/personas/` directory.*
-
 ### Using Context Plugins for Domain Knowledge
 Plugins inject domain-specific knowledge into the conversation.
 ```bash
@@ -155,9 +147,7 @@ Plugins inject domain-specific knowledge into the conversation.
 ai --context Trading "Explain the typical data flow from a market data receiver to an executor."
 ```
 
----
-
-## Expert Mode: Autonomous Operation
+### Expert Mode: Autonomous Operation
 
 This mode allows the assistant to complete an entire task—including making file changes and committing to Git—without asking for your approval at each step.
 
