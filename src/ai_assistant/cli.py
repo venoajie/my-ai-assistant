@@ -332,6 +332,7 @@ async def orchestrate_agent_run(
     any_tool_succeeded = False
     any_risky_action_denied = False
 
+    # 1. Evaluate Condition with Type Safety
     for i, step in enumerate(plan):
         step_num = i + 1
 
@@ -345,15 +346,32 @@ async def orchestrate_agent_run(
                  print(f"  - ⚠️  Warning: Conditional step {step_num} is missing 'from_step'. Skipping condition check.")
             else:
                 prev_result = step_results.get(from_step_num, "")
-                check_value = cond.get("in") or cond.get("not_in")
-                is_negation = "not_in" in cond
+                
+                condition_met = True # Assume condition is met unless a check fails
+                
+                if "in" in cond:
+                    check_value = cond["in"]
+                    # Handle the case where the check value or the result is None
+                    if check_value is None:
+                        if prev_result is not None and prev_result.strip() != "":
+                            condition_met = False
+                    elif prev_result is None or str(check_value) not in str(prev_result):
+                        condition_met = False
 
-                # If the condition is not met, skip this step
-                if (is_negation and check_value in prev_result) or \
-                   (not is_negation and check_value not in prev_result):
+                if "not_in" in cond:
+                    check_value = cond["not_in"]
+                    # Handle the case where the check value or the result is None
+                    if check_value is None:
+                        if prev_result is None or prev_result.strip() == "":
+                            condition_met = False
+                    elif prev_result is not None and str(check_value) in str(prev_result):
+                        condition_met = False
+                
+                if not condition_met:
                     print(f"  - Skipping Step {step_num} because condition was not met.")
                     continue
 
+        # 2. Execute Tool (The rest of the loop remains the same)
         tool_name = step.get("tool_name")
         args = step.get("args") or {}
 
@@ -371,7 +389,7 @@ async def orchestrate_agent_run(
             try:
                 success, result = tool(**args)
                 step_results[step_num] = result # Store result for future conditions
-                # FIX #3: IMPROVED OBSERVATION FORMATTING
+
                 if success:
                     observations.append(f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\n{result}\n</Observation>")
                     print(f"    ✅ Success.")
