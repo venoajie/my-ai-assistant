@@ -162,9 +162,8 @@ Plugins inject domain-specific knowledge into the conversation.
 # Activate the Trading plugin to get context on trading-specific terms
 ai --context Trading "Explain the typical data flow from a market data receiver to an executor."
 ```
----
 
-## Extending the Assistant: Creating a Custom Plugin
+#### Extending the Assistant: Creating a Custom Plugin
 
 You can teach the assistant about your project's unique domain by creating a simple plugin.
 
