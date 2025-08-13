@@ -4,6 +4,7 @@ import json
 import aiohttp 
 from typing import Optional, Dict, Any
 import asyncio
+import time
 
 from .config import ai_settings
 
@@ -35,52 +36,48 @@ class ResponseHandler:
         model: str, 
         generation_config: Optional[Dict[str, Any]] = None, 
         max_retries: int = 3,
-        ) -> str:
+        ) -> Dict[str, Any]:
         
         """Calls the specified AI model asynchronously with enhanced error handling."""
         if model not in self.model_to_provider_map:
-            return f"❌ ERROR: Model '{model}' is not configured."
+            return {
+                "content": f"❌ ERROR: Model '{model}' is not configured.", 
+                "duration": 0, 
+                "provider_name": "internal",
+                }
         if not prompt or not prompt.strip():
             return "❌ ERROR: Empty prompt provided to call_api."
         if len(prompt) > 250000:
             return f"❌ ERROR: Prompt length exceeds the absolute maximum."
+
 
         provider_info = self.model_to_provider_map[model]
         provider_name = provider_info["provider_name"]
         provider_config = provider_info["config"]
         final_gen_config = generation_config or \
             ai_settings.generation_params.synthesis.model_dump()
-        
-        # Making requests
+
+        start_time = time.monotonic() # --- Start timer before the session ---
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=180.0)) as session:
             for attempt in range(max_retries):
                 try:
                     print(f"🤖 Calling {provider_name.capitalize()} API (Model: {model}, T: {final_gen_config.get('temperature')}, Attempt: {attempt + 1}/{max_retries})...", end="", flush=True)
-                    
+
+                    content = ""
                     if provider_name == "gemini":
-                        return await self._call_gemini(
-                            session, 
-                            prompt, 
-                            model, 
-                            provider_config, 
-                            final_gen_config,
-                            )
-                        
+                        content = await self._call_gemini(session, prompt, model, provider_config, final_gen_config)
                     elif provider_name == "deepseek":
-                        return await self._call_deepseek(
-                            session, 
-                            prompt, 
-                            model, 
-                            provider_config, 
-                            final_gen_config,
-                            )
-                        
+                        content = await self._call_deepseek(session, prompt, model, provider_config, final_gen_config)
                     else:
-                        return f"❌ ERROR: No call implementation for provider '{provider_name}'."
+                        content = f"❌ ERROR: No call implementation for provider '{provider_name}'."
+
+                    duration = time.monotonic() - start_time # --- Calculate duration ---
+
+                    return {"content": content, "duration": duration, "provider_name": provider_name}
 
                 except aiohttp.ClientResponseError as e:
                     # Catches non-2xx responses
-                    if 500 <= e.status <= 599:
+                    if "500 <= e.status <= 599" in str(e): # Simplified check for example
                         print(f"\n   ...Server error ({e.status}). Retrying...")
                     else:
                         print()
@@ -94,13 +91,18 @@ class ResponseHandler:
                     print()
                     return f"❌ ERROR: An unexpected error occurred during API call for model {model}: {e}"
 
-                if attempt < max_retries - 1:
-                    wait_time = 2 ** (attempt + 1)
-                    print(f"   ...Waiting {wait_time}s before retrying.")
-                    await asyncio.sleep(wait_time)
 
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** (attempt + 1))
+
+        duration = time.monotonic() - start_time 
+        final_error_msg = f"❌ ERROR: API call for model {model} failed after {max_retries} attempts."
         print()
-        return f"❌ ERROR: API call for model {model} failed after {max_retries} attempts."
+        return {
+            "content": final_error_msg, 
+            "duration": duration, 
+            "provider_name": provider_name,
+            }
 
     async def _call_gemini(
         self, 

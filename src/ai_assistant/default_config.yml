@@ -11,6 +11,8 @@ general:
   universal_base_persona: "_mixins/codegen-standards-1"
 context_optimizer:
   max_tokens: 8000
+  # If estimated input tokens exceed this, use compact prompts. Set to 0 to always use verbose prompts.
+  prompt_compression_threshold: 6000
 tools:
   git:
     branch_prefix: "ai"

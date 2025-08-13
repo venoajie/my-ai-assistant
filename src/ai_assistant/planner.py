@@ -1,7 +1,7 @@
 # src/ai_assistant/planner.py
 import json
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
@@ -13,13 +13,20 @@ class Planner:
         self.prompt_builder = PromptBuilder()
         self.response_handler = ResponseHandler()
 
-    # MODIFIED: Converted to an async method
     async def create_plan(
-        self, query: str, history: List[Dict[str, Any]] = None, persona_content: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        self, 
+        query: str, 
+        history: List[Dict[str, Any]] = None, 
+        persona_content: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], float]:
         print("🤔 Generating execution plan...")
         tool_descriptions = TOOL_REGISTRY.get_tool_descriptions()
-        prompt = self.prompt_builder.build_planning_prompt(query, tool_descriptions, history, persona_content)
+        prompt = self.prompt_builder.build_planning_prompt(
+            query, 
+            tool_descriptions, 
+            history, 
+            persona_content,
+            )
 
         planning_model = ai_settings.model_selection.planning
         planning_generation_config = ai_settings.generation_params.planning.model_dump()
@@ -27,24 +34,27 @@ class Planner:
         if "deepseek" in planning_model:
             planning_generation_config["response_format"] = {"type": "json_object"}
 
-        # MODIFIED: Added 'await' to correctly call the async function
-        response_text = await self.response_handler.call_api(
+        api_result = await self.response_handler.call_api(
             prompt,
             model=planning_model,
             generation_config=planning_generation_config
         )
-        
+
+        response_text = api_result["content"]
+        planning_duration = api_result["duration"]
+
         plan = self._extract_and_validate_plan(response_text)
 
         if not plan:
             if isinstance(plan, list):
                 print("✅ Plan generated successfully (No tool execution required).")
-            return plan
-            
+            # --- Return duration even for no-op plans ---
+            return plan, planning_duration
+                    
         print("✅ Plan generated successfully.")
         for i, step in enumerate(plan):
             print(f"  - Step {i+1}: {step.get('thought', '')} -> {step.get('tool_name')}({step.get('args', {})})")
-        return plan
+        return  plan, planning_duration
         
     def _extract_and_validate_plan(self, response_text: str) -> List[Dict[str, Any]]:
         """Extracts, sanitizes, repairs, and validates a JSON plan from raw LLM text."""

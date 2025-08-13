@@ -20,6 +20,7 @@ class GeneralConfig(BaseModel):
 
 class ContextOptimizerConfig(BaseModel):
     max_tokens: int
+    prompt_compression_threshold: int = Field(default=0, description="Token count above which to use compact prompts. 0 to disable.")
 
 class GitToolConfig(BaseModel):
     branch_prefix: str
