@@ -140,12 +140,6 @@ ai "Compare these two service implementations and suggest which pattern is bette
 
 ## Advanced Workflows
 
-### Using Context Plugins for Domain Knowledge
-Plugins inject domain-specific knowledge into the conversation.
-```bash
-# Activate the Trading plugin to get context on trading-specific terms
-ai --context Trading "Explain the typical data flow from a market data receiver to an executor."
-```
 
 ### Expert Mode: Autonomous Operation
 
@@ -161,6 +155,13 @@ ai --new-session --persona core/SA-1 --autonomous \
 ```
 The assistant will perform all the steps and notify you when it has pushed the branch. Your only job is to review the resulting pull request.
 
+
+### Using Context Plugins for Domain Knowledge
+Plugins inject domain-specific knowledge into the conversation.
+```bash
+# Activate the Trading plugin to get context on trading-specific terms
+ai --context Trading "Explain the typical data flow from a market data receiver to an executor."
+```
 ---
 
 ## Extending the Assistant: Creating a Custom Plugin
