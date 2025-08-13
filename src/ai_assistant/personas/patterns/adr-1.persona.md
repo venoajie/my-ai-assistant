@@ -1,5 +1,5 @@
 ---
-alias: ADR-1
+alias: patterns/ADR-1
 version: 1.0.0
 type: patterns
 input_mode: evidence-driven

@@ -1,5 +1,5 @@
 ---
-alias: DPA-1
+alias: core/DPA-1
 version: 1.0.0
 type: core
 input_mode: evidence-driven

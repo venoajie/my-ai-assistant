@@ -1,5 +1,5 @@
 ---
-alias: BPR-1
+alias: patterns/BPR-1
 version: 1.0.0
 type: patterns
 input_mode: evidence-driven

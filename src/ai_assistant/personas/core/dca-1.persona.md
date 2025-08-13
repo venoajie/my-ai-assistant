@@ -1,5 +1,5 @@
 ---
-alias: DCA-1
+alias: core/DCA-1
 version: 1.0.0
 type: core
 input_mode: evidence-driven

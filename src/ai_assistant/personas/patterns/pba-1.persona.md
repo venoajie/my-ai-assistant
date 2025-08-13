@@ -1,5 +1,5 @@
 ---
-alias: PBA-1
+alias: patterns/PBA-1
 version: 1.0.0
 type: patterns
 title: Performance Bottleneck Analyst

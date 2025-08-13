@@ -1,5 +1,5 @@
 ---
-alias: ADA-1
+alias: domains/finance/ADA-1
 version: 1.0.0
 type: domains
 input_mode: evidence-driven

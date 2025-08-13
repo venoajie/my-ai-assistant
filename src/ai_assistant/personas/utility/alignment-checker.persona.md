@@ -1,5 +1,5 @@
 ---
-alias: alignment-checker
+alias: utility/alignment-checker
 version: 1.1.0
 type: utility
 title: Mandate Alignment Checker

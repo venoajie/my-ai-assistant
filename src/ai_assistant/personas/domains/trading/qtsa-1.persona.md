@@ -1,5 +1,5 @@
 ---
-alias: QTSA-1
+alias: domains/trading/QTSA-1
 version: 1.1.0
 type: domains
 title: Quantitative Strategy Analyst
