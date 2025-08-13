@@ -86,11 +86,10 @@ The personas are included as data files within the installed package. You can di
 
 ### Bundled Personas
 
-Here is a list of the primary personas included with the assistant:
+Here is a list of the primary persona examples included with the assistant:
 
 | Alias | Category | Title | Use Case |
 | :--- | :--- | :--- | :--- |
-| `core/ARC-1` | Core | Architectural Auditor | Conducts a comprehensive audit of a project's architecture, code, and security. |
 | `core/CSA-1` | Core | Systems Architect | Designs new systems or refactors existing ones, ensuring architectural integrity. |
 | `core/DCA-1` | Core | Documentation Architect | Creates clear, user-centric documentation from technical artifacts. |
 | `core/DPA-1` | Core | Deployment Architect | Creates detailed, risk-mitigated deployment and validation plans. |
@@ -128,17 +127,34 @@ Now, use the `--session` flag with the ID you just received. The AI will remembe
 ai --session a1b2c3d4-e5f6-7890-gh12-i3j4k5l6m7n8 "Okay, show me the contents of that file."
 ```
 
+#### Step 3: Working with Multiple Files
+
+For tasks that require context from multiple files, such as code reviews or refactoring, attach them with the `-f` flag.
+
+```bash
+ai "Compare these two service implementations and suggest which pattern is better." \
+  -f src/services/auth_service.py \
+  -f src/services/user_service.py
+```
 ---
 
 ## Advanced Workflows
 
-### Using Personas for Expert Results
-Personas are key to getting high-quality, structured output.
+
+### Expert Mode: Autonomous Operation
+
+This mode allows the assistant to complete an entire task—including making file changes and committing to Git—without asking for your approval at each step.
+
+> **WARNING: Use with extreme caution.** In this mode, the agent can create, modify, and delete files and push to your Git repository without confirmation. Only use it for well-defined tasks where you fully trust the plan.
+
+**Example: Autonomous Refactoring**
 ```bash
-# Ask the Systems Architect to design a Dockerfile
-ai --persona core/SA-1 "Create a multi-stage Dockerfile for a Python FastAPI application."
+ai --new-session --persona core/SA-1 --autonomous \
+  -f src/services/distributor.py \
+  "Refactor the 'distributor' service in the attached file to improve its logging and add error handling. When done, commit the changes to a new git branch named 'refactor/distributor-logging'."
 ```
-*You can explore all available personas in the `src/ai_assistant/personas/` directory.*
+The assistant will perform all the steps and notify you when it has pushed the branch. Your only job is to review the resulting pull request.
+
 
 ### Using Context Plugins for Domain Knowledge
 Plugins inject domain-specific knowledge into the conversation.
@@ -147,9 +163,7 @@ Plugins inject domain-specific knowledge into the conversation.
 ai --context Trading "Explain the typical data flow from a market data receiver to an executor."
 ```
 
----
-
-## Extending the Assistant: Creating a Custom Plugin
+#### Extending the Assistant: Creating a Custom Plugin
 
 You can teach the assistant about your project's unique domain by creating a simple plugin.
 
