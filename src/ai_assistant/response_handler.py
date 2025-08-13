@@ -77,32 +77,31 @@ class ResponseHandler:
 
                 except aiohttp.ClientResponseError as e:
                     # Catches non-2xx responses
-                    if "500 <= e.status <= 599" in str(e): # Simplified check for example
+                    if 500 <= e.status <= 599:
                         print(f"\n   ...Server error ({e.status}). Retrying...")
                     else:
+                        error_msg = f"❌ ERROR: Non-retriable API request error for model {model}: {e.status} - {e.message}"
                         print()
-                        return f"❌ ERROR: Non-retriable API request error for model {model}: {e.status} - {e.message}"
+                        return {"content": error_msg, "duration": time.monotonic() - start_time, "provider_name": provider_name}
                 except asyncio.TimeoutError:
                     print(f"\n   ...Request timed out.")
-                except aiohttp.ClientError as e:
+                    error_msg = f"❌ ERROR: Network-level error for model {model}: {e}"
                     print()
-                    return f"❌ ERROR: Network-level error for model {model}: {e}"
+                    return {"content": error_msg, "duration": time.monotonic() - start_time, "provider_name": provider_name}
                 except Exception as e:
+                    error_msg = f"❌ ERROR: An unexpected error occurred during API call for model {model}: {e}"
                     print()
-                    return f"❌ ERROR: An unexpected error occurred during API call for model {model}: {e}"
-
+                    return {"content": error_msg, "duration": time.monotonic() - start_time, "provider_name": provider_name}
 
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(2 ** (attempt + 1))
-
-        duration = time.monotonic() - start_time 
+                    wait_time = 2 ** (attempt + 1)
+                    print(f"   ...Waiting {wait_time}s before retrying.")
+                    await asyncio.sleep(wait_time)
+                    
         final_error_msg = f"❌ ERROR: API call for model {model} failed after {max_retries} attempts."
         print()
-        return {
-            "content": final_error_msg, 
-            "duration": duration, 
-            "provider_name": provider_name,
-            }
+        return {"content": final_error_msg, "duration": time.monotonic() - start_time, "provider_name": provider_name}
+
 
     async def _call_gemini(
         self, 
