@@ -166,3 +166,4 @@ providers:
       - "deepseek-reasoner"
       - "deepseek-coder"
       - "deepseek-chat"      
+src\ai_assistant\session_manager.py

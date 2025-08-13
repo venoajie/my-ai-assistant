@@ -106,7 +106,8 @@ class ResponseHandler:
         self, 
         session: aiohttp.ClientSession, 
         prompt: str, model: str, 
-        config: Any, gen_config: Dict,
+        config: Any, 
+        gen_config: Dict,
         ) -> str:
         
         api_key = os.getenv(config.api_key_env)
@@ -126,6 +127,10 @@ class ResponseHandler:
         
         content = response_data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
         
+        if not content or not content.strip():
+            # Raise an exception to trigger the retry logic in the main call_api method
+            raise ValueError("API returned an empty or whitespace-only response.")
+
         print(f" ✅ Done!")
         return content
 
@@ -162,6 +167,10 @@ class ResponseHandler:
             response_data = await response.json()
         
         content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+        if not content or not content.strip():
+            # Raise an exception to trigger the retry logic in the main call_api method
+            raise ValueError("API returned an empty or whitespace-only response.")
 
         print(f" ✅ Done!")
         return content

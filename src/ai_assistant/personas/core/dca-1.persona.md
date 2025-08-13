@@ -5,7 +5,7 @@ type: core
 input_mode: evidence-driven
 title: Documentation & Content Architect
 engine_version: v1
-inherits_from: bcaa-1
+inherits_from: _base/BCAA-1
 status: active
 expected_artifacts:
   - id: documentation_goal

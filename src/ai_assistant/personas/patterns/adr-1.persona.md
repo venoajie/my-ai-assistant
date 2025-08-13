@@ -5,7 +5,7 @@ type: patterns
 input_mode: evidence-driven
 title: Architectural Decision Analyst
 engine_version: v1
-inherits_from: btaa-1
+inherits_from: _base/BTAA-1
 status: active
 expected_artifacts:
   - id: decision_context

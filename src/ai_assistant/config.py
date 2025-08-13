@@ -15,6 +15,8 @@ class ModelSelectionConfig(BaseModel):
 class GeneralConfig(BaseModel):
     personas_directory: str
     sessions_directory: str
+    max_file_size_mb: int
+    universal_base_persona: Optional[str] = None
 
 class ContextOptimizerConfig(BaseModel):
     max_tokens: int

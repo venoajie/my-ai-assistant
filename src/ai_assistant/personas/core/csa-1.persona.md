@@ -4,7 +4,7 @@ version: 1.3.0
 type: core
 title: Collaborative Systems Architect
 engine_version: v1
-inherits_from: bcaa-1
+inherits_from: _base/BCAA-1
 status: active
 input_mode: evidence-driven
 expected_artifacts:

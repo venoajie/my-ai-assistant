@@ -4,7 +4,7 @@ version: 4.1.0
 type: core
 title: Session Initiator
 status: active
-inherits_from: bcaa-1
+inherits_from: _base/BCAA-1
 expected_artifacts:
   - id: high_level_goal
     type: primary

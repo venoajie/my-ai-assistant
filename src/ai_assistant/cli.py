@@ -6,8 +6,10 @@ import asyncio
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import sys
-import importlib
+import yaml
 from importlib import metadata
+from datetime import datetime, timezone
+from importlib import resources
 
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from .context_plugin import ContextPluginBase
@@ -19,30 +21,68 @@ from .persona_loader import PersonaLoader
 from .config import ai_settings
 from .context_optimizer import ContextOptimizer
 
+def is_manifest_stale(manifest_path: Path):
+    """Checks if the manifest is older than any persona file in the package."""
+    if not manifest_path.exists():
+        return True, "Manifest file does not exist."
 
-def build_file_context(files: List[str]) -> str:
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest_data = yaml.safe_load(f)
+        generated_at_str = manifest_data.get("generated_at_utc")
+        if not generated_at_str:
+            return True, "Manifest is missing the 'generated_at_utc' timestamp."
+        manifest_time = datetime.fromisoformat(generated_at_str)
+    except (yaml.YAMLError, TypeError, ValueError) as e:
+        return True, f"Could not parse manifest or its timestamp: {e}"
+
+    try:
+        # Find all persona files within the package resources
+        persona_root = resources.files("ai_assistant").joinpath("personas")
+        for persona_path_traversable in persona_root.rglob("*.persona.md"):
+            # We need to get the real file path to check mtime
+            with resources.as_file(persona_path_traversable) as persona_path:
+                persona_mtime = datetime.fromtimestamp(persona_path.stat().st_mtime, tz=timezone.utc)
+                if persona_mtime > manifest_time:
+                    return True, f"Persona '{persona_path.name}' was modified after the manifest was generated."
+    except Exception as e:
+        return True, f"Could not scan package persona files: {e}"
+
+    return False, "Manifest is up-to-date."
+
+def build_file_context(files: List[str], query: str) -> str:
     """Reads multiple files and formats them into a single context string."""
     if not files:
         return ""
     
-    MAX_FILE_SIZE = 5 * 1024 * 1024 # 5MB
+    MAX_FILE_SIZE = MAX_FILE_SIZE = ai_settings.general.max_file_size_mb * 1024 * 1024
     context_str = ""
     print("📎 Attaching files to context...")
+    optimizer = ContextOptimizer()
     for file_path_str in files:
         path = Path(file_path_str)
         if not path.exists():
             print(f"   - ⚠️  Warning: File not found, skipping: {file_path_str}")
             continue
         
-        # --- ADD THIS CHECK ---
         if path.stat().st_size > MAX_FILE_SIZE:
             print(f"   - ⚠️  Warning: File exceeds 5MB limit, skipping: {file_path_str}")
             continue
-        # --- END OF CHECK ---
 
         try:
+            
             content = path.read_text(encoding='utf-8')
-            context_str += f"<AttachedFile path=\"{file_path_str}\">\n{content}\n</AttachedFile>\n\n"
+
+            compressed_content = optimizer.compress_file_context(
+                file_path=file_path_str,
+                content=content, 
+                query=query,
+            )
+
+            if len(compressed_content) < len(content):
+                print(f"   - ℹ️  Compressed for relevance: {file_path_str}")
+
+            context_str += f"<AttachedFile path=\"{file_path_str}\">\n{compressed_content}\n</AttachedFile>\n\n"
             print(f"   - ✅ Attached: {file_path_str}")
         except Exception as e:
             print(f"   - ❌ Error reading file {file_path_str}: {e}")
@@ -147,14 +187,35 @@ async def async_main():
         history = session_manager.load_session(session_id) or []
     
     if args.interactive:
-        await run_interactive_session(history, session_id, args.persona, args.autonomous, args.files)
+        await run_interactive_session(
+            history, 
+            session_id, 
+            args.persona, 
+            args.autonomous, 
+            args.files,
+            )
     else:
         if not query.strip() and not args.files:
             parser.error("The 'query' argument is required in one-shot mode.")
-        await run_one_shot(query, history, session_id, args.persona, args.autonomous, args.files)
+        await run_one_shot(
+            query, 
+            history, 
+            session_id, 
+            args.persona, 
+            args.autonomous,
+            args.files,
+            )
 
-async def run_one_shot(query: str, history: List, session_id: str, persona_alias: str, is_autonomous: bool, files: Optional[List[str]] = None):
-    file_context = build_file_context(files)
+async def run_one_shot(
+    query: str, 
+    history: List, 
+    session_id: str, 
+    persona_alias: str, 
+    is_autonomous: bool, 
+    files: Optional[List[str]] = None,
+    ):
+    
+    file_context = build_file_context(files, query)
     full_query = file_context + query
     print(f"🤖 Processing query: {query}")
     if persona_alias: print(f"👤 Embodying persona: {persona_alias}")
@@ -169,13 +230,22 @@ async def run_one_shot(query: str, history: List, session_id: str, persona_alias
         SessionManager().save_session(session_id, history)
         print(f"💾 Session {session_id} saved.")
 
-async def run_interactive_session(history: List, session_id: str, persona_alias: str, is_autonomous: bool, files: Optional[List[str]] = None):
+async def run_interactive_session(
+    history: List,
+    session_id: str, 
+    persona_alias: str,
+    is_autonomous: bool, 
+    files: Optional[List[str]] = None,
+    ):
+    
     print("Entering interactive mode. Type 'exit' or 'quit' to end the session.")
     if persona_alias: print(f"👤 Embodying persona: {persona_alias}")
     if is_autonomous: print("🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨")
     
     if files:
-        initial_file_context = build_file_context(files)
+        # In interactive mode, there's no initial query, so we pass an empty one
+        # to trigger the summarization fallback in the optimizer.
+        initial_file_context = build_file_context(files, query="")
         if initial_file_context:
             print("The content of the attached files has been added to the start of this session's context.")
             history = SessionManager().update_history(history, "user", initial_file_context + "The preceding file(s) have been attached for context in this session.")
@@ -207,10 +277,27 @@ async def orchestrate_agent_run(
     is_autonomous: bool = False,
     ):
     
+    # --- MANIFEST STALENESS CHECK ---
+    if persona_alias and "si-1" in persona_alias.lower():
+        manifest_path = Path.cwd() / "persona_manifest.yml"
+        stale, reason = is_manifest_stale(manifest_path)
+        if stale:
+            error_msg = f"🛑 HALTING: The persona manifest is stale. Reason: {reason}\nPlease run your manifest generation script and try again."
+            print(error_msg, file=sys.stderr)
+            # In a real app, you might exit, but here we return an error message
+            return error_msg
+        print("✅ Persona manifest is up-to-date.")
+    # --- END OF CHECK ---
+
     persona_content = None
     if persona_alias:
         loader = PersonaLoader() 
-        persona_content = loader.load_persona_content(persona_alias)
+        try:
+            persona_content = loader.load_persona_content(persona_alias)
+        except (RecursionError, FileNotFoundError) as e:
+            error_msg = f"🛑 HALTING: Could not load persona '{persona_alias}'. Reason: {e}"
+            print(error_msg, file=sys.stderr)
+            return error_msg
 
     # Add this block
     optimizer = ContextOptimizer()

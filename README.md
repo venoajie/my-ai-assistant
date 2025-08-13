@@ -78,15 +78,17 @@ ai --persona domains/trading/QTSA-1 "Develop a mean-reversion strategy for ETH/U
 
 ### Discovering Available Personas
 
-The personas are included as data files within the installed package. You can discover them by exploring the `src/ai_assistant/personas` directory in the source code. They are organized into logical categories:
+The definitive list of available expert personas is located in the persona_manifest.yml file at the root of the project. This file is the source of truth for the SI-1 (Session Initiator) persona and provides the alias, title, and a description of each expert's capability.
 
-*   **`core/`**: Foundational personas for high-level software architecture and lifecycle management.
-*   **`patterns/`**: Specialist personas that implement a specific, repeatable development pattern (e.g., debugging, security auditing).
-*   **`domains/`**: Example personas for specific business domains (e.g., trading, finance) that showcase the assistant's extensibility.
+To regenerate this manifest after adding or changing personas, run the following command from the project root:
+
+```bash
+python scripts/generate_manifest.py
+
 
 ### Bundled Personas
 
-Here is a list of the primary persona examples included with the assistant:
+Here is a list of the primary persona examples included with the assistant. These are concrete, expert agents you can use directly.
 
 | Alias | Category | Title | Use Case |
 | :--- | :--- | :--- | :--- |
@@ -227,8 +229,43 @@ The rules for persona frontmatter and body sections are defined in `persona_conf
 Before submitting a pull request with persona changes, run the validation script from the project root:
 
 ```bash
-python scripts/validate_personas.py
+python scripts/generate_manifest.py
 ```
 
-The script will check all personas in `src/ai_assistant/personas/` and report any errors. The test suite also runs this script, so pull requests with invalid personas will be automatically blocked by CI checks.
+This script serves two purposes:
+Validation: It acts as a linter, failing immediately if any persona file is malformed or missing required frontmatter.
+Generation: If all personas are valid, it generates the persona_manifest.yml file.
+You must commit the updated persona_manifest.yml along with your persona changes. Pull requests with stale or missing manifests will be blocked by CI checks.
+
+> ### The Persona Inheritance System
+>
+> To ensure consistency and reduce duplication, personas are built on a powerful inheritance system. This allows new, specialized personas to inherit a common set of directives and philosophies.
+>
+> #### Universal Standards (`_mixins/`)
+>
+> The application can be configured to automatically apply a "universal base persona" to **every** persona that is loaded. This is defined by the `universal_base_persona` key in `config.yml` and points to a persona in the `_mixins/` directory. By default, all personas inherit from `_mixins/codegen-standards-1`, which enforces a consistent, structured output format.
+>
+> #### Base Personas (`_base/`)
+>
+> The `_base/` directory contains foundational "archetypes" that define a core operational philosophy (e.g., technical analysis vs. collaborative dialogue). Specialized personas should inherit from one of these bases to ensure they follow a proven interaction pattern.
+>
+> #### How to Use Inheritance
+>
+> To make a new persona inherit from a base, use the `inherits_from` key in its frontmatter. The loader will recursively build the full persona content.
+>
+> **Example: `core/CSA-1.persona.md`**
+> ```yaml
+> ---
+> alias: CSA-1
+> inherits_from: _base/BCAA-1 # Inherits the collaborative dialogue pattern
+> # ... other frontmatter
+> ---
+> <SECTION:PRIMARY_DIRECTIVE>
+> To design new systems...
+> # ... specific directives for this persona
+> ```
+> In this example, `CSA-1` will first be composed with the universal `codegen-standards-1` mixin, and then its explicit parent `_base/BCAA-1` will be prepended to its own body, creating a complete, multi-layered expert agent.
+
+
+
 ```

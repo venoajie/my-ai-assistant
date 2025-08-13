@@ -3,6 +3,10 @@
 
 # Defines valid persona types and their validation rules for the frontmatter.
 persona_types:
+  _base: 
+    required_keys: ["alias", "type", "status"]
+  _mixins:
+    required_keys: ["alias", "type", "status"]
   core:
     required_keys:
       - "alias"

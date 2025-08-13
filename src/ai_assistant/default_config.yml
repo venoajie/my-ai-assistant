@@ -7,6 +7,8 @@ default_provider: "gemini"
 general:
   personas_directory: "personas"
   sessions_directory: ".ai_sessions"
+  max_file_size_mb: 5
+  universal_base_persona: "_mixins/codegen-standards-1"
 context_optimizer:
   max_tokens: 8000
 tools:

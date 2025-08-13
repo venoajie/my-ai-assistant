@@ -1,0 +1,10 @@
+[
+  {
+    "role": "user",
+    "content": "Explain containerization"
+  },
+  {
+    "role": "model",
+    "content": "🛑 HALTING: Could not load persona 'core/CSA-1'. Reason: Persona 'codegen-standards-1' could not be found or read."
+  }
+]

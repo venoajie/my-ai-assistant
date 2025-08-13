@@ -5,7 +5,7 @@ type: core
 input_mode: evidence-driven
 title: Deployment Process Architect
 engine_version: v1
-inherits_from: btaa-1
+inherits_from: _base/BTAA-1
 status: active
 expected_artifacts:
   - id: architectural_blueprint

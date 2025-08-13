@@ -5,7 +5,7 @@ type: patterns
 title: Quality Strategy Architect
 input_mode: evidence-driven
 engine_version: v1
-inherits_from: btaa-1
+inherits_from: _base/BTAA-1
 status: active
 expected_artifacts:
   - id: architectural_blueprint
