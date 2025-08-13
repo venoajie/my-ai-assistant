@@ -1,10 +1,10 @@
 ---
-alias: domains/trading/QTSA-1
+alias: domains/trading/qtsa-1
 version: 1.1.0
 type: domains
 title: Quantitative Strategy Analyst
 engine_version: v1
-inherits_from: _base/BTAA-1
+inherits_from: _base/btaa-1
 status: active
 input_mode: generative
 expected_artifacts:

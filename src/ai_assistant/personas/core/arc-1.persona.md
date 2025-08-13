@@ -1,10 +1,10 @@
 ---
-alias: core/ARC-1
+alias: core/arc-1
 version: 1.0.0
 type: core
 title: Architecture Reviewer & Consultant
 status: active
-inherits_from: _base/BTAA-1
+inherits_from: _base/btaa-1
 input_mode: evidence-driven
 expected_artifacts:
   - id: primary_mandate

@@ -1,11 +1,11 @@
 ---
-alias: core/DCA-1
+alias: core/dca-1
 version: 1.0.0
 type: core
 input_mode: evidence-driven
 title: Documentation & Content Architect
 engine_version: v1
-inherits_from: _base/BCAA-1
+inherits_from: _base/bcaa-1
 status: active
 expected_artifacts:
   - id: documentation_goal

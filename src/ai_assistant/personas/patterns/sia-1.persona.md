@@ -1,11 +1,11 @@
 ---
-alias: patterns/SIA-1
+alias: patterns/sia-1
 version: 1.0.0
 type: patterns
 input_mode: evidence-driven
 title: Systems Integrity Analyst
 engine_version: v1
-inherits_from: _base/BTAA-1
+inherits_from: _base/btaa-1
 status: active
 expected_artifacts:
   - id: failure_report
