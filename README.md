@@ -86,11 +86,10 @@ The personas are included as data files within the installed package. You can di
 
 ### Bundled Personas
 
-Here is a list of the primary personas included with the assistant:
+Here is a list of the primary persona examples included with the assistant:
 
 | Alias | Category | Title | Use Case |
 | :--- | :--- | :--- | :--- |
-| `core/ARC-1` | Core | Architectural Auditor | Conducts a comprehensive audit of a project's architecture, code, and security. |
 | `core/CSA-1` | Core | Systems Architect | Designs new systems or refactors existing ones, ensuring architectural integrity. |
 | `core/DCA-1` | Core | Documentation Architect | Creates clear, user-centric documentation from technical artifacts. |
 | `core/DPA-1` | Core | Deployment Architect | Creates detailed, risk-mitigated deployment and validation plans. |
