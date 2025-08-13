@@ -128,6 +128,15 @@ Now, use the `--session` flag with the ID you just received. The AI will remembe
 ai --session a1b2c3d4-e5f6-7890-gh12-i3j4k5l6m7n8 "Okay, show me the contents of that file."
 ```
 
+#### Step 3: Working with Multiple Files
+
+For tasks that require context from multiple files, such as code reviews or refactoring, attach them with the `-f` flag.
+
+```bash
+ai "Compare these two service implementations and suggest which pattern is better." \
+  -f src/services/auth_service.py \
+  -f src/services/user_service.py
+```
 ---
 
 ## Advanced Workflows
@@ -146,6 +155,22 @@ Plugins inject domain-specific knowledge into the conversation.
 # Activate the Trading plugin to get context on trading-specific terms
 ai --context Trading "Explain the typical data flow from a market data receiver to an executor."
 ```
+
+---
+
+## Expert Mode: Autonomous Operation
+
+This mode allows the assistant to complete an entire task—including making file changes and committing to Git—without asking for your approval at each step.
+
+> **WARNING: Use with extreme caution.** In this mode, the agent can create, modify, and delete files and push to your Git repository without confirmation. Only use it for well-defined tasks where you fully trust the plan.
+
+**Example: Autonomous Refactoring**
+```bash
+ai --new-session --persona core/SA-1 --autonomous \
+  -f src/services/distributor.py \
+  "Refactor the 'distributor' service in the attached file to improve its logging and add error handling. When done, commit the changes to a new git branch named 'refactor/distributor-logging'."
+```
+The assistant will perform all the steps and notify you when it has pushed the branch. Your only job is to review the resulting pull request.
 
 ---
 
