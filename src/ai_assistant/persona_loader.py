@@ -4,60 +4,95 @@ import yaml
 from pathlib import Path
 from typing import Optional, List
 from importlib import resources
-from pathlib import PurePath
 
 from .config import ai_settings
 
 class PersonaLoader:
     def __init__(self):
-        
         self.user_personas_dir = Path(ai_settings.general.personas_directory).resolve()
         self.user_personas_dir.mkdir(parents=True, exist_ok=True)
-        
+        self._loading_stack = set()
+
+    def _load_recursive(self, alias: str) -> str:
+        """Internal recursive loader for a single inheritance chain."""
+        if alias in self._loading_stack:
+            raise RecursionError(f"Circular persona inheritance detected: {alias} is in the stack {self._loading_stack}")
+        self._loading_stack.add(alias)
+
+        try:
+            _, content = self._find_and_read_persona(alias)
+            if not content:
+                raise FileNotFoundError(f"Persona '{alias}' could not be found or read.")
+
+            parts = content.split("---")
+            body = "---".join(parts[2:]) if len(parts) >= 3 else content
+            frontmatter_str = parts[1] if len(parts) >= 3 else "{}"
+            
+            data = yaml.safe_load(frontmatter_str) or {}
+            inherits_from = data.get("inherits_from")
+
+            if inherits_from:
+                parent_content = self._load_recursive(inherits_from)
+                return parent_content + "\n" + body.strip()
+            else:
+                return body.strip()
+        finally:
+            self._loading_stack.remove(alias)
+
+
     def load_persona_content(self, alias: str) -> Optional[str]:
+        """
+        Loads the full content of a persona, prepending the universal base
+        persona if one is configured and not already in the inheritance chain.
+        """
+        self._loading_stack.clear()
         
-        alias = alias.lower()  # Normalize case
+        # First, load the specific persona and its entire inheritance chain
+        specific_content = self._load_recursive(alias)
         
-        # Do not use .name, preserve the full alias path for user overrides
-        # Use os.sep here because we are interacting with the real filesystem
-        user_path = self.user_personas_dir / f"{alias.replace('/', os.sep)}.persona.md"
+        # Now, check if a universal base is needed
+        universal_base_alias = ai_settings.general.universal_base_persona
+        if universal_base_alias and universal_base_alias not in self._loading_stack:
+            # The universal base was NOT part of the chain, so we need to prepend it.
+            # The loading stack from the previous call contains all ancestors.
+            self._loading_stack.clear() # Reset for the base load
+            try:
+                base_content = self._load_recursive(universal_base_alias)
+                return (base_content + "\n" + specific_content).strip()
+            except (FileNotFoundError, RecursionError) as e:
+                print(f"⚠️ Warning: Could not load universal base persona '{universal_base_alias}'. Reason: {e}")
+                # Fall through to return just the specific content
+        
+        # Either no universal base is configured, or it was already inherited.
+        return specific_content
+    
+    def _find_and_read_persona(self, alias: str):
+
+        alias_norm = alias.lower().replace('/', os.sep)
+        user_path = self.user_personas_dir / f"{alias_norm}.persona.md"
+
         if user_path.exists():
             print(f"ℹ️  Loading user-defined persona: {alias}")
-            return self._read_persona(user_path)
-        
-        #resource_path = f"personas/{alias.replace('/', os.sep)}.persona.md" 
-        # Use POSIX forward slashes for package resources, regardless of OS
-        resource_path = f"personas/{alias}.persona.md"  
-         
-        try:
-            # This returns a traversable object for the package data
-            traversable = resources.files("ai_assistant").joinpath(resource_path)
-            return traversable.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return None
+            return user_path, user_path.read_text(encoding="utf-8")
 
-    def _read_persona(self, path: Path) -> str:
+        resource_path = f"personas/{alias.lower()}.persona.md"
         try:
-            content = path.read_text(encoding="utf-8")
-            return content
-        except Exception as e:
-            print(f"Error reading persona: {e}")
-            return None
-            
+            traversable = resources.files("ai_assistant").joinpath(resource_path)
+            return Path(str(traversable)), traversable.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return None, None 
+        
     def list_builtin_personas(self) -> List[str]:
+
         personas = []
         try:
             base_dir = resources.files("ai_assistant").joinpath("personas")
-            # Use the actual base directory for relative paths
             for path in base_dir.rglob("*.persona.md"):
                 try:
-                    # Get relative path to base_dir
                     rel_path = path.relative_to(base_dir)
-                    # Convert to POSIX format with forward slashes
                     persona_id = str(rel_path).replace(".persona.md", "").replace("\\", "/")
                     personas.append(persona_id)
                 except ValueError:
-                    # Skip files not in base_dir
                     continue
             return sorted(personas)
         except FileNotFoundError:

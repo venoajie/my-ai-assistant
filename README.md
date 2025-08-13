@@ -30,9 +30,6 @@ cd my-ai-assistant
 
 # Install in editable mode
 pip install -e .
-
-# Install in experimental mode
-pip install git+https://github.com/venoajie/my-ai-assistance.git@develop
 ```
 
 ---
@@ -66,46 +63,48 @@ Personas are the most powerful feature for ensuring high-quality, consistent, an
 
 ### How to Use Personas
 
-Simply provide the persona's alias using the `--persona` flag. The alias corresponds to the file path within the `personas` directory, without the `.persona.md` extension.
+Simply provide the persona's alias using the `--persona` flag. **The alias is always the full file path within the `personas` directory, without the `.persona.md` extension.**
 
 ```bash
 # Use the Systems Architect from the 'core' category
-ai --persona core/SA-1 "Design a multi-stage Dockerfile for a Python app."
+ai --persona core/csa-1 "Design a multi-stage Dockerfile for a Python app."
 
 # Use the Quantitative Trading Strategy Analyst from the 'domains/trading' category
-ai --persona domains/trading/QTSA-1 "Develop a mean-reversion strategy for ETH/USDT."
+ai --persona domains/trading/qtsa-1 "Develop a mean-reversion strategy for ETH/USDT."
 ```
 
 ### Discovering Available Personas
 
-The personas are included as data files within the installed package. You can discover them by exploring the `src/ai_assistant/personas` directory in the source code. They are organized into logical categories:
+The definitive list of available expert personas is located in the `persona_manifest.yml` file at the root of the project. This file is the source of truth for the `core/si-1` (Session Initiator) persona and provides the alias, title, and a description of each expert's capability.
 
-*   **`core/`**: Foundational personas for high-level software architecture and lifecycle management.
-*   **`patterns/`**: Specialist personas that implement a specific, repeatable development pattern (e.g., debugging, security auditing).
-*   **`domains/`**: Example personas for specific business domains (e.g., trading, finance) that showcase the assistant's extensibility.
+To regenerate this manifest after adding or changing personas, run the following command from the project root:
+
+```bash
+python scripts/generate_manifest.py
+```
 
 ### Bundled Personas
 
-Here is a list of the primary persona examples included with the assistant:
+Here is a list of the primary persona examples included with the assistant. These are concrete, expert agents you can use directly.
 
 | Alias | Category | Title | Use Case |
 | :--- | :--- | :--- | :--- |
-| `core/CSA-1` | Core | Systems Architect | Designs new systems or refactors existing ones, ensuring architectural integrity. |
-| `core/DCA-1` | Core | Documentation Architect | Creates clear, user-centric documentation from technical artifacts. |
-| `core/DPA-1` | Core | Deployment Architect | Creates detailed, risk-mitigated deployment and validation plans. |
-| `patterns/DA-1` | Patterns | Debugging Analyst | Diagnoses the root cause of bugs from error reports and stack traces. |
-| `patterns/BPR-1` | Patterns | Best Practices Reviewer | Acts as a senior peer reviewer for code quality, style, and patterns. |
-| `patterns/QSA-1` | Patterns | Quality Strategy Architect | Analyzes a codebase to create a prioritized, risk-based testing plan. |
-| `patterns/SVA-1` | Patterns | Security Auditor | Reviews code with an adversarial mindset to find potential vulnerabilities. |
-| `domains/trading/QTSA-1` | Domains | Quant Strategy Analyst | Guides the development of formal, testable trading strategy blueprints. |
-| `domains/finance/ADA-1` | Domains | API Contract Architect | Designs API contracts for financial services, focusing on REST and OpenAPI. |
+| `core/csa-1` | Core | Systems Architect | Designs new systems or refactors existing ones, ensuring architectural integrity. |
+| `core/dca-1` | Core | Documentation Architect | Creates clear, user-centric documentation from technical artifacts. |
+| `core/dpa-1` | Core | Deployment Architect | Creates detailed, risk-mitigated deployment and validation plans. |
+| `patterns/da-1` | Patterns | Debugging Analyst | Diagnoses the root cause of bugs from error reports and stack traces. |
+| `patterns/bpr-1` | Patterns | Best Practices Reviewer | Acts as a senior peer reviewer for code quality, style, and patterns. |
+| `patterns/qsa-1` | Patterns | Quality Strategy Architect | Analyzes a codebase to create a prioritized, risk-based testing plan. |
+| `patterns/sva-1` | Patterns | Security Auditor | Reviews code with an adversarial mindset to find potential vulnerabilities. |
+| `domains/trading/qtsa-1` | Domains | Quant Strategy Analyst | Guides the development of formal, testable trading strategy blueprints. |
+| `domains/finance/ada-1` | Domains | API Contract Architect | Designs API contracts for financial services, focusing on REST and OpenAPI. |
 
 ### Creating Your Own Personas
 
 You can easily create your own personas by placing `.persona.md` files in your user configuration directory: `~/.config/ai_assistant/personas/`.
 
-For example, to create a new persona `my-patterns/DBA-1`, you would create the file:
-`~/.config/ai_assistant/personas/my-patterns/DBA-1.persona.md`
+For example, to create a new persona `my-patterns/dba-1`, you would create the file:
+`~/.config/ai_assistant/personas/my-patterns/dba-1.persona.md`
 
 The application will **always check your user directory first**, allowing you to override bundled personas or add your own without modifying the installed package.
 
@@ -116,7 +115,7 @@ This is the most common and powerful way to use the assistant.
 #### Step 1: Start a New Task
 Always begin a new, distinct task with `--new-session`.
 ```bash
-ai --new-session --persona core/DA-1 "I'm getting a 'KeyError' in my 'distributor' service. I think the problem is in 'src/distributor.py'. Can you help me debug it?"
+ai --new-session --persona patterns/da-1 "I'm getting a 'KeyError' in my 'distributor' service. I think the problem is in 'src/distributor.py'. Can you help me debug it?"
 ```
 The assistant will respond and give you a session ID: `✨ Starting new session: a1b2c3d4-e5f6-7890-gh12-i3j4k5l6m7n8`
 
@@ -149,7 +148,7 @@ This mode allows the assistant to complete an entire task—including making fil
 
 **Example: Autonomous Refactoring**
 ```bash
-ai --new-session --persona core/SA-1 --autonomous \
+ai --new-session --persona core/csa-1 --autonomous \
   -f src/services/distributor.py \
   "Refactor the 'distributor' service in the attached file to improve its logging and add error handling. When done, commit the changes to a new git branch named 'refactor/distributor-logging'."
 ```
@@ -227,8 +226,43 @@ The rules for persona frontmatter and body sections are defined in `persona_conf
 Before submitting a pull request with persona changes, run the validation script from the project root:
 
 ```bash
-python scripts/validate_personas.py
+python scripts/generate_manifest.py
 ```
 
-The script will check all personas in `src/ai_assistant/personas/` and report any errors. The test suite also runs this script, so pull requests with invalid personas will be automatically blocked by CI checks.
+This script serves two purposes:
+1.  **Validation:** It acts as a linter, failing immediately if any persona file is malformed or does not match its canonical alias.
+2.  **Generation:** If all personas are valid, it generates the `persona_manifest.yml` file.
+
+You must commit the updated `persona_manifest.yml` along with your persona changes. Pull requests with stale or missing manifests will be blocked by CI checks.
+
+> ### The Persona Inheritance System
+>
+> To ensure consistency and reduce duplication, personas are built on a powerful inheritance system. This allows new, specialized personas to inherit a common set of directives and philosophies.
+>
+> #### Universal Standards (`_mixins/`)
+>
+> The application can be configured to automatically apply a "universal base persona" to **every** persona that is loaded. This is defined by the `universal_base_persona` key in `config.yml` and points to a persona in the `_mixins/` directory. By default, all personas inherit from `_mixins/codegen-standards-1`, which enforces a consistent, structured output format.
+>
+> #### Base Personas (`_base/`)
+>
+> The `_base/` directory contains foundational "archetypes" that define a core operational philosophy (e.g., technical analysis vs. collaborative dialogue). Specialized personas should inherit from one of these bases to ensure they follow a proven interaction pattern.
+>
+> #### How to Use Inheritance
+>
+> To make a new persona inherit from a base, use the `inherits_from` key in its frontmatter. The loader will recursively build the full persona content.
+>
+> **Example: `core/csa-1.persona.md`**
+> ```yaml
+> ---
+> # The alias MUST match the file path
+> alias: core/csa-1
+> # The inherited alias MUST also match its file path
+> inherits_from: _base/bcaa-1
+> # ... other frontmatter
+> ---
+> <SECTION:PRIMARY_DIRECTIVE>
+> To design new systems...
+> # ... specific directives for this persona
+> ```
+> In this example, `csa-1` will first be composed with the universal `_mixins/codegen-standards-1` mixin, and then its explicit parent `_base/bcaa-1` will be prepended to its own body, creating a complete, multi-layered expert agent.
 ```

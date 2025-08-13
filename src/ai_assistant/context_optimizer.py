@@ -1,52 +1,90 @@
-# ai_assistant/context_optimizer.py
-from typing import Dict, List, Any
+# src/ai_assistant/context_optimizer.py
+from typing import Set, List
 from .config import ai_settings
 
 class ContextOptimizer:
-    """Simple context optimization for token management"""
-    
-    def __init__(self, max_tokens: int = 8000):
-        self.max_tokens = max_tokens or ai_settings.context_optimizer.max_tokens
-    
+    """
+    Optimizes context for token efficiency by trimming and compressing text.
+    """
+    CHARS_PER_TOKEN_ESTIMATE: int = 4
+    DEFAULT_MAX_TOKENS: int = 8000
+    TRIM_SUMMARY_LINES: int = 10
+    COMPRESS_CONTEXT_LINES: int = 2
+
+    def __init__(self, max_tokens: int = None):
+        """
+        Initializes the optimizer with a maximum token limit.
+        """
+        self.max_tokens = max_tokens or getattr(ai_settings.context_optimizer, 'max_tokens', self.DEFAULT_MAX_TOKENS)
+
     def estimate_tokens(self, text: str) -> int:
-        """Rough token estimation (1 token ≈ 4 chars)"""
-        return len(text) // 4
-    
+        """
+        Provides a rough estimation of token count based on character length.
+        1 token is approximated as 4 characters.
+        """
+        return len(text) // self.CHARS_PER_TOKEN_ESTIMATE
+
     def trim_to_limit(self, text: str, max_tokens: int = None) -> str:
-        """Trim text to fit token limit"""
+        """
+        Trims text to fit within a specified token limit by keeping the start
+        and end of the text, replacing the middle with an informative message.
+        """
         limit = max_tokens or self.max_tokens
-        max_chars = limit * 4
-        
+        max_chars = limit * self.CHARS_PER_TOKEN_ESTIMATE
+
         if len(text) <= max_chars:
             return text
-        
-        # Simple trimming - keep start and end
-        keep_start = max_chars // 2
-        keep_end = max_chars // 2
-        
-        return (text[:keep_start] + 
-                f"\n\n[... {len(text) - keep_start - keep_end} chars truncated ...]\n\n" + 
-                text[-keep_end:])
-    
+
+        keep_chars_each_side = max_chars // 2
+        if keep_chars_each_side <= 0:
+            return text[:max_chars]
+
+        truncated_chars = len(text) - (keep_chars_each_side * 2)
+        if truncated_chars <= 0:
+            return text[:max_chars]
+
+        truncation_message = f"\n\n[... {truncated_chars} characters truncated (original: {len(text)} characters, max allowed: {max_chars} characters, truncated percentage: {round((truncated_chars / len(text)) * 100, 2)}%) ...]\n\n"
+        return (text[:keep_chars_each_side] + truncation_message + text[-keep_chars_each_side:])
+
     def compress_file_context(self, file_path: str, content: str, query: str) -> str:
-        """Compress file content based on query relevance"""
+        """
+        Compresses file content based on query relevance. It first tries to find
+        lines matching the query keywords and includes context around them. If no
+        matches are found, it falls back to a summary of the file's start and end.
+        """
         lines = content.split('\n')
-        query_keywords = set(query.lower().split())
-        
-        relevant_lines = []
-        context_size = 2  # Lines of context around matches
-        
+        query_keywords: Set[str] = set(query.lower().split())
+
+        if not query_keywords:
+            return self._summarize_by_lines(lines)
+
+        indices_to_include: Set[int] = set()
         for i, line in enumerate(lines):
             if any(keyword in line.lower() for keyword in query_keywords):
-                start = max(0, i - context_size)
-                end = min(len(lines), i + context_size + 1)
-                relevant_lines.extend(lines[start:end])
-        
-        if relevant_lines:
-            return '\n'.join(set(relevant_lines))  # Remove duplicates
-        
-        # If no matches, return summary
-        if len(lines) > 20:
-            return '\n'.join(lines[:10] + ['# ... middle content truncated ...'] + lines[-10:])
-        
-        return content
+                start = max(0, i - self.COMPRESS_CONTEXT_LINES)
+                end = min(len(lines), i + self.COMPRESS_CONTEXT_LINES + 1)
+                for j in range(start, end):
+                    indices_to_include.add(j)
+
+        if indices_to_include:
+            relevant_lines: List[str] = []
+            last_index = -2
+            for index in sorted(list(indices_to_include)):
+                if index > last_index + 1 and last_index != -2:
+                    relevant_lines.append('# ...')
+                relevant_lines.append(lines[index])
+                last_index = index
+            return '\n'.join(relevant_lines)
+
+        return self._summarize_by_lines(lines)
+
+    def _summarize_by_lines(self, lines: List[str]) -> str:
+        """
+        Creates a summary of a file by taking the first and last N lines.
+        """
+        if len(lines) <= (self.TRIM_SUMMARY_LINES * 2):
+            return '\n'.join(lines)
+
+        truncated_line_count = len(lines) - (self.TRIM_SUMMARY_LINES * 2)
+        truncation_message = f"# ... {truncated_line_count} lines truncated ..."
+        return '\n'.join(lines[:self.TRIM_SUMMARY_LINES] + [truncation_message] + lines[-self.TRIM_SUMMARY_LINES:])

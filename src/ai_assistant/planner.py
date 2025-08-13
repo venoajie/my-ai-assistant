@@ -1,7 +1,7 @@
 # src/ai_assistant/planner.py
 import json
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
@@ -13,13 +13,20 @@ class Planner:
         self.prompt_builder = PromptBuilder()
         self.response_handler = ResponseHandler()
 
-    # MODIFIED: Converted to an async method
     async def create_plan(
-        self, query: str, history: List[Dict[str, Any]] = None, persona_content: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        self, 
+        query: str, 
+        history: List[Dict[str, Any]] = None, 
+        persona_content: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], float]:
         print("🤔 Generating execution plan...")
         tool_descriptions = TOOL_REGISTRY.get_tool_descriptions()
-        prompt = self.prompt_builder.build_planning_prompt(query, tool_descriptions, history, persona_content)
+        prompt = self.prompt_builder.build_planning_prompt(
+            query, 
+            tool_descriptions, 
+            history, 
+            persona_content,
+            )
 
         planning_model = ai_settings.model_selection.planning
         planning_generation_config = ai_settings.generation_params.planning.model_dump()
@@ -27,24 +34,27 @@ class Planner:
         if "deepseek" in planning_model:
             planning_generation_config["response_format"] = {"type": "json_object"}
 
-        # MODIFIED: Added 'await' to correctly call the async function
-        response_text = await self.response_handler.call_api(
+        api_result = await self.response_handler.call_api(
             prompt,
             model=planning_model,
             generation_config=planning_generation_config
         )
-        
+
+        response_text = api_result["content"]
+        planning_duration = api_result["duration"]
+
         plan = self._extract_and_validate_plan(response_text)
 
         if not plan:
             if isinstance(plan, list):
                 print("✅ Plan generated successfully (No tool execution required).")
-            return plan
-            
+            # --- Return duration even for no-op plans ---
+            return plan, planning_duration
+                    
         print("✅ Plan generated successfully.")
         for i, step in enumerate(plan):
             print(f"  - Step {i+1}: {step.get('thought', '')} -> {step.get('tool_name')}({step.get('args', {})})")
-        return plan
+        return  plan, planning_duration
         
     def _extract_and_validate_plan(self, response_text: str) -> List[Dict[str, Any]]:
         """Extracts, sanitizes, repairs, and validates a JSON plan from raw LLM text."""
@@ -56,7 +66,8 @@ class Planner:
             response_text = response_text[:50000]
         
         extraction_methods = [
-            self._extract_from_markdown,
+            self._extract_from_markdown,   
+            self._extract_from_json_key, 
             self._extract_from_json_key,
             self._extract_from_boundaries,
             self._extract_direct_list,
@@ -88,7 +99,8 @@ class Planner:
         try:
             data = json.loads(text)
             if isinstance(data, dict):
-                for key in ["JSON_PLAN", "json_plan", "plan"]:
+                # Check for 'plan' as the primary key, then fall back
+                for key in ["plan", "JSON_PLAN", "json_plan"]:
                     if key in data and isinstance(data[key], list):
                         return data[key]
         except (json.JSONDecodeError, TypeError):
@@ -163,15 +175,26 @@ class Planner:
             return True
         if not isinstance(plan, list): return False
         if len(plan) > 25: return False
-        required_keys = {"tool_name", "args", "thought"}
+        
+        # Allow 'tool' as an alias for 'tool_name'
         for i, step in enumerate(plan):
             if not isinstance(step, dict): return False
-            if not required_keys.issubset(step.keys()): return False
-            if step.get("tool_name") is not None and not isinstance(step.get("tool_name"), str): return False
-            if not (isinstance(step.get("args"), dict) or step.get("args") is None): return False
-            if not isinstance(step.get("thought"), str): return False
+            
+            # Normalize 'tool' to 'tool_name'
+            if 'tool' in step and 'tool_name' not in step:
+                step['tool_name'] = step.pop('tool')
+
+            if "tool_name" not in step or "args" not in step: return False
+            
             tool_name = step["tool_name"]
             if tool_name and tool_name.lower() != "null" and not TOOL_REGISTRY.get_tool(tool_name):
                 print(f"⚠️  Warning: Step {i+1} references unknown tool: '{tool_name}'. Rejecting plan.")
                 return False
+            
+            # Validate optional condition structure
+            if 'condition' in step:
+                if not isinstance(step['condition'], dict): return False
+                if not ('from_step' in step['condition'] and ('in' or 'not_in' in step['condition'])):
+                    return False
+
         return True

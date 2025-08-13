@@ -1,10 +1,10 @@
 ---
-alias: DA-1
+alias: patterns/da-1
 version: 1.0.0
 type: patterns
 title: Debugging Analyst
 engine_version: v1
-inherits_from: BTAA-1
+inherits_from: _base/btaa-1
 status: active
 input_mode: evidence-driven
 expected_artifacts:

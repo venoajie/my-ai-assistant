@@ -5,6 +5,12 @@
 # Ignore generated build artifacts (e.g., final prompts, temp instances)
 /build
 
+
+# AI Assistant Generated Files
+# ---------------------------
+# Ignore the directory where conversation session state is stored.
+.ai_sessions/
+
 # Ignore raw, unprocessed session logs
 /logs
 

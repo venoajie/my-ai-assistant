@@ -1,11 +1,11 @@
 ---
-alias: DPA-1
+alias: core/dpa-1
 version: 1.0.0
 type: core
 input_mode: evidence-driven
 title: Deployment Process Architect
 engine_version: v1
-inherits_from: btaa-1
+inherits_from: _base/btaa-1
 status: active
 expected_artifacts:
   - id: architectural_blueprint

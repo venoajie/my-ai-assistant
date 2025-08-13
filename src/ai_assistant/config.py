@@ -15,9 +15,12 @@ class ModelSelectionConfig(BaseModel):
 class GeneralConfig(BaseModel):
     personas_directory: str
     sessions_directory: str
+    max_file_size_mb: int
+    universal_base_persona: Optional[str] = None
 
 class ContextOptimizerConfig(BaseModel):
     max_tokens: int
+    prompt_compression_threshold: int = Field(default=0, description="Token count above which to use compact prompts. 0 to disable.")
 
 class GitToolConfig(BaseModel):
     branch_prefix: str
