@@ -1,5 +1,5 @@
 ---
-alias: DA-1
+alias: patterns/DA-1
 version: 1.0.0
 type: patterns
 title: Debugging Analyst

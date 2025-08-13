@@ -1,5 +1,5 @@
 ---
-alias: BCAA-1
+alias: _base/BCAA-1
 version: 1.0.0
 type: _base
 title: Base Collaborative Agent

@@ -1,5 +1,5 @@
 ---
-alias: jan-1
+alias: utility/jan-1
 version: 1.0.0
 type: utility
 title: Project Janitor

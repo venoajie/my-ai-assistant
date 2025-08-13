@@ -1,5 +1,5 @@
 ---
-alias: TAE-1
+alias: patterns/TAE-1
 version: 1.0.0
 type: patterns
 title: Test Automation Engineer

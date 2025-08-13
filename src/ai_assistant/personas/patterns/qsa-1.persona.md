@@ -1,5 +1,5 @@
 ---
-alias: QSA-1
+alias: patterns/QSA-1
 version: 1.0.0
 type: patterns
 title: Quality Strategy Architect

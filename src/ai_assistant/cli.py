@@ -12,6 +12,8 @@ from importlib import metadata
 from datetime import datetime, timezone
 from importlib import resources
 import time
+import hashlib
+import json
 
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from .context_plugin import ContextPluginBase
@@ -21,34 +23,89 @@ from .config import ai_settings
 from .context_optimizer import ContextOptimizer
 from . import kernel 
 
-def is_manifest_stale(manifest_path: Path):
-    """Checks if the manifest is older than any persona file in the package."""
+
+# --- This is a necessary evil for runtime validation. ---
+# In a more mature package, PersonaValidator would be part of the src library.
+try:
+    sys.path.insert(0, str(Path.cwd() / "scripts"))
+    from persona_validator import PersonaValidator
+except ImportError:
+    PersonaValidator = None
+    
+def is_manifest_invalid(manifest_path: Path):
+    """
+    Checks if the manifest is invalid due to timestamps or content mismatch.
+    Returns a tuple (is_invalid: bool, reason: str).
+    """
+    project_root = Path.cwd()
+    personas_dir = project_root / "src" / "ai_assistant" / "personas"
+
     if not manifest_path.exists():
         return True, "Manifest file does not exist."
 
+    # --- Check 1: Timestamp and basic structure validation ---
     try:
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest_data = yaml.safe_load(f)
         generated_at_str = manifest_data.get("generated_at_utc")
-        if not generated_at_str:
-            return True, "Manifest is missing the 'generated_at_utc' timestamp."
+        stored_signature = manifest_data.get("validation_signature")
+        if not generated_at_str or not stored_signature:
+            return True, "Manifest is malformed (missing timestamp or validation_signature)."
         manifest_time = datetime.fromisoformat(generated_at_str)
     except (yaml.YAMLError, TypeError, ValueError) as e:
-        return True, f"Could not parse manifest or its timestamp: {e}"
+        return True, f"Could not parse manifest: {e}"
+
+    # --- Check 2: Compare file modification times ---
+    try:
+        for persona_path_obj in personas_dir.rglob("*.persona.md"):
+            persona_mtime = datetime.fromtimestamp(persona_path_obj.stat().st_mtime, tz=timezone.utc)
+            if persona_mtime > manifest_time:
+                return True, f"Persona '{persona_path_obj.name}' was modified after the manifest was generated."
+    except Exception as e:
+        return True, f"Could not scan persona files for modification times: {e}"
+
+    # --- Check 3: Recalculate and compare the validation signature ---
+    if not PersonaValidator:
+        return True, "Could not import PersonaValidator from scripts directory. Cannot perform full validation."
 
     try:
-        # Find all persona files within the package resources
-        persona_root = resources.files("ai_assistant").joinpath("personas")
-        for persona_path_traversable in persona_root.rglob("*.persona.md"):
-            # We need to get the real file path to check mtime
-            with resources.as_file(persona_path_traversable) as persona_path:
-                persona_mtime = datetime.fromtimestamp(persona_path.stat().st_mtime, tz=timezone.utc)
-                if persona_mtime > manifest_time:
-                    return True, f"Persona '{persona_path.name}' was modified after the manifest was generated."
-    except Exception as e:
-        return True, f"Could not scan package persona files: {e}"
+        validator = PersonaValidator(project_root / "persona_config.yml")
+        all_persona_paths = list(personas_dir.rglob("*.persona.md"))
+        validated_persona_details = []
 
-    return False, "Manifest is up-to-date."
+        for persona_path in all_persona_paths:
+            is_valid, reason = validator.validate_persona(persona_path, personas_dir)
+            if not is_valid:
+                return True, f"A persona file on disk is invalid. Reason: {reason} for file {persona_path.relative_to(project_root)}. The manifest is out of sync with an invalid state."
+            else:
+                content = persona_path.read_text(encoding="utf-8")
+                data = yaml.safe_load(content.split("---")[1])
+                validated_persona_details.append({
+                    "path": persona_path,
+                    "alias": data['alias'],
+                    "content": content,
+                })
+
+        # This logic MUST EXACTLY MATCH generate_manifest.py
+        canonical_data = []
+        for details in sorted(validated_persona_details, key=lambda p: p['alias']):
+            canonical_data.append({
+                "alias": details['alias'],
+                "path": str(details['path'].relative_to(project_root)),
+                "content_sha256": hashlib.sha256(details['content'].encode('utf-8')).hexdigest()
+            })
+
+        canonical_string = json.dumps(canonical_data, sort_keys=True, separators=(',', ':'))
+        recalculated_signature = hashlib.sha256(canonical_string.encode('utf-8')).hexdigest()
+
+        if recalculated_signature != stored_signature:
+            return True, "Persona file structure or content has changed since last validation. The signature does not match."
+
+    except Exception as e:
+        return True, f"A critical error occurred during runtime signature validation: {e}"
+
+    return False, "Manifest is valid and up-to-date."
+
 
 def build_file_context(files: List[str], query: str) -> str:
     """Reads multiple files and formats them into a single context string."""
@@ -155,14 +212,13 @@ async def async_main():
     
     if args.persona:
         manifest_path = Path.cwd() / "persona_manifest.yml"
-        if manifest_path.exists(): # Only check if the manifest file is present
-            stale, reason = is_manifest_stale(manifest_path)
-            if stale:
-                print(f"🛑 HALTING: The persona manifest is stale. Reason: {reason}", file=sys.stderr)
-                print("Please run your manifest generation script to update it before using personas.", file=sys.stderr)
-                sys.exit(1)
-            print("✅ Persona manifest is up-to-date.")
-    
+        invalid, reason = is_manifest_invalid(manifest_path)
+        if invalid:
+            print(f"🛑 HALTING: The persona manifest is invalid. Reason: {reason}", file=sys.stderr)
+            print("Please run 'python scripts/generate_manifest.py' to fix it.", file=sys.stderr)
+            sys.exit(1)
+        print("✅ Persona manifest is valid and up-to-date.")
+        
     if args.list_plugins:
         print("Available Context Plugins:")
         plugins = list_available_plugins()

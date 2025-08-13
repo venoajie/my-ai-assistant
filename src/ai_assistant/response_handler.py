@@ -75,33 +75,48 @@ class ResponseHandler:
 
                     return {"content": content, "duration": duration, "provider_name": provider_name}
 
-                except aiohttp.ClientResponseError as e:
-                    # Catches non-2xx responses
-                    if 500 <= e.status <= 599:
+                except (
+                    aiohttp.ClientResponseError, 
+                    asyncio.TimeoutError, 
+                    ValueError,
+                    ) as e:
+                    
+                    if isinstance(e, aiohttp.ClientResponseError) \
+                        and 500 <= e.status <= 599:
                         print(f"\n   ...Server error ({e.status}). Retrying...")
+                    elif isinstance(e, ValueError) and "empty or whitespace-only" in str(e):
+                        print(f"\n   ...API returned empty response. Retrying...")
                     else:
-                        error_msg = f"❌ ERROR: Non-retriable API request error for model {model}: {e.status} - {e.message}"
+                        # This is now for non-5xx HTTP errors or other unexpected ValueErrors
+                        error_msg = f"❌ ERROR: Non-retriable API error for model {model}: {e}"
                         print()
-                        return {"content": error_msg, "duration": time.monotonic() - start_time, "provider_name": provider_name}
-                except asyncio.TimeoutError:
-                    print(f"\n   ...Request timed out.")
-                    error_msg = f"❌ ERROR: Network-level error for model {model}: {e}"
-                    print()
-                    return {"content": error_msg, "duration": time.monotonic() - start_time, "provider_name": provider_name}
+                        return {
+                            "content": error_msg, 
+                            "duration": time.monotonic() - start_time, 
+                            "provider_name": provider_name,
+                            }
                 except Exception as e:
+                    # Catch-all for any other unexpected errors
                     error_msg = f"❌ ERROR: An unexpected error occurred during API call for model {model}: {e}"
                     print()
-                    return {"content": error_msg, "duration": time.monotonic() - start_time, "provider_name": provider_name}
+                    return {
+                        "content": error_msg,
+                        "duration": time.monotonic() - start_time, 
+                        "provider_name": provider_name,
+                        }
 
                 if attempt < max_retries - 1:
                     wait_time = 2 ** (attempt + 1)
                     print(f"   ...Waiting {wait_time}s before retrying.")
                     await asyncio.sleep(wait_time)
-                    
+
         final_error_msg = f"❌ ERROR: API call for model {model} failed after {max_retries} attempts."
         print()
-        return {"content": final_error_msg, "duration": time.monotonic() - start_time, "provider_name": provider_name}
-
+        return {
+            "content": final_error_msg, 
+            "duration": time.monotonic() - start_time, 
+            "provider_name": provider_name,
+            }
 
     async def _call_gemini(
         self, 
@@ -129,7 +144,6 @@ class ResponseHandler:
         content = response_data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
         
         if not content or not content.strip():
-            # Raise an exception to trigger the retry logic in the main call_api method
             raise ValueError("API returned an empty or whitespace-only response.")
 
         print(f" ✅ Done!")
@@ -170,8 +184,7 @@ class ResponseHandler:
         content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
         if not content or not content.strip():
-            # Raise an exception to trigger the retry logic in the main call_api method
             raise ValueError("API returned an empty or whitespace-only response.")
-
+        
         print(f" ✅ Done!")
         return content

@@ -1,5 +1,5 @@
 # /scripts/generate_manifest.py
-# Version: 6.0 (Definitive - With Unified Validation)
+# Version: 7.0 (Definitive - With Unified Validation)
 
 import yaml
 from pathlib import Path
@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 import sys
 import re
 import os 
+import hashlib
+import json
 
 from persona_validator import PersonaValidator
 
@@ -18,7 +20,7 @@ sys.path.insert(0, str(ROOT_DIR / "src"))
 # --- Constants ---
 PERSONAS_DIR = ROOT_DIR / "src" / "ai_assistant" / "personas"
 OUTPUT_FILE = ROOT_DIR / "persona_manifest.yml"
-MANIFEST_VERSION = "1.5"
+MANIFEST_VERSION = "2.0"
 
 
 def extract_description(content: str) -> str:
@@ -46,85 +48,82 @@ def is_public_persona(persona_path: Path, personas_root: Path) -> bool:
     return not any(part.startswith('_') for part in relative_path.parts)
 
 
+
 def main():
     """
-    Scans all persona files, performs critical validation (including alias matching),
-    filters for public personas, and generates the persona_manifest.yml file.
-    This script is now the single source of truth for build-time validation.
+    Scans, validates all personas, and generates a cryptographically signed
+    persona_manifest.yml file only on complete success.
     """
-    print("--- Generating Persona Manifest (v6.0 - Definitive) ---")
+    print("--- Generating Persona Manifest (v7.0 - With Cryptographic Signature) ---")
     print(f"Scanning for personas in: {PERSONAS_DIR}")
 
     all_personas = list(PERSONAS_DIR.rglob("*.persona.md"))
-    validator = PersonaValidator(CONFIG_FILE) 
-    manifest_personas = []
+    validator = PersonaValidator(CONFIG_FILE)
+    validated_persona_details = []
     has_errors = False
 
     for persona_path in all_personas:
-        
         is_valid, reason = validator.validate_persona(persona_path, PERSONAS_DIR)
         if not is_valid:
             print(f"  - [FAIL] {persona_path.relative_to(ROOT_DIR)}", file=sys.stderr)
             print(f"       └─ Reason: {reason}", file=sys.stderr)
             has_errors = True
-            continue
-        
-        try:
+        else:
+            # Collect details of valid personas for signature generation
             content = persona_path.read_text(encoding="utf-8")
-            parts = content.split("---")
-            if len(parts) < 3:
-                print(f"  - [FAIL] Malformed persona file (missing '---' separators): {persona_path}", file=sys.stderr)
-                has_errors = True
-                continue
-
-            data = yaml.safe_load(parts[1])
-            if not isinstance(data, dict) or "alias" not in data or "title" not in data:
-                print(f"  - [FAIL] Invalid or missing frontmatter (requires 'alias' and 'title'): {persona_path}", file=sys.stderr)
-                has_errors = True
-                continue
-
-            # --- UNIFIED VALIDATION LOGIC ---
-            expected_alias = str(persona_path.relative_to(PERSONAS_DIR)).replace(".persona.md", "").replace(os.path.sep, "/")
-            actual_alias = data.get("alias")
-            if expected_alias.lower() != actual_alias.lower():
-                print(f"  - [FAIL] Filename-Alias Mismatch in {persona_path}:", file=sys.stderr)
-                print(f"       └─ Expected alias based on path: '{expected_alias}'", file=sys.stderr)
-                print(f"       └─ Found alias in frontmatter:   '{actual_alias}'", file=sys.stderr)
-                has_errors = True
-                continue # Do not add invalid personas to the manifest
-            # --- END OF UNIFIED VALIDATION ---
-
-            if is_public_persona(persona_path, PERSONAS_DIR):
-                description = extract_description(content)
-                manifest_personas.append(
-                    {
-                        "alias": actual_alias,
-                        "title": data.get("title"),
-                        "description": description,
-                    }
-                )
-        except (yaml.YAMLError, Exception) as e:
-            print(f"  - [FAIL] Error processing {persona_path}: {e}", file=sys.stderr)
-            has_errors = True
-            continue
+            data = yaml.safe_load(content.split("---")[1])
+            validated_persona_details.append({
+                "path": persona_path,
+                "alias": data['alias'],
+                "title": data.get('title'),
+                "content": content,
+            })
 
     if has_errors:
         print("\n🛑 Validation failed. Persona manifest was NOT generated.", file=sys.stderr)
         sys.exit(1)
 
-    manifest_personas.sort(key=lambda p: p["alias"])
+    # --- SIGNATURE GENERATION ---
+    # 1. Create a canonical data structure of all validated personas
+    canonical_data = []
+    for details in sorted(validated_persona_details, key=lambda p: p['alias']):
+        canonical_data.append({
+            "alias": details['alias'],
+            "path": str(details['path'].relative_to(ROOT_DIR)),
+            "content_sha256": hashlib.sha256(details['content'].encode('utf-8')).hexdigest()
+        })
+
+    # 2. Create a stable string representation and hash it
+    canonical_string = json.dumps(canonical_data, sort_keys=True, separators=(',', ':'))
+    validation_signature = hashlib.sha256(canonical_string.encode('utf-8')).hexdigest()
+
+    # --- MANIFEST CREATION ---
+    # Filter for public personas to be listed in the manifest
+    public_personas = []
+    for details in validated_persona_details:
+        if is_public_persona(details['path'], PERSONAS_DIR):
+            description = extract_description(details['content'])
+            public_personas.append({
+                "alias": details['alias'],
+                "title": details['title'],
+                "description": description,
+            })
+
+    public_personas.sort(key=lambda p: p["alias"])
     manifest_data = {
         "version": MANIFEST_VERSION,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "personas": manifest_personas,
+        "validation_signature": validation_signature, # Embed the signature
+        "personas": public_personas,
     }
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         yaml.dump(manifest_data, f, sort_keys=False, indent=2, default_flow_style=False)
 
-    print(f"\n✓ All personas passed validation.")
+    print(f"\n✓ All {len(all_personas)} personas passed validation.")
     print(f"✓ Persona manifest successfully generated at: {OUTPUT_FILE}")
-    print(f"  Found and included {len(manifest_personas)} public personas.")
+    print(f"  - Included {len(public_personas)} public personas in the list.")
+    print(f"  - Validation Signature: {validation_signature[:12]}...")
 
 
 if __name__ == "__main__":

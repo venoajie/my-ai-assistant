@@ -1,5 +1,5 @@
 ---
-alias: SI-1
+alias: core/SI-1
 version: 4.1.0
 type: core
 title: Session Initiator
