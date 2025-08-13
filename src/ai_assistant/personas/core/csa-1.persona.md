@@ -1,5 +1,5 @@
 ---
-alias: CSA-1
+alias: core/CSA-1
 version: 1.3.0
 type: core
 title: Collaborative Systems Architect

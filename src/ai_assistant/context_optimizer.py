@@ -43,7 +43,7 @@ class ContextOptimizer:
         if truncated_chars <= 0:
             return text[:max_chars]
 
-        truncation_message = f"\n\n[... {truncated_chars} characters truncated ...]\n\n"
+        truncation_message = f"\n\n[... {truncated_chars} characters truncated (original: {len(text)} characters, max allowed: {max_chars} characters, truncated percentage: {round((truncated_chars / len(text)) * 100, 2)}%) ...]\n\n"
         return (text[:keep_chars_each_side] + truncation_message + text[-keep_chars_each_side:])
 
     def compress_file_context(self, file_path: str, content: str, query: str) -> str:

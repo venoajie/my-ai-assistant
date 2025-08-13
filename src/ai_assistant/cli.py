@@ -153,6 +153,16 @@ async def async_main():
     
     args = parser.parse_args()
     
+    if args.persona:
+        manifest_path = Path.cwd() / "persona_manifest.yml"
+        if manifest_path.exists(): # Only check if the manifest file is present
+            stale, reason = is_manifest_stale(manifest_path)
+            if stale:
+                print(f"🛑 HALTING: The persona manifest is stale. Reason: {reason}", file=sys.stderr)
+                print("Please run your manifest generation script to update it before using personas.", file=sys.stderr)
+                sys.exit(1)
+            print("✅ Persona manifest is up-to-date.")
+    
     if args.list_plugins:
         print("Available Context Plugins:")
         plugins = list_available_plugins()
@@ -166,11 +176,18 @@ async def async_main():
     session_id = args.session
     context_plugin = load_context_plugin(args.context)
     query = ' '.join(args.query)
+    user_query = ' '.join(args.query)
+    initial_context = ""
 
+    context_plugin = load_context_plugin(args.context)
     if context_plugin:
         print("   - ✅ Plugin loaded successfully.")
-        context_str = context_plugin.get_context(query, args.files or [])
-        query = context_str + query
+        plugin_context = context_plugin.get_context(user_query, args.files or [])
+        initial_context += plugin_context
+        
+    if args.files:
+        file_context = build_file_context(args.files, user_query)
+        initial_context += file_context
         
     if args.list_personas:
         print("Built-in Personas:")
@@ -178,6 +195,8 @@ async def async_main():
             print(f" - {p}")
         sys.exit(0) 
         
+    session_manager = SessionManager()
+    session_id = args.session
     history = []
     if args.new_session or (args.interactive and not args.session):
         session_id = session_manager.start_new_session()
@@ -185,7 +204,7 @@ async def async_main():
     elif session_id:
         print(f"🔄 Continuing session: {session_id}")
         history = session_manager.load_session(session_id) or []
-    
+        
     if args.interactive:
         await run_interactive_session(
             history, 
@@ -271,27 +290,16 @@ async def run_interactive_session(
     print("👋 Exiting interactive session.")
 
 async def orchestrate_agent_run(
-    query: str, 
-    history: List[Dict[str, Any]], 
-    persona_alias: Optional[str] = None, 
+    query: str,
+    history: List[Dict[str, Any]],
+    persona_alias: Optional[str] = None,
     is_autonomous: bool = False,
     ):
-    
-    # --- MANIFEST STALENESS CHECK ---
-    if persona_alias and "si-1" in persona_alias.lower():
-        manifest_path = Path.cwd() / "persona_manifest.yml"
-        stale, reason = is_manifest_stale(manifest_path)
-        if stale:
-            error_msg = f"🛑 HALTING: The persona manifest is stale. Reason: {reason}\nPlease run your manifest generation script and try again."
-            print(error_msg, file=sys.stderr)
-            # In a real app, you might exit, but here we return an error message
-            return error_msg
-        print("✅ Persona manifest is up-to-date.")
-    # --- END OF CHECK ---
 
+    # --- PERSONA LOADING ---
     persona_content = None
     if persona_alias:
-        loader = PersonaLoader() 
+        loader = PersonaLoader()
         try:
             persona_content = loader.load_persona_content(persona_alias)
         except (RecursionError, FileNotFoundError) as e:
@@ -299,9 +307,9 @@ async def orchestrate_agent_run(
             print(error_msg, file=sys.stderr)
             return error_msg
 
-    # Add this block
+    # --- PRE-PROCESSING & PLANNING ---
     optimizer = ContextOptimizer()
-    optimized_query = optimizer.trim_to_limit(query) # Use trim_to_limit on the combined query/context
+    optimized_query = optimizer.trim_to_limit(query)
     if len(optimized_query) < len(query):
         print(f"ℹ️  Context has been truncated to fit the token limit.")
 
@@ -309,7 +317,6 @@ async def orchestrate_agent_run(
     plan = await planner.create_plan(optimized_query, history, persona_content)
 
     is_no_op_plan = not plan or all(not step.get("tool_name") for step in plan)
-
     if is_no_op_plan:
         print("📝 No tool execution required. Generating direct response...")
         prompt_builder = PromptBuilder()
@@ -318,44 +325,70 @@ async def orchestrate_agent_run(
         synthesis_model = ai_settings.model_selection.synthesis
         return await response_handler.call_api(direct_prompt, model=synthesis_model)
 
-    print("🚀 Executing plan...")
+    # --- ADAPTIVE AGENT KERNEL ---
+    print("🚀 Executing adaptive plan...")
     observations = []
+    step_results: Dict[int, str] = {}
     any_tool_succeeded = False
     any_risky_action_denied = False
 
     for i, step in enumerate(plan):
+        step_num = i + 1
+
+        if "condition" in step:
+            cond = step["condition"]
+            # The planner might use 'from_tool' or 'from_step'. We need to find the source step's result.
+            # This logic is simplified; a real implementation might need a more robust way to map tool names to step numbers.
+            # For now, we assume 'from_step' is provided as an integer.
+            from_step_num = cond.get("from_step")
+            if from_step_num is None:
+                 print(f"  - ⚠️  Warning: Conditional step {step_num} is missing 'from_step'. Skipping condition check.")
+            else:
+                prev_result = step_results.get(from_step_num, "")
+                check_value = cond.get("in") or cond.get("not_in")
+                is_negation = "not_in" in cond
+
+                # If the condition is not met, skip this step
+                if (is_negation and check_value in prev_result) or \
+                   (not is_negation and check_value not in prev_result):
+                    print(f"  - Skipping Step {step_num} because condition was not met.")
+                    continue
+
         tool_name = step.get("tool_name")
         args = step.get("args") or {}
-        
-        print(f"  - Executing Step {i+1}: {tool_name}({args})")
+
+        print(f"  - Executing Step {step_num}: {tool_name}({args})")
         tool = TOOL_REGISTRY.get_tool(tool_name)
         if tool:
             if tool.is_risky and not is_autonomous:
                 confirm = await asyncio.to_thread(input, "      Proceed? [y/N]: ")
                 if confirm.lower().strip() != 'y':
                     print("    🚫 Action denied by user. Skipping step.")
-                    observations.append(f"<Observation tool='{tool_name}' args='{args}'>\nAction denied by user.\n</Observation>")
+                    observations.append(f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\nAction denied by user.\n</Observation>")
                     any_risky_action_denied = True
                     continue
-            
+
             try:
                 success, result = tool(**args)
+                step_results[step_num] = result # Store result for future conditions
+                # FIX #3: IMPROVED OBSERVATION FORMATTING
                 if success:
-                    observations.append(f"<Observation tool='{tool_name}' args='{args}'>\n{result}\n</Observation>")
+                    observations.append(f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\n{result}\n</Observation>")
                     print(f"    ✅ Success.")
                     any_tool_succeeded = True
                 else:
-                    error_msg = f"<Observation tool='{tool_name}' args='{args}'>\nError: {result}\n</Observation>"
+                    error_msg = f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\nError: {result}\n</Observation>"
                     observations.append(error_msg)
                     print(f"    ❌ Failure: {result}")
             except Exception as e:
-                error_msg = f"<Observation tool='{tool_name}'>\nCritical Error: {e}\n</Observation>"
+                error_msg = f"<Observation step='{step_num}' tool='{tool_name}'>\nCritical Error: {e}\n</Observation>"
                 observations.append(error_msg)
                 print(f"    ❌ CRITICAL FAILURE: {e}")
         else:
-            observations.append(f"<Observation tool='{tool_name}'>Error: Tool not found.</Observation>")
+            observations.append(f"<Observation step='{step_num}' tool='{tool_name}'>Error: Tool not found.</Observation>")
             print(f"    ❌ Failure: Tool '{tool_name}' not found.")
 
+    # --- SYNTHESIS ---
     if any_risky_action_denied and not any_tool_succeeded:
         print("\n🛑 Halting before synthesis. A critical action was denied and no other operations succeeded.")
         return "I was unable to complete the task because a necessary action was denied by the user for safety reasons."
