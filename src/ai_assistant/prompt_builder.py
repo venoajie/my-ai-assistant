@@ -1,5 +1,4 @@
 # src/ai_assistant/prompt_builder.py
-from pathlib import Path
 from typing import Dict, List, Any
 from importlib import resources
 
@@ -15,7 +14,7 @@ class PromptBuilder:
     def _load_da_persona(self) -> str:
         """
         Loads the Debugging Analyst (da-1) persona content from its file.
-        This method now uses importlib.resources to robustly find the package data.
+        This method uses importlib.resources to robustly find the package data.
         """
         if self._da_persona_content is None:
             try:
@@ -113,20 +112,18 @@ JSON_PLAN:
         history: List[Dict[str, Any]],
         observations: List[str],
         persona_content: str = None,
-        use_compact_protocol: bool = False
+        use_compact_protocol: bool = False,
+        is_failure: bool = False
         ) -> str:
         """
-        Builds the prompt for the Synthesizer, which formulates the final response.
-        It conditionally uses compact formats to save tokens on large inputs.
+        Builds the prompt for the Synthesizer. The decision to use a failure
+        persona is now passed in from the orchestration layer.
         """
         history_section = self._build_history_section(history, use_compact_format=use_compact_protocol)
         observation_section = "\n".join(observations)
 
-        # --- REFACTOR: Centralized Failure Handling ---
-        # Check for failure keywords in observations.
-        has_failure = any(keyword in observation_section.lower() for keyword in ['error', 'failure', 'critical failure', 'denied by user'])
-
-        if has_failure:
+        # The builder no longer inspects observations. It just obeys the flag from the kernel.
+        if is_failure:
             # On failure, override the original persona with the Debugging Analyst persona.
             guardrails = f"<SystemPrompt>\n{self._load_da_persona()}\n</SystemPrompt>"
         elif persona_content:
