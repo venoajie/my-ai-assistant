@@ -126,14 +126,80 @@ Now, use the `--session` flag with the ID you just received. The AI will remembe
 ai --session a1b2c3d4-e5f6-7890-gh12-i3j4k5l6m7n8 "Okay, show me the contents of that file."
 ```
 
-#### Step 3: Working with Multiple Files
+#### Step 3: Working with Multiple Files & Complex Queries
 
-For tasks that require context from multiple files, such as code reviews or refactoring, attach them with the `-f` flag.
+When your commands become long or involve many files, how you write them in the terminal matters. Here are three common methods, from the simplest to the most robust.
+
+---
+### Option 1: The Quick Method (Simple Terminal Input)
+
+For a quick, one-off command you're typing directly, you can use the backslash (`\`) to continue a command onto a new line.
 
 ```bash
-ai "Compare these two service implementations and suggest which pattern is better." \
+# Type this directly into your terminal
+ai --new-session "Compare these two service implementations." \
   -f src/services/auth_service.py \
   -f src/services/user_service.py
+```
+
+> **Warning: This Method is Fragile!**
+> This method is very sensitive to invisible characters. If you copy-paste this command, an invisible space or a different line ending (like from Windows) after a `\` will break the entire command, often with strange errors like `-f: not found`. **For scripts, always use Option 2.**
+
+---
+### Option 2: The Recommended Scripting Method (Robust & Readable)
+
+This is the **best practice** for saving complex commands in a script file (e.g., `my_task.sh`). It is immune to copy-paste errors and works reliably across different Linux systems.
+
+This method requires the `bash` shell. By starting the script with `#!/bin/bash`, you ensure the correct shell is always used, regardless of the system's default.
+
+**Create a file `my_task.sh`:**
+```bash
+#!/bin/bash
+
+# This line ensures the script is run with bash, not a simpler shell like dash.
+
+# Step 1: Define all file arguments in a clean array.
+files=(
+    -f src/ai_assistant/cli.py
+    -f src/ai_assistant/config.py
+    -f src/ai_assistant/context_optimizer.py
+    # ... add all other files here ...
+)
+
+# Step 2: Define your long, multi-line query safely using a "here document".
+query=$(cat <<'EOF'
+This is my long, multi-line request.
+I can write anything here without worrying about special characters or quotes.
+EOF
+)
+
+# Step 3: Execute the command safely.
+# The quotes around "${files[@]}" and "$query" are important!
+ai --new-session --persona core/csa-1 "${files[@]}" "$query"
+```
+
+**How to run this script:**
+```bash
+# 1. Make the script executable (you only need to do this once)
+chmod +x my_task.sh
+
+# 2. Run it
+./my_task.sh
+```
+
+---
+### Option 3: The Interactive Array Method
+
+This is a great middle-ground if you're working interactively in your terminal but don't want to create a full script file. It's much safer than using backslashes.
+
+**Just paste these two commands into your terminal one after the other:**
+
+```bash
+# First, define the array of files
+files=(-f src/services/auth_service.py -f src/services/user_service.py)
+
+# Then, run the command using the array
+ai --new-session "${files[@]}" "Compare these two service implementations."
 ```
 ---
 
