@@ -1,4 +1,5 @@
-# src/ai_assistant/prompt_builder.py
+
+import re
 from typing import Dict, List, Any
 from importlib import resources
 
@@ -104,11 +105,22 @@ JSON_PLAN:
         if not persona_content:
             raise ValueError("`persona_content` is a mandatory argument for build_synthesis_prompt.")
 
+        # REFACTOR: Extract directives to be top-level instructions, not nested context.
+        directives_section = ""
+        # Use a regex to find and extract the <directives> block
+        directives_match = re.search(r"<directives>.*?</directives>", persona_content, re.DOTALL)
+        if directives_match:
+            directives_section = directives_match.group(0)
+            # Remove the directives from the main persona content to avoid duplication
+            persona_content = persona_content.replace(directives_section, "").strip()
+
         history_section = self._build_history_section(history, use_compact_format=use_compact_protocol)
         observation_section = "\n".join(observations)
-        guardrails = f"<SystemPrompt>\n{persona_content}\n</SystemPrompt>"
+        # The remaining persona content serves as contextual background
+        persona_context_section = f"<SystemPrompt>\n{persona_content}\n</SystemPrompt>"
 
-        prompt = f"""{guardrails}
+        prompt = f"""{directives_section}
+{persona_context_section}
 You are an expert AI assistant. Your task is to provide a final, comprehensive answer to the user's request based on the preceding conversation and the observations gathered from tool executions.
 You MUST embody the persona, philosophy, and directives provided in the SystemPrompt.
 

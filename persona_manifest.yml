@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-14T07:44:12.449181+00:00'
+generated_at_utc: '2025-08-14T08:15:09.146431+00:00'
 manifest_version: 7.1-idempotent
-validation_signature: 4e4fb00648a5803726cc9ad9532da3638bf68f4c3c71cb0ac323edca534d105a
+validation_signature: 30e562e8b8b2cfca37f2959cb8f7aa826a9e64900f16e4edb78ef9f77c6d00f9
 personas:
 - alias: _base/bcaa-1
   title: Base Collaborative Agent
