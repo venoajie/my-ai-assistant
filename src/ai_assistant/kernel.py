@@ -33,15 +33,16 @@ async def orchestrate_agent_run(
             return {
                 "response": error_msg, 
                 "synthesis_prompt": "",
+                "timings": timings,
                 }
 
-    # --- PRE-PROCESSING & PLANNING ---        
+    # --- PRE-PROCESSING & COMPRESSION LOGIC ---
     optimizer = ContextOptimizer()
     optimized_query = optimizer.trim_to_limit(query)
     if len(optimized_query) < len(query):
         print(f"ℹ️  Context has been truncated to fit the token limit.")
 
-    # We estimate token usage without observations first, as they don't exist yet.
+    # This logic must run BEFORE the planner is called to decide if planning prompt needs compact history.
     use_compact_protocol = False
     threshold = ai_settings.context_optimizer.prompt_compression_threshold
     if threshold > 0:
@@ -54,19 +55,22 @@ async def orchestrate_agent_run(
             print(f"ℹ️  Context size ({estimated_tokens} tokens) exceeds threshold ({threshold}). Using compact prompt format for planning.")
             use_compact_protocol = True
 
+    # --- PLANNING ---
     planner = Planner()
     plan, planning_duration = await planner.create_plan(
         optimized_query,
         history,
         persona_content,
-        use_compact_protocol
-        )    
-    timings["planning"] = planning_duration # --- Store planning time ---
+        use_compact_protocol  # Now this variable exists and has a value
+    )
+    timings["planning"] = planning_duration
     
     prompt_builder = PromptBuilder()
 
+    # --- DIRECT RESPONSE (NO TOOLS) ---
     if not plan or all(not step.get("tool_name") for step in plan):
         print("📝 No tool execution required. Generating direct response...")
+        # For no-op, we don't need to worry about compact protocol as context is small.
         direct_prompt = prompt_builder.build_synthesis_prompt(
             query=query,
             history=history,
@@ -77,7 +81,7 @@ async def orchestrate_agent_run(
         synthesis_model = ai_settings.model_selection.synthesis
         
         synthesis_result = await response_handler.call_api(direct_prompt, model=synthesis_model)
-        timings["synthesis"] = synthesis_result["duration"] # --- Store synthesis time ---
+        timings["synthesis"] = synthesis_result["duration"]
         
         return {
             "response": synthesis_result["content"],
@@ -85,15 +89,13 @@ async def orchestrate_agent_run(
             "timings": timings
         }
 
-
-    # --- ADAPTIVE AGENT KERNEL ---
+    # --- ADAPTIVE AGENT KERNEL (TOOL EXECUTION) ---
     print("🚀 Executing adaptive plan...")
     observations = []
     step_results: Dict[int, str] = {}
     any_tool_succeeded = False
     any_risky_action_denied = False
 
-    # 1. Evaluate Condition with Type Safety
     for i, step in enumerate(plan):
         step_num = i + 1
 
@@ -104,30 +106,15 @@ async def orchestrate_agent_run(
                  print(f"  - ⚠️  Warning: Conditional step {step_num} is missing 'from_step'. Skipping condition check.")
             else:
                 prev_result = step_results.get(from_step_num, "")
-                
                 condition_met = True
-                
-                if "in" in cond:
-                    check_value = cond["in"]
-                    if check_value is None:
-                        if prev_result is not None and prev_result.strip() != "":
-                            condition_met = False
-                    elif prev_result is None or str(check_value) not in str(prev_result):
-                        condition_met = False
-
-                if "not_in" in cond:
-                    check_value = cond["not_in"]
-                    if check_value is None:
-                        if prev_result is None or prev_result.strip() == "":
-                            condition_met = False
-                    elif prev_result is not None and str(check_value) in str(prev_result):
-                        condition_met = False
-                
+                if "in" in cond and (prev_result is None or str(cond["in"]) not in str(prev_result)):
+                    condition_met = False
+                if "not_in" in cond and (prev_result is not None and str(cond["not_in"]) in str(prev_result)):
+                    condition_met = False
                 if not condition_met:
                     print(f"  - Skipping Step {step_num} because condition was not met.")
                     continue
 
-        # 2. Execute Tool
         tool_name = step.get("tool_name")
         args = step.get("args") or {}
 
@@ -145,7 +132,6 @@ async def orchestrate_agent_run(
             try:
                 success, result = tool(**args)
                 step_results[step_num] = result
-
                 if success:
                     observations.append(f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\n{result}\n</Observation>")
                     print(f"    ✅ Success.")
@@ -169,39 +155,32 @@ async def orchestrate_agent_run(
         return {
             "response": error_msg, 
             "synthesis_prompt": "",
+            "timings": timings,
             }
-        # --- SYNTHESIS ---
+            
     # Join observations into a single string for analysis and prompt building.
     observation_text = "\n".join(observations)
 
-    # --- Precise Failure Detection ---
-    # The kernel now inspects the structure of the observations to determine failure,
-    # preventing false positives from tool output content.
+    # Precise Failure Detection
     is_failure_state = False
     for obs in observations:
-        # Check for specific error markers that the system controls.
         if obs.startswith("<Observation") and ("Error:" in obs or "Critical Error:" in obs or "Action denied by user" in obs):
             is_failure_state = True
             break
 
-    # --- Conditional Prompt Compression ---
+    # Re-run compression check for synthesis, now including the observations.
     use_compact_protocol = False
-    threshold = ai_settings.context_optimizer.prompt_compression_threshold
     if threshold > 0:
         temp_history_str = " ".join(turn['content'] for turn in history)
-        # The `observation_text` variable is still available and used here.
         estimated_input = query + temp_history_str + observation_text
         estimated_tokens = optimizer.estimate_tokens(estimated_input)
-
         if estimated_tokens > threshold:
-            print(f"ℹ️  Context size ({estimated_tokens} tokens) exceeds threshold ({threshold}). Using compact prompt format.")
+            print(f"ℹ️  Context size ({estimated_tokens} tokens) exceeds threshold ({threshold}). Using compact prompt format for synthesis.")
             use_compact_protocol = True
 
     print("📝 Synthesizing final response from observations...")
 
-    # --- Dynamic Persona Selection ---
-    # The kernel is now responsible for selecting the correct persona content
-    # based on the application's state (success or failure).
+    # Dynamic Persona Selection
     final_persona_content = persona_content
     if is_failure_state:
         print("   ...A failure was detected. Switching to Debugging Analyst persona...")
@@ -212,12 +191,11 @@ async def orchestrate_agent_run(
             print(f"   - ⚠️ CRITICAL: Could not load failure persona 'da-1'. Reason: {e}")
             final_persona_content = "CRITICAL: The primary task failed, and the 'da-1' recovery persona could not be loaded. Your only job is to report the raw tool observations to the user clearly."
 
-    # Ensure a persona is always present before synthesis.
     if not final_persona_content:
         print("   - ⚠️ Warning: No persona was loaded. The agent will use a generic, system-defined personality.")
         final_persona_content = "You are a helpful AI assistant. Answer the user's query based on the provided context and observations."
 
-    # --- Final Prompt Construction and API Call ---
+    # Final Prompt Construction and API Call
     synthesis_prompt = prompt_builder.build_synthesis_prompt(
         query=query,
         history=history,
@@ -228,11 +206,4 @@ async def orchestrate_agent_run(
     response_handler = ResponseHandler()
     synthesis_model = ai_settings.model_selection.synthesis
     synthesis_result = await response_handler.call_api(synthesis_prompt, model=synthesis_model)
-    timings["synthesis"] = synthesis_result["duration"]
-    final_response = synthesis_result["content"]
-   
-    return {
-        "response": final_response,
-        "synthesis_prompt": synthesis_prompt,
-        "timings": timings,
-        }
+    timings["synthesis"] = synthesis_result
