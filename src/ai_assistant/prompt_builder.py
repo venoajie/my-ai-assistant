@@ -5,33 +5,8 @@ from importlib import resources
 class PromptBuilder:
     """
     Constructs prompts for the planning and synthesis stages of the agent.
+    This is a stateless utility that combines provided components into a final prompt string.
     """
-
-    def __init__(self):
-        """Initializes the PromptBuilder."""
-        self._da_persona_content = None
-
-    def _load_da_persona(self) -> str:
-        """
-        Loads the Debugging Analyst (da-1) persona content from its file.
-        This method uses importlib.resources to robustly find the package data.
-        """
-        if self._da_persona_content is None:
-            try:
-                # Use importlib.resources to safely access package data
-                da_path = resources.files('ai_assistant').joinpath('personas/patterns/da-1.persona.md')
-                self._da_persona_content = da_path.read_text(encoding='utf-8')
-            except FileNotFoundError:
-                # Fallback to a minimal, hardcoded error message if the persona file is missing.
-                self._da_persona_content = """
-                <SystemPrompt>
-                CRITICAL: A failure was detected, but the primary 'Debugging Analyst' persona file (da-1) could not be loaded.
-                Your task is to report the failure clearly to the user.
-                1. State that the original task failed.
-                2. Present the error details from the <ToolObservations>.
-                </SystemPrompt>
-                """
-        return self._da_persona_content
 
     def build_planning_prompt(
         self,
@@ -111,25 +86,26 @@ JSON_PLAN:
         query: str,
         history: List[Dict[str, Any]],
         observations: List[str],
-        persona_content: str = None,
-        use_compact_protocol: bool = False,
-        is_failure: bool = False
+        persona_content: str,
+        use_compact_protocol: bool = False
         ) -> str:
         """
-        Builds the prompt for the Synthesizer. The decision to use a failure
-        persona is now passed in from the orchestration layer.
+        Builds the prompt for the Synthesizer.
+
+        Args:
+            query: The original user query.
+            history: The preceding conversation history.
+            observations: A list of observations from tool executions.
+            persona_content: The complete, pre-loaded content of the persona file to be used.
+                             This is a mandatory argument.
+            use_compact_protocol: Flag to switch to a more compact history format.
         """
+        if not persona_content:
+            raise ValueError("`persona_content` is a mandatory argument for build_synthesis_prompt.")
+
         history_section = self._build_history_section(history, use_compact_format=use_compact_protocol)
         observation_section = "\n".join(observations)
-
-        # The builder no longer inspects observations. It just obeys the flag from the kernel.
-        if is_failure:
-            # On failure, override the original persona with the Debugging Analyst persona.
-            guardrails = f"<SystemPrompt>\n{self._load_da_persona()}\n</SystemPrompt>"
-        elif persona_content:
-            guardrails = f"<SystemPrompt>\n{persona_content}\n</SystemPrompt>"
-        else:
-            guardrails = self._build_default_guardrails()
+        guardrails = f"<SystemPrompt>\n{persona_content}\n</SystemPrompt>"
 
         prompt = f"""{guardrails}
 You are an expert AI assistant. Your task is to provide a final, comprehensive answer to the user's request based on the preceding conversation and the observations gathered from tool executions.
@@ -141,19 +117,6 @@ You MUST embody the persona, philosophy, and directives provided in the SystemPr
 Synthesize all information to formulate a direct, clear, and actionable response.
 """
         return prompt
-
-    def _build_default_guardrails(self) -> str:
-        return """<SystemPrompt version="1.0">
-<PersonaStandards>
-    <CommunicationDirectives>
-        - Be clear, direct, and helpful.
-        - Structure responses for readability.
-    </CommunicationDirectives>
-    <StructuredOutput>
-        When generating code, place it in a markdown block with the language specified.
-    </StructuredOutput>
-</PersonaStandards>
-</SystemPrompt>"""
 
     def _build_history_section(
         self,
