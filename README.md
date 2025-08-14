@@ -69,13 +69,13 @@ Simply provide the persona's alias using the `--persona` flag. **The alias is al
 # Use the Systems Architect from the 'core' category
 ai --persona core/csa-1 "Design a multi-stage Dockerfile for a Python app."
 
-# Use the Quantitative Trading Strategy Analyst from the 'domains/trading' category
-ai --persona domains/trading/qtsa-1 "Develop a mean-reversion strategy for ETH/USDT."
+# Use the new Persona Architect to review another persona
+ai --persona core/pa-1 -f src/ai_assistant/personas/patterns/da-1.persona.md "Review this persona for clarity and robustness."
 ```
 
 ### Discovering Available Personas
 
-The definitive list of available expert personas is located in the `persona_manifest.yml` file at the root of the project. This file is the source of truth for the `core/si-1` (Session Initiator) persona and provides the alias, title, and a description of each expert's capability.
+The definitive list of available expert personas is located in the `persona_manifest.yml` file at the root of the project. This file is the source of truth and provides the alias, title, and a description of each expert's capability.
 
 To regenerate this manifest after adding or changing personas, run the following command from the project root:
 
@@ -89,9 +89,11 @@ Here is a list of the primary persona examples included with the assistant. Thes
 
 | Alias | Category | Title | Use Case |
 | :--- | :--- | :--- | :--- |
+| `core/arc-1` | Core | Architecture Reviewer | Audits a system's source code and provides a structured, actionable report. |
 | `core/csa-1` | Core | Systems Architect | Designs new systems or refactors existing ones, ensuring architectural integrity. |
 | `core/dca-1` | Core | Documentation Architect | Creates clear, user-centric documentation from technical artifacts. |
 | `core/dpa-1` | Core | Deployment Architect | Creates detailed, risk-mitigated deployment and validation plans. |
+| **`core/pa-1`** | **Core** | **Persona Architect** | **A meta-specialist that designs, audits, and governs the entire persona ecosystem.** |
 | `patterns/da-1` | Patterns | Debugging Analyst | Diagnoses the root cause of bugs from error reports and stack traces. |
 | `patterns/bpr-1` | Patterns | Best Practices Reviewer | Acts as a senior peer reviewer for code quality, style, and patterns. |
 | `patterns/qsa-1` | Patterns | Quality Strategy Architect | Analyzes a codebase to create a prioritized, risk-based testing plan. |
@@ -205,6 +207,28 @@ ai --new-session "${files[@]}" "Compare these two service implementations."
 
 ## Advanced Workflows
 
+### Building a Prompt Library (Recommended Best Practice)
+
+To maximize your productivity, you should store your common, high-value prompts in a structured library of executable scripts. This makes them reusable, shareable, and immune to copy-paste errors.
+
+1.  **Create Your Libraries:** In your project root, create two directories.
+    ```bash
+    mkdir -p prompt_library          # For shared prompts you commit to Git
+    mkdir -p prompt_library_local    # For private prompts you DO NOT commit
+    ```
+
+2.  **Ignore the Local Library:** Add `prompt_library_local/` to your `.gitignore` file. This prevents your private prompts from ever being committed.
+
+3.  **Create a Reusable Prompt Script:** Create a new file, for example, `prompt_library/audits/01_audit_persona_architecture.sh`, using the robust pattern from "Option 2" above.
+
+4.  **Run Your Prompt:**
+    ```bash
+    # Make it executable (only once)
+    chmod +x prompt_library/audits/01_audit_persona_architecture.sh
+
+    # Run it anytime
+    ./prompt_library/audits/01_audit_persona_architecture.sh
+    ```
 
 ### Expert Mode: Autonomous Operation
 
@@ -214,12 +238,12 @@ This mode allows the assistant to complete an entire task—including making fil
 
 **Example: Autonomous Refactoring**
 ```bash
+# This simple example is fine for direct terminal input
 ai --new-session --persona core/csa-1 --autonomous \
   -f src/services/distributor.py \
   "Refactor the 'distributor' service in the attached file to improve its logging and add error handling. When done, commit the changes to a new git branch named 'refactor/distributor-logging'."
 ```
-The assistant will perform all the steps and notify you when it has pushed the branch. Your only job is to review the resulting pull request.
-
+For more complex autonomous tasks, it is highly recommended to save them as a script in your **Prompt Library** to ensure they are robust and reusable.
 
 ### Using Context Plugins for Domain Knowledge
 Plugins inject domain-specific knowledge into the conversation.
@@ -297,7 +321,7 @@ python scripts/generate_manifest.py
 
 This script serves two purposes:
 1.  **Validation:** It acts as a linter, failing immediately if any persona file is malformed or does not match its canonical alias.
-2.  **Generation:** If all personas are valid, it generates the `persona_manifest.yml` file.
+2.  **Generation:** If all personas are valid, it generates the `persona_manifest.yml` file. The script is **idempotent**, meaning it will not modify the manifest if no persona files have changed, preventing unnecessary `git` commits.
 
 You must commit the updated `persona_manifest.yml` along with your persona changes. Pull requests with stale or missing manifests will be blocked by CI checks.
 
