@@ -14,20 +14,22 @@ class Planner:
         self.response_handler = ResponseHandler()
 
     async def create_plan(
-        self, 
-        query: str, 
-        history: List[Dict[str, Any]] = None, 
+        self,
+        query: str,
+        history: List[Dict[str, Any]] = None,
         persona_content: Optional[str] = None,
+        use_compact_protocol: bool = False  # Add the new argument here
     ) -> Tuple[List[Dict[str, Any]], float]:
         print("🤔 Generating execution plan...")
         tool_descriptions = TOOL_REGISTRY.get_tool_descriptions()
         prompt = self.prompt_builder.build_planning_prompt(
-            query, 
-            tool_descriptions, 
-            history, 
+            query,
+            tool_descriptions,
+            history,
             persona_content,
-            )
-
+            use_compact_protocol=use_compact_protocol  # Pass the argument to the builder
+        )
+        
         planning_model = ai_settings.model_selection.planning
         planning_generation_config = ai_settings.generation_params.planning.model_dump()
 

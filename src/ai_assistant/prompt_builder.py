@@ -14,16 +14,17 @@ class PromptBuilder:
         tool_descriptions: str,
         history: List[Dict[str, Any]] = None,
         persona_content: str = None,
+        use_compact_protocol: bool = False
         ) -> str:
         """
         Builds the prompt for the Planner, instructing it to create a JSON tool plan.
         """
-        history_section = self._build_history_section(history)
+        history_section = self._build_history_section(history, use_compact_format=use_compact_protocol)
         persona_section = ""
         if persona_content:
             persona_section = f"<Persona>\n{persona_content}\n</Persona>\n\n"
 
-        prompt = f"""You are a planning agent. Your SOLE purpose is to convert a user's request into a structured JSON plan of tool calls. You must adhere strictly to the provided tool signatures and planning heuristics.
+        prompt = f"""{persona_section}You are a planning agent. Your SOLE purpose is to convert a user's request into a structured JSON plan of tool calls. You must adhere strictly to the provided tool signatures and planning heuristics.
 
 <AvailableTools>
 # You must use the function signatures below to construct your tool calls.
@@ -134,8 +135,9 @@ Synthesize all information to formulate a direct, clear, and actionable response
             for turn in history:
                 role = turn.get('role', 'unknown').upper()
                 content = turn.get('content', '')
-                if role in ['USER', 'MODEL']:
-                    history_lines.append(f"[{role}]: {content}")
+                if role in ['USER', 'ASSISTANT', 'MODEL']: # 'MODEL' for backward compatibility
+                    role_display = 'USER' if role == 'USER' else 'ASSISTANT'
+                    history_lines.append(f"[{role_display}]: {content}")
             if not history_lines: return ""
             return "---\nConversation History (compact)\n" + "\n".join(history_lines) + "\n---\n\n"
         else:
@@ -143,10 +145,11 @@ Synthesize all information to formulate a direct, clear, and actionable response
             for turn in history:
                 role = turn.get('role', 'unknown')
                 content = turn.get('content', '')
-                content = content.replace('<', '&lt;').replace('>', '&gt;')
+                # Basic XML escaping for content
+                content = content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                 if role == 'user':
                     history_section += f"<UserRequest>{content}</UserRequest>\n"
-                elif role == 'model':
+                elif role in ['assistant', 'model']:
                     history_section += f"<AssistantResponse>{content}</AssistantResponse>\n"
             history_section += "</ConversationHistory>\n\n"
             return history_section
