@@ -1,11 +1,11 @@
-generated_at_utc: '2025-08-14T05:30:08.600531+00:00'
+generated_at_utc: '2025-08-14T06:04:14.482731+00:00'
 manifest_version: 7.1-idempotent
-validation_signature: cebd0b6a7b96e47f66116091d6ac6041110000e39d4b8222d9f567d107c1ad49
+validation_signature: 7aa376c8f76e39681c12881475e8d8a9a996b45df0500f70aa253e33b03fa95c
 personas:
-- alias: _base/BCAA-1
+- alias: _base/bcaa-1
   title: Base Collaborative Agent
   description: No description provided.
-- alias: _base/BTAA-1
+- alias: _base/btaa-1
   title: Base Technical Analysis Agent
   description: No description provided.
 - alias: _mixins/CODEGEN-STANDARDS-1
