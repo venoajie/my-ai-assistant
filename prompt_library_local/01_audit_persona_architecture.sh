@@ -11,9 +11,11 @@ specialist_persona="core/pa-1"
 files_to_review=(
     -f src/ai_assistant/personas/_base/bcaa-1.persona.md
     -f src/ai_assistant/personas/_base/btaa-1.persona.md
+    -f src/ai_assistant/personas/_mixins/codegen-standards-1.persona.md
     -f src/ai_assistant/personas/core/si-1.persona.md
     -f src/ai_assistant/personas/core/csa-1.persona.md
     -f src/ai_assistant/personas/core/pa-1.persona.md
+    -f src/ai_assistant/personas/core/arc-1.persona.md
     -f src/ai_assistant/personas/patterns/da-1.persona.md
     -f src/ai_assistant/personas/utility/pel-a.persona.md
     -f src/ai_assistant/prompt_builder.py
