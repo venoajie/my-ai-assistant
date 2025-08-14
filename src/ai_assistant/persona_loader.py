@@ -1,11 +1,15 @@
 # ai_assistant/persona_loader.py
 import os
+import re
 import yaml
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from importlib import resources
 
 from .config import ai_settings
+
+# Define a type alias for clarity
+ParsedPersona = Tuple[Optional[str], str]
 
 class PersonaLoader:
     def __init__(self):
@@ -13,8 +17,22 @@ class PersonaLoader:
         self.user_personas_dir.mkdir(parents=True, exist_ok=True)
         self._loading_stack = set()
 
-    def _load_recursive(self, alias: str) -> str:
-        """Internal recursive loader for a single inheritance chain."""
+    def _parse_content(self, content: str) -> ParsedPersona:
+        """Extracts directives and returns the remaining context."""
+        directives_section = None
+        context_section = content
+
+        # Use a regex to find and extract the <directives> block
+        directives_match = re.search(r"<directives>.*?</directives>", content, re.DOTALL)
+        if directives_match:
+            directives_section = directives_match.group(0)
+            # Remove the directives from the main content to avoid duplication
+            context_section = content.replace(directives_section, "").strip()
+        
+        return (directives_section, context_section)
+
+    def _load_recursive(self, alias: str) -> ParsedPersona:
+        """Internal recursive loader, now returns a tuple of (directives, context)."""
         if alias in self._loading_stack:
             raise RecursionError(f"Circular persona inheritance detected: {alias} is in the stack {self._loading_stack}")
         self._loading_stack.add(alias)
@@ -31,40 +49,45 @@ class PersonaLoader:
             data = yaml.safe_load(frontmatter_str) or {}
             inherits_from = data.get("inherits_from")
 
+            current_directives, current_context = self._parse_content(body.strip())
+
             if inherits_from:
-                parent_content = self._load_recursive(inherits_from)
-                return parent_content + "\n" + body.strip()
+                parent_directives, parent_context = self._load_recursive(inherits_from)
+                
+                # Combine directives and context from parent and child
+                combined_directives = "\n".join(filter(None, [parent_directives, current_directives]))
+                combined_context = "\n".join([parent_context, current_context]).strip()
+                
+                return (combined_directives if combined_directives else None, combined_context)
             else:
-                return body.strip()
+                return (current_directives, current_context)
         finally:
             self._loading_stack.remove(alias)
 
-
-    def load_persona_content(self, alias: str) -> Optional[str]:
+    def load_persona_content(self, alias: str) -> ParsedPersona:
         """
-        Loads the full content of a persona, prepending the universal base
-        persona if one is configured and not already in the inheritance chain.
+        Loads and parses a persona, returning a tuple of (directives, context).
+        Prepends the universal base persona if configured.
         """
         self._loading_stack.clear()
         
-        # First, load the specific persona and its entire inheritance chain
-        specific_content = self._load_recursive(alias)
+        specific_directives, specific_context = self._load_recursive(alias)
         
-        # Now, check if a universal base is needed
         universal_base_alias = ai_settings.general.universal_base_persona
         if universal_base_alias and universal_base_alias not in self._loading_stack:
-            # The universal base was NOT part of the chain, so we need to prepend it.
-            # The loading stack from the previous call contains all ancestors.
-            self._loading_stack.clear() # Reset for the base load
+            self._loading_stack.clear()
             try:
-                base_content = self._load_recursive(universal_base_alias)
-                return (base_content + "\n" + specific_content).strip()
+                base_directives, base_context = self._load_recursive(universal_base_alias)
+                
+                # Combine universal base with the specific persona
+                final_directives = "\n".join(filter(None, [base_directives, specific_directives]))
+                final_context = (base_context + "\n" + specific_context).strip()
+
+                return (final_directives if final_directives else None, final_context)
             except (FileNotFoundError, RecursionError) as e:
                 print(f"⚠️ Warning: Could not load universal base persona '{universal_base_alias}'. Reason: {e}")
-                # Fall through to return just the specific content
         
-        # Either no universal base is configured, or it was already inherited.
-        return specific_content
+        return (specific_directives, specific_context)
     
     def _find_and_read_persona(self, alias: str):
 

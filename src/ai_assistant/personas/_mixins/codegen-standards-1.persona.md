@@ -1,5 +1,5 @@
 ---
-alias: _mixins/CODEGEN-STANDARDS-1
+alias: _mixins/codegen-standards-1
 version: 2.1.0
 type: _mixins
 title: Code Generation Standards Mixin

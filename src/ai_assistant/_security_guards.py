@@ -21,6 +21,7 @@ SHELL_COMMAND_BLOCKLIST = (
     r'\bchmod\s+777',       # Overly permissive permissions
     r'\bcurl.*\|\s*sh',     # Pipe to shell from web
     r'\bwget.*\|\s*sh',
+    r'\bmv\s+.*\s+~\/',   # Moving files to home directory
     r'\bfind\b.*-delete\b', # Find command with delete action
     r'\brm\s+.*\*',         # Remove with wildcards
     r'\bmv\s+.*\s+/dev/null',# Move to null
