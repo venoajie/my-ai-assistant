@@ -45,9 +45,11 @@ async def orchestrate_agent_run(
     plan, planning_duration = await planner.create_plan(optimized_query, history, persona_content)
     timings["planning"] = planning_duration # --- Store planning time ---
     
+    # --- REFACTOR: Instantiate PromptBuilder without arguments ---
+    prompt_builder = PromptBuilder()
+
     if not plan or all(not step.get("tool_name") for step in plan):
         print("📝 No tool execution required. Generating direct response...")
-        prompt_builder = PromptBuilder()
         direct_prompt = prompt_builder.build_synthesis_prompt(query, history, ["<Observation>No tool execution was required for this query.</Observation>"], persona_content)
         response_handler = ResponseHandler()
         synthesis_model = ai_settings.model_selection.synthesis
@@ -169,7 +171,6 @@ async def orchestrate_agent_run(
             use_compact_protocol = True
 
     print("📝 Synthesizing final response from observations...")
-    prompt_builder = PromptBuilder()
     synthesis_prompt = prompt_builder.build_synthesis_prompt(
         query,
         history,
