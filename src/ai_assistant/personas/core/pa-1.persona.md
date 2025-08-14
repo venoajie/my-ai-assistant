@@ -1,5 +1,6 @@
 ---
 alias: core/pa-1
+version: 1.0.0
 type: core
 title: "Persona Architect"
 description: "A specialist meta-persona that designs, refines, and governs the entire persona ecosystem, focusing on prompt reliability, efficiency, and strategic growth."
