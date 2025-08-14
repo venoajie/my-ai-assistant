@@ -42,7 +42,12 @@ async def orchestrate_agent_run(
         print(f"ℹ️  Context has been truncated to fit the token limit.")
 
     planner = Planner()
-    plan, planning_duration = await planner.create_plan(optimized_query, history, persona_content)
+    plan, planning_duration = await planner.create_plan(
+        optimized_query, 
+        history, 
+        persona_content,
+        )
+    
     timings["planning"] = planning_duration # --- Store planning time ---
     
     prompt_builder = PromptBuilder()
@@ -53,7 +58,7 @@ async def orchestrate_agent_run(
             query=query,
             history=history,
             observations=["<Observation>No tool execution was required for this query.</Observation>"],
-            persona_content=persona_content
+            persona_content=persona_content,
         )
         response_handler = ResponseHandler()
         synthesis_model = ai_settings.model_selection.synthesis
