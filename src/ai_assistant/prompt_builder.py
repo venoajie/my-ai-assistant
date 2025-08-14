@@ -1,38 +1,38 @@
 # src/ai_assistant/prompt_builder.py
 from pathlib import Path
 from typing import Dict, List, Any
-
-# --- REFACTOR: Define two versions of the failure protocol as per approved proposal ---
-# This is the high-fidelity, verbose version used for standard requests to ensure maximum clarity.
-_FAILURE_PROTOCOL_VERBOSE = """<META_DIRECTIVE>
-**CRITICAL: FAILURE HANDLING PROTOCOL**
-Your behavior is dictated by this primary rule: If ANY tool observation in the `<ToolObservations>` section contains the words 'Error', 'Failure', or 'CRITICAL FAILURE', you MUST immediately abandon your primary persona and adopt the role of a **Debugging Analyst**.
-
-As a Debugging Analyst, your response MUST follow this structure:
-1.  **State Failure:** Begin by clearly stating that the original task could not be completed.
-2.  **Root Cause Analysis:** Analyze the error messages in the observations and provide a concise diagnosis of the root cause.
-3.  **Recovery Plan:** Provide the user with the exact, numbered, manual commands or steps they need to take to resolve the issue and complete the task.
-4.  **Provide Artifacts:** If any artifacts (like code) were successfully generated before the failure, present them to the user in a "Generated Artifacts" section so their work is not lost.
-
-This protocol OVERRIDES all other persona directives. You are FORBIDDEN from returning an empty response if a failure is present.
-</META_DIRECTIVE>
-"""
-
-# This is the token-efficient, compact version used only when the context size is very large.
-_FAILURE_PROTOCOL_COMPACT = """<MetaDirective>
-**FAILURE PROTOCOL** (OVERRIDES ALL): If observations contain 'Error'/'Failure', you are a Debugging Analyst.
-1. State failure.
-2. Analyze root cause from observations.
-3. Provide numbered, manual recovery steps for the user.
-4. Present any generated artifacts.
-This protocol is mandatory.
-</MetaDirective>"""
-
+from importlib import resources
 
 class PromptBuilder:
     """
     Constructs prompts for the planning and synthesis stages of the agent.
     """
+
+    def __init__(self):
+        """Initializes the PromptBuilder."""
+        self._da_persona_content = None
+
+    def _load_da_persona(self) -> str:
+        """
+        Loads the Debugging Analyst (da-1) persona content from its file.
+        This method now uses importlib.resources to robustly find the package data.
+        """
+        if self._da_persona_content is None:
+            try:
+                # Use importlib.resources to safely access package data
+                da_path = resources.files('ai_assistant').joinpath('personas/patterns/da-1.persona.md')
+                self._da_persona_content = da_path.read_text(encoding='utf-8')
+            except FileNotFoundError:
+                # Fallback to a minimal, hardcoded error message if the persona file is missing.
+                self._da_persona_content = """
+                <SystemPrompt>
+                CRITICAL: A failure was detected, but the primary 'Debugging Analyst' persona file (da-1) could not be loaded.
+                Your task is to report the failure clearly to the user.
+                1. State that the original task failed.
+                2. Present the error details from the <ToolObservations>.
+                </SystemPrompt>
+                """
+        return self._da_persona_content
 
     def build_planning_prompt(
         self,
@@ -43,8 +43,6 @@ class PromptBuilder:
         ) -> str:
         """
         Builds the prompt for the Planner, instructing it to create a JSON tool plan.
-        This prompt remains unchanged by the recent optimizations as its verbosity is
-        critical for reliable planning.
         """
         history_section = self._build_history_section(history)
         persona_section = ""
@@ -115,27 +113,30 @@ JSON_PLAN:
         history: List[Dict[str, Any]],
         observations: List[str],
         persona_content: str = None,
-        use_compact_protocol: bool = False # --- REFACTOR: Added flag for conditional compression ---
+        use_compact_protocol: bool = False
         ) -> str:
         """
         Builds the prompt for the Synthesizer, which formulates the final response.
         It conditionally uses compact formats to save tokens on large inputs.
         """
-        # --- REFACTOR: Use compact history format and select protocol based on the flag ---
         history_section = self._build_history_section(history, use_compact_format=use_compact_protocol)
         observation_section = "\n".join(observations)
-        if persona_content:
+
+        # --- REFACTOR: Centralized Failure Handling ---
+        # Check for failure keywords in observations.
+        has_failure = any(keyword in observation_section.lower() for keyword in ['error', 'failure', 'critical failure', 'denied by user'])
+
+        if has_failure:
+            # On failure, override the original persona with the Debugging Analyst persona.
+            guardrails = f"<SystemPrompt>\n{self._load_da_persona()}\n</SystemPrompt>"
+        elif persona_content:
             guardrails = f"<SystemPrompt>\n{persona_content}\n</SystemPrompt>"
         else:
             guardrails = self._build_default_guardrails()
 
-        # Select the appropriate failure protocol based on context size
-        failure_protocol = _FAILURE_PROTOCOL_COMPACT if use_compact_protocol else _FAILURE_PROTOCOL_VERBOSE
-
-        prompt = f"""{failure_protocol}
-{guardrails}
+        prompt = f"""{guardrails}
 You are an expert AI assistant. Your task is to provide a final, comprehensive answer to the user's request based on the preceding conversation and the observations gathered from tool executions.
-You MUST embody the persona, philosophy, and directives provided in the SystemPrompt, but you MUST adhere to the FAILURE HANDLING PROTOCOL meta-directive above all else.
+You MUST embody the persona, philosophy, and directives provided in the SystemPrompt.
 
 {history_section}
 <UserRequest>{query}</UserRequest>
@@ -160,7 +161,7 @@ Synthesize all information to formulate a direct, clear, and actionable response
     def _build_history_section(
         self,
         history: List[Dict[str, Any]] = None,
-        use_compact_format: bool = False # --- REFACTOR: Added flag for format switching ---
+        use_compact_format: bool = False
         ) -> str:
         """
         Builds the conversation history section of the prompt.
@@ -168,24 +169,20 @@ Synthesize all information to formulate a direct, clear, and actionable response
         """
         if not history: return ""
 
-        # --- REFACTOR: Switch between verbose and compact history formats ---
         if use_compact_format:
             history_lines = []
             for turn in history:
                 role = turn.get('role', 'unknown').upper()
                 content = turn.get('content', '')
                 if role in ['USER', 'MODEL']:
-                    # Use a simple, token-efficient format
                     history_lines.append(f"[{role}]: {content}")
             if not history_lines: return ""
             return "---\nConversation History (compact)\n" + "\n".join(history_lines) + "\n---\n\n"
         else:
-            # Original verbose format for maximum clarity
             history_section = "<ConversationHistory>\n"
             for turn in history:
                 role = turn.get('role', 'unknown')
                 content = turn.get('content', '')
-                # Basic XML escaping for safety
                 content = content.replace('<', '&lt;').replace('>', '&gt;')
                 if role == 'user':
                     history_section += f"<UserRequest>{content}</UserRequest>\n"
