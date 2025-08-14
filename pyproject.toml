@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "my-ai-assistant"
-version = "1.1.5"
+version = "1.2.0"
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -17,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 ai = "ai_assistant.cli:main"
+ai-execute = "ai_assistant.executor:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
