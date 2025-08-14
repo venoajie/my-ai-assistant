@@ -1,7 +1,6 @@
-
+# src\ai_assistant\prompt_builder.py
 import re
-from typing import Dict, List, Any
-from importlib import resources
+from typing import Dict, List, Any, Optional
 
 class PromptBuilder:
     """
@@ -88,7 +87,8 @@ JSON_PLAN:
         query: str,
         history: List[Dict[str, Any]],
         observations: List[str],
-        persona_content: str,
+        persona_context: str,
+        directives: Optional[str] = None,
         use_compact_protocol: bool = False
         ) -> str:
         """
@@ -98,26 +98,17 @@ JSON_PLAN:
             query: The original user query.
             history: The preceding conversation history.
             observations: A list of observations from tool executions.
-            persona_content: The complete, pre-loaded content of the persona file to be used.
-                             This is a mandatory argument.
+            persona_context: The contextual (non-directive) content of the persona file.
+            directives: The pre-parsed <directives> block from the persona, if any.
             use_compact_protocol: Flag to switch to a more compact history format.
         """
-        if not persona_content:
-            raise ValueError("`persona_content` is a mandatory argument for build_synthesis_prompt.")
+        if not persona_context:
+            raise ValueError("`persona_context` is a mandatory argument for build_synthesis_prompt.")
 
-        # REFACTOR: Extract directives to be top-level instructions, not nested context.
-        directives_section = ""
-        # Use a regex to find and extract the <directives> block
-        directives_match = re.search(r"<directives>.*?</directives>", persona_content, re.DOTALL)
-        if directives_match:
-            directives_section = directives_match.group(0)
-            # Remove the directives from the main persona content to avoid duplication
-            persona_content = persona_content.replace(directives_section, "").strip()
-
+        directives_section = directives or ""
         history_section = self._build_history_section(history, use_compact_format=use_compact_protocol)
         observation_section = "\n".join(observations)
-        # The remaining persona content serves as contextual background
-        persona_context_section = f"<SystemPrompt>\n{persona_content}\n</SystemPrompt>"
+        persona_context_section = f"<SystemPrompt>\n{persona_context}\n</SystemPrompt>"
 
         prompt = f"""{directives_section}
 {persona_context_section}
