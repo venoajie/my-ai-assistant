@@ -59,11 +59,15 @@ ai [FLAGS] "Your goal in plain English"
 | `--autonomous` | Enables fully automatic mode; the AI will **not** ask for permission. | For well-defined tasks where you trust the AI to run without supervision. **Use with extreme caution.** |
 | `--output-dir <PATH>` | **(New)** Generates a reviewable "Output Package" instead of executing live. | For complex or risky tasks, this separates AI analysis from execution, allowing for manual review and safer application of changes. |
 
-## The Two-Stage Workflow: Analyze then Execute (Recommended)
+## The Two-Stage Workflow: Analyze then Execute
 
-For any complex task that involves modifying files or interacting with Git, the recommended approach is the new two-stage workflow. This decouples the expensive, AI-driven analysis from the deterministic, safe execution of the plan.
+For any complex task that involves modifying files or interacting with Git, the recommended approach is the new two-stage workflow. This decouples the expensive, AI-driven analysis from the deterministic, safe execution of the plan. There are two ways to use this workflow: Manually for high-risk tasks, and automatically for trusted tasks.
 
-### Stage 1: Generate an Output Package
+### Option 1: Manual Review (Maximum Safety)
+
+This is the safest way to operate, giving you a chance to review every change before it's applied.
+
+#### Stage 1: Generate an Output Package
 
 Use the `--output-dir` flag to have the AI analyze your request and generate a self-contained "Output Package". The AI will not perform any live actions.
 
@@ -71,7 +75,7 @@ Use the `--output-dir` flag to have the AI analyze your request and generate a s
 # The AI will analyze the request and create a package in './ai_runs/refactor-01'
 ai --new-session --persona core/csa-1 --output-dir ./ai_runs/refactor-01 \
   -f src/services/distributor.py \
-  "Refactor the 'distributor' service to improve its logging and add error handling. When done, commit the changes to a new git branch named 'refactor/distributor-logging'."
+  "Refactor the 'distributor' service to improve its logging."
 ```
 
 This command creates a directory with the following structure:
@@ -82,7 +86,7 @@ This command creates a directory with the following structure:
 └── summary.md            # A human-readable summary of the proposed changes.
 ```
 
-### Stage 2: Review and Execute the Plan
+#### Stage 2: Review and Execute the Plan
 
 Once the package is generated, you can review the proposed changes and then use the new `ai-execute` command to apply them.
 
@@ -91,15 +95,58 @@ Once the package is generated, you can review the proposed changes and then use 
 cat ./ai_runs/refactor-01/summary.md
 git diff ./ai_runs/refactor-01/workspace/src/services/distributor.py
 
-# 2. Execute the plan
-# The command will perform a dry-run by default, showing you what it will do.
+# 2. Execute the plan with a dry-run to see what commands will run
 ai-execute ./ai_runs/refactor-01
 
-# 3. Apply the changes for real
-# Add the --confirm flag to apply the file and Git changes.
+# 3. Apply the changes for real using the --confirm flag
 ai-execute ./ai_runs/refactor-01 --confirm
 ```
-This workflow provides a critical safety layer, ensuring you have full control and visibility before any changes are made to your project.
+
+### Option 2: Automated Chaining (Maximum Convenience)
+
+For trusted, repeatable tasks, you can create a "wrapper" script that chains the generation and execution stages into a single, seamless command. This gives you the architectural benefits of decoupling while maintaining the convenience of a single action.
+
+**This is the recommended pattern for your `prompt_library`.**
+
+#### Create a Reusable "Generate and Apply" Script
+
+Create a script like `prompt_library/audits/01_audit_and_apply.sh`:
+
+```bash
+#!/bin/bash
+# This script chains the generation and execution stages for a fully automated run.
+set -e # Exit immediately if any command fails.
+
+# --- Configuration ---
+specialist_persona="core/pa-1"
+output_package_dir="./ai_runs/auto_audit_$(date +%Y%m%d-%H%M%S)"
+files_to_review=(-f src/ai_assistant/personas/core/csa-1.persona.md)
+query="Refactor the attached persona's operational protocol for conciseness."
+
+# --- STAGE 1: GENERATION ---
+echo "🤖 [STAGE 1/2] Starting AI analysis..."
+ai --new-session \
+   --persona "$specialist_persona" \
+   --output-dir "$output_package_dir" \
+   "${files_to_review[@]}" \
+   "$query"
+
+# --- STAGE 2: EXECUTION ---
+echo "🚀 [STAGE 2/2] Automatically executing the generated plan..."
+ai-execute "$output_package_dir" --confirm
+
+echo "🎉 Workflow complete."
+```
+
+Now, you can run the entire, complex task with a single command, while still benefiting from the safety and resilience of the two-stage architecture.
+
+```bash
+# Make it executable once
+chmod +x prompt_library/audits/01_audit_and_apply.sh
+
+# Run it anytime
+./prompt_library/audits/01_audit_and_apply.sh
+```
 
 ## The Persona System: Your Team of Virtual Experts
 
