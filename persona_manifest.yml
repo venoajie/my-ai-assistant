@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-14T05:18:48.493328+00:00'
+generated_at_utc: '2025-08-14T05:30:08.600531+00:00'
 manifest_version: 7.1-idempotent
-validation_signature: 1a547042025cea7d6d8434ba0ef92d07577070de4a4d57a6102dcfff7a8f7440
+validation_signature: cebd0b6a7b96e47f66116091d6ac6041110000e39d4b8222d9f567d107c1ad49
 personas:
 - alias: _base/BCAA-1
   title: Base Collaborative Agent
@@ -65,4 +65,7 @@ personas:
   description: No description provided.
 - alias: utility/jan-1
   title: Project Janitor
+  description: No description provided.
+- alias: utility/pel-a
+  title: Prompt Engineering Library Architect
   description: No description provided.
