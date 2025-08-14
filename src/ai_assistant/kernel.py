@@ -170,13 +170,33 @@ async def orchestrate_agent_run(
             use_compact_protocol = True
 
     print("📝 Synthesizing final response from observations...")
+    
+    # The kernel is now responsible for selecting the correct persona content
+    # based on the application's state (success or failure).
+    final_persona_content = persona_content
+    if is_failure_state:
+        print("   ...A failure was detected. Switching to Debugging Analyst persona...")
+        # The kernel explicitly loads the failure persona.
+        loader = PersonaLoader()
+        try:
+            final_persona_content = loader.load_persona_content('patterns/da-1')
+        except (FileNotFoundError, RecursionError) as e:
+            print(f"   - ⚠️ CRITICAL: Could not load failure persona 'da-1'. Reason: {e}")
+            # Provide a hardcoded, minimal fallback if the DA persona is missing
+            final_persona_content = "CRITICAL: The primary task failed, and the 'da-1' recovery persona could not be loaded. Your only job is to report the raw tool observations to the user clearly."
+
+    # Ensure a persona is always present before synthesis.
+    if not final_persona_content:
+        print("   - ⚠️ Warning: No persona was loaded. The agent will use a generic, system-defined personality.")
+        # Provide a safe, generic default if no persona was specified and no failure occurred.
+        final_persona_content = "You are a helpful AI assistant. Answer the user's query based on the provided context and observations."
+
     synthesis_prompt = prompt_builder.build_synthesis_prompt(
         query=query,
         history=history,
         observations=observations,
-        persona_content=persona_content,
-        use_compact_protocol=use_compact_protocol,
-        is_failure=is_failure_state  # Pass the decision as a flag
+        persona_content=final_persona_content, # Pass the chosen persona content
+        use_compact_protocol=use_compact_protocol
     )
     response_handler = ResponseHandler()
     synthesis_model = ai_settings.model_selection.synthesis
@@ -189,4 +209,3 @@ async def orchestrate_agent_run(
         "synthesis_prompt": synthesis_prompt,
         "timings": timings,
         }
-    
