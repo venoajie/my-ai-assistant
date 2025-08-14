@@ -41,6 +41,19 @@ async def orchestrate_agent_run(
     if len(optimized_query) < len(query):
         print(f"ℹ️  Context has been truncated to fit the token limit.")
 
+    # We estimate token usage without observations first, as they don't exist yet.
+    use_compact_protocol = False
+    threshold = ai_settings.context_optimizer.prompt_compression_threshold
+    if threshold > 0:
+        temp_history_str = " ".join(turn['content'] for turn in history)
+        # At this stage, there are no observations, so we estimate based on query and history.
+        estimated_input = query + temp_history_str
+        estimated_tokens = optimizer.estimate_tokens(estimated_input)
+
+        if estimated_tokens > threshold:
+            print(f"ℹ️  Context size ({estimated_tokens} tokens) exceeds threshold ({threshold}). Using compact prompt format for planning.")
+            use_compact_protocol = True
+
     planner = Planner()
     plan, planning_duration = await planner.create_plan(
         optimized_query,
