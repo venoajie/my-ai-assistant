@@ -25,7 +25,7 @@ files_to_review=(
     -f src/ai_assistant/plugins/trading_plugin.py
 )
 
-# Define the high-level goal for the specialist.
+# Define the high-level goal for the specialist. #
 query=$(cat <<'EOF'
 Perform a final, comprehensive architectural review of the entire 'ai_assistant' application. The review must be based on all attached Python source files. A key focus of this review must be the analysis of the architectural trade-off between prompt safety/explicitness and token economy, using 'prompt_builder.py' as the primary case study. The final report should assess whether the current balance is appropriate and suggest any potential optimizations.
 EOF
