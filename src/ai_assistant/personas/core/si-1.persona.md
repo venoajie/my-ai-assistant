@@ -1,10 +1,10 @@
 ---
 alias: core/si-1
-version: 4.1.0
+version: 4.2.0
 type: core
 title: Session Initiator
 status: active
-inherits_from: _base/bcaa-1
+inherits_from: _base/btaa-1
 expected_artifacts:
   - id: high_level_goal
     type: primary
@@ -70,5 +70,3 @@ To review a given code artifact against a set of coding standards and best pract
     </StaticFile>
   </SECTION:ARTIFACTS_FOR_REVIEW>
 </Mandate>
-```
-</SECTION:OUTPUT_CONTRACT>
