@@ -13,17 +13,19 @@ files_to_review=(
     -f src/ai_assistant/personas/_base/btaa-1.persona.md
     -f src/ai_assistant/personas/core/si-1.persona.md
     -f src/ai_assistant/personas/core/csa-1.persona.md
-    -f src/ai_assistant/personas/core/pa-1.persona.md # The architect can review itself
+    -f src/ai_assistant/personas/core/pa-1.persona.md
     -f src/ai_assistant/personas/patterns/da-1.persona.md
+    -f src/ai_assistant/personas/utility/pel-a.persona.md
+    -f src/ai_assistant/prompt_builder.py
 )
 
 # Define the high-level goal for the specialist.
 query=$(cat <<'EOF'
-Perform a full architectural audit of the attached persona files.
+Perform a full architectural audit of the attached persona and python files.
 
 Specifically, I want you to:
 1.  Assess if the chosen base persona (`bcaa-1` vs. `btaa-1`) is appropriate for each specialist's stated function.
-2.  Identify any inconsistencies or weaknesses in the `OPERATIONAL_PROTOCOL` of the `si-1` and `csa-1` personas.
+2.  Identify any inconsistencies or weaknesses.
 3.  Propose any refactoring that would improve the clarity and reliability of the overall ecosystem.
 EOF
 )
