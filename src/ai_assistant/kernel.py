@@ -45,12 +45,16 @@ async def orchestrate_agent_run(
     plan, planning_duration = await planner.create_plan(optimized_query, history, persona_content)
     timings["planning"] = planning_duration # --- Store planning time ---
     
-    # --- REFACTOR: Instantiate PromptBuilder without arguments ---
     prompt_builder = PromptBuilder()
 
     if not plan or all(not step.get("tool_name") for step in plan):
         print("📝 No tool execution required. Generating direct response...")
-        direct_prompt = prompt_builder.build_synthesis_prompt(query, history, ["<Observation>No tool execution was required for this query.</Observation>"], persona_content)
+        direct_prompt = prompt_builder.build_synthesis_prompt(
+            query=query,
+            history=history,
+            observations=["<Observation>No tool execution was required for this query.</Observation>"],
+            persona_content=persona_content
+        )
         response_handler = ResponseHandler()
         synthesis_model = ai_settings.model_selection.synthesis
         
@@ -77,20 +81,16 @@ async def orchestrate_agent_run(
 
         if "condition" in step:
             cond = step["condition"]
-            # The planner might use 'from_tool' or 'from_step'. We need to find the source step's result.
-            # This logic is simplified; a real implementation might need a more robust way to map tool names to step numbers.
-            # For now, we assume 'from_step' is provided as an integer.
             from_step_num = cond.get("from_step")
             if from_step_num is None:
                  print(f"  - ⚠️  Warning: Conditional step {step_num} is missing 'from_step'. Skipping condition check.")
             else:
                 prev_result = step_results.get(from_step_num, "")
                 
-                condition_met = True # Assume condition is met unless a check fails
+                condition_met = True
                 
                 if "in" in cond:
                     check_value = cond["in"]
-                    # Handle the case where the check value or the result is None
                     if check_value is None:
                         if prev_result is not None and prev_result.strip() != "":
                             condition_met = False
@@ -99,7 +99,6 @@ async def orchestrate_agent_run(
 
                 if "not_in" in cond:
                     check_value = cond["not_in"]
-                    # Handle the case where the check value or the result is None
                     if check_value is None:
                         if prev_result is None or prev_result.strip() == "":
                             condition_met = False
@@ -110,7 +109,7 @@ async def orchestrate_agent_run(
                     print(f"  - Skipping Step {step_num} because condition was not met.")
                     continue
 
-        # 2. Execute Tool (The rest of the loop remains the same)
+        # 2. Execute Tool
         tool_name = step.get("tool_name")
         args = step.get("args") or {}
 
@@ -127,7 +126,7 @@ async def orchestrate_agent_run(
 
             try:
                 success, result = tool(**args)
-                step_results[step_num] = result # Store result for future conditions
+                step_results[step_num] = result
 
                 if success:
                     observations.append(f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\n{result}\n</Observation>")
@@ -154,16 +153,16 @@ async def orchestrate_agent_run(
             "synthesis_prompt": "",
             }
     
-    # --- Conditional prompt compression ---
-    # This logic applies the approved optimizations only when the context is large,
-    # preserving maximum prompt fidelity for normal requests.
+    # --- REFACTOR: Orchestration layer is now responsible for failure detection ---
+    observation_text = "\n".join(observations)
+    is_failure_state = any(keyword in observation_text.lower() for keyword in ['error', 'failure', 'critical failure', 'denied by user'])
 
+    # --- Conditional prompt compression ---
     use_compact_protocol = False
     threshold = ai_settings.context_optimizer.prompt_compression_threshold
     if threshold > 0:
         temp_history_str = " ".join(turn['content'] for turn in history)
-        temp_observations_str = " ".join(observations)
-        estimated_input = query + temp_history_str + temp_observations_str
+        estimated_input = query + temp_history_str + observation_text
         estimated_tokens = optimizer.estimate_tokens(estimated_input)
 
         if estimated_tokens > threshold:
@@ -172,16 +171,17 @@ async def orchestrate_agent_run(
 
     print("📝 Synthesizing final response from observations...")
     synthesis_prompt = prompt_builder.build_synthesis_prompt(
-        query,
-        history,
-        observations,
-        persona_content,
+        query=query,
+        history=history,
+        observations=observations,
+        persona_content=persona_content,
         use_compact_protocol=use_compact_protocol,
+        is_failure=is_failure_state  # Pass the decision as a flag
     )
     response_handler = ResponseHandler()
     synthesis_model = ai_settings.model_selection.synthesis
     synthesis_result = await response_handler.call_api(synthesis_prompt, model=synthesis_model)
-    timings["synthesis"] = synthesis_result["duration"] # --- Store synthesis time ---
+    timings["synthesis"] = synthesis_result["duration"]
     final_response = synthesis_result["content"]
    
     return {
@@ -189,3 +189,4 @@ async def orchestrate_agent_run(
         "synthesis_prompt": synthesis_prompt,
         "timings": timings,
         }
+    
