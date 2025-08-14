@@ -1,5 +1,5 @@
 ---
-alias: _base/BTAA-1
+alias: _base/btaa-1
 version: 1.0.0
 type: _base
 title: Base Technical Analysis Agent
