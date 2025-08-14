@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-14T06:04:14.482731+00:00'
+generated_at_utc: '2025-08-14T06:25:40.904020+00:00'
 manifest_version: 7.1-idempotent
-validation_signature: 7aa376c8f76e39681c12881475e8d8a9a996b45df0500f70aa253e33b03fa95c
+validation_signature: 3fe43b364e00e954d28d46f57b889ad20acb7cc01346328e1b23ee27aa37008b
 personas:
 - alias: _base/bcaa-1
   title: Base Collaborative Agent
@@ -8,7 +8,7 @@ personas:
 - alias: _base/btaa-1
   title: Base Technical Analysis Agent
   description: No description provided.
-- alias: _mixins/CODEGEN-STANDARDS-1
+- alias: _mixins/codegen-standards-1
   title: Code Generation Standards Mixin
   description: No description provided.
 - alias: core/arc-1
@@ -65,7 +65,4 @@ personas:
   description: No description provided.
 - alias: utility/jan-1
   title: Project Janitor
-  description: No description provided.
-- alias: utility/pel-a
-  title: Prompt Engineering Library Architect
   description: No description provided.
