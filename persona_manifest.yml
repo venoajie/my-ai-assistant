@@ -1,87 +1,68 @@
-version: '2.0'
-generated_at_utc: '2025-08-14T02:09:16.313743+00:00'
-validation_signature: f9b22b11a94c90904d00a2e818290f80b2ee1af7677b9bb2e97544b56880173c
+generated_at_utc: '2025-08-14T05:18:48.493328+00:00'
+manifest_version: 7.1-idempotent
+validation_signature: 1a547042025cea7d6d8434ba0ef92d07577070de4a4d57a6102dcfff7a8f7440
 personas:
+- alias: _base/BCAA-1
+  title: Base Collaborative Agent
+  description: No description provided.
+- alias: _base/BTAA-1
+  title: Base Technical Analysis Agent
+  description: No description provided.
+- alias: _mixins/CODEGEN-STANDARDS-1
+  title: Code Generation Standards Mixin
+  description: No description provided.
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant
-  description: A system's health is measured by its alignment with architectural principles
-    and best practices. My purpose is to perform a rigorous, evidence-based audit
-    to identify deviations, assess risks, and provide a clear, prioritized path to
-    architectural integrity. An analysis without an actionable recommendation is incomplete.
+  description: No description provided.
 - alias: core/csa-1
   title: Collaborative Systems Architect
-  description: A healthy system is clear, maintainable, and aligned with its blueprint.
-    All changes must enhance architectural integrity. Production and development environments,
-    while different, must derive from a single, consistent source of truth to ensure
-    reliability.
+  description: No description provided.
 - alias: core/dca-1
   title: Documentation & Content Architect
-  description: Documentation is the user interface to the system's knowledge. Clarity
-    for the consumer is the ultimate measure of success.
+  description: No description provided.
 - alias: core/dpa-1
   title: Deployment Process Architect
-  description: Deployment is not an event; it is a controlled, verifiable process.
-    The goal is a zero-defect transition from a pre-production environment to live
-    operation, with every step planned, validated, and reversible.
+  description: No description provided.
+- alias: core/pa-1
+  title: Persona Architect
+  description: A specialist meta-persona that designs, refines, and governs the entire
+    persona ecosystem, focusing on prompt reliability, efficiency, and strategic growth.
 - alias: core/si-1
   title: Session Initiator
-  description: Every well-defined task begins with a clear, unambiguous objective.
-    My purpose is to transform a user's raw intent into a formal, actionable starting
-    point for the appropriate specialist agent.
+  description: No description provided.
 - alias: domains/finance/ada-1
   title: API Contract Architect
-  description: An API is a permanent contract. It must be designed with foresight,
-    prioritizing clarity, consistency, and stability for its consumers.
+  description: No description provided.
 - alias: domains/trading/qtsa-1
   title: Quantitative Strategy Analyst
-  description: A profitable trading strategy is not a guess; it is a hypothesis, rigorously
-    defined, grounded in a quantitative understanding of market dynamics, and structured
-    for empirical validation. All alpha is born from a clear, testable thesis, not
-    from intuition alone.
+  description: No description provided.
 - alias: patterns/adr-1
   title: Architectural Decision Analyst
-  description: A recommendation without a trade-off analysis is an opinion. A robust
-    architectural decision is a justified, auditable choice made with full awareness
-    of its consequences.
+  description: No description provided.
 - alias: patterns/bpr-1
   title: Best Practices Reviewer
-  description: Code is read more often than it is written. Clarity, simplicity, and
-    adherence to idiomatic patterns are paramount for long-term maintainability.
+  description: No description provided.
 - alias: patterns/da-1
   title: Debugging Analyst
-  description: Every bug is a logical puzzle. The solution is found by systematically
-    analyzing the discrepancy between the expected outcome and the actual outcome,
-    as detailed in the error report, and formulating a precise, minimal change to
-    correct the logic.
+  description: No description provided.
 - alias: patterns/pba-1
   title: Performance Bottleneck Analyst
-  description: Performance is not a feature; it is a fundamental requirement. All
-    bottlenecks are measurable and can be traced to a specific violation of resource
-    constraints.
+  description: No description provided.
 - alias: patterns/qsa-1
   title: Quality Strategy Architect
-  description: Testing is not about achieving 100% coverage; it is about strategically
-    reducing risk. The most critical, complex, and dependency-heavy code must be tested
-    first to maximize the impact on system stability.
+  description: No description provided.
 - alias: patterns/sia-1
   title: Systems Integrity Analyst
-  description: A system failure is a deviation from a known-good state. The most direct
-    path to resolution is through rapid, evidence-based hypothesis testing against
-    the system's blueprint.
+  description: No description provided.
 - alias: patterns/sva-1
   title: Security Vulnerability Auditor
-  description: All code is assumed to be insecure until proven otherwise. Every input
-    is a potential threat vector.
+  description: No description provided.
 - alias: patterns/tae-1
   title: Test Automation Engineer
-  description: Every system component's behavior must be verifiable through automated,
-    repeatable tests. A successful test is one that produces a clear, unambiguous
-    pass or fail result.
+  description: No description provided.
 - alias: utility/alignment-checker
   title: Mandate Alignment Checker
-  description: A single, minified JSON object suggesting the best-fit persona for
-    a mandate.
+  description: No description provided.
 - alias: utility/jan-1
   title: Project Janitor
-  description: A shell script containing commands to clean up orphaned and unnecessary
-    project artifacts.
+  description: No description provided.
