@@ -203,6 +203,7 @@ async def async_main():
     parser.add_argument('--autonomous', action='store_true', help='Run in autonomous mode.')
     parser.add_argument('--interactive', action='store_true', help='Start an interactive chat session.')
     parser.add_argument('--context', help='The name of the context plugin to use (e.g., Trading).')
+    parser.add_argument('--output-dir', help='Activates Output-First mode, generating an execution package in the specified directory instead of executing live.')
     session_group = parser.add_mutually_exclusive_group()
     session_group.add_argument('--session', help='Continue an existing session by ID.')
     session_group.add_argument('--new-session', action='store_true', help='Start a new session.')    
@@ -285,6 +286,7 @@ async def async_main():
             session_id=session_id,
             persona_alias=args.persona,
             is_autonomous=args.autonomous,
+            output_dir=args.output_dir,
         )
     
 def print_summary_metrics(
@@ -325,11 +327,14 @@ async def run_one_shot(
     session_id: str,
     persona_alias: str,
     is_autonomous: bool,
+    output_dir: Optional[str] = None,
 ):
     start_time = time.monotonic()
     print(f"🤖 Processing query: {display_query}")
     if persona_alias: print(f"👤 Embodying persona: {persona_alias}")
     if is_autonomous: print("🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨")
+    if output_dir: print(f"📦 OUTPUT-FIRST MODE: Generating execution package in '{output_dir}'")
+
 
     # --- Use explicit keyword arguments to prevent positional errors ---
     # This ensures the correct variables are passed to the kernel, resolving the TypeError.
@@ -337,7 +342,8 @@ async def run_one_shot(
         query=full_query,
         history=history,
         persona_alias=persona_alias,
-        is_autonomous=is_autonomous
+        is_autonomous=is_autonomous,
+        output_dir=output_dir,
     )
     response = result_data["response"]
 
@@ -346,15 +352,21 @@ async def run_one_shot(
     print("="*60)
 
     end_time = time.monotonic()
+    
+    # In output-first mode, the synthesis prompt might be the manifest itself
+    synthesis_prompt = result_data.get("synthesis_prompt", "")
+    if output_dir and not synthesis_prompt:
+        synthesis_prompt = json.dumps(result_data.get("manifest", {}))
+
     print_summary_metrics(
         start_time,
         end_time,
-        result_data["synthesis_prompt"],
+        synthesis_prompt,
         response,
         result_data.get("timings", {})
     )
 
-    if session_id:
+    if session_id and not output_dir: # Don't save session history in output-first mode
         history = SessionManager().update_history(history, "user", full_query)
         history = SessionManager().update_history(history, "model", response)
         SessionManager().save_session(session_id, history)
