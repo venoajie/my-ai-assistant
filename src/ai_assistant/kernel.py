@@ -61,7 +61,7 @@ async def orchestrate_agent_run(
         optimized_query,
         history,
         persona_content,
-        use_compact_protocol  # Now this variable exists and has a value
+        use_compact_protocol
     )
     timings["planning"] = planning_duration
     
@@ -70,7 +70,6 @@ async def orchestrate_agent_run(
     # --- DIRECT RESPONSE (NO TOOLS) ---
     if not plan or all(not step.get("tool_name") for step in plan):
         print("📝 No tool execution required. Generating direct response...")
-        # For no-op, we don't need to worry about compact protocol as context is small.
         direct_prompt = prompt_builder.build_synthesis_prompt(
             query=query,
             history=history,
@@ -149,6 +148,7 @@ async def orchestrate_agent_run(
             print(f"    ❌ Failure: Tool '{tool_name}' not found.")
 
     # --- SYNTHESIS ---
+    # This entire block now correctly sits AFTER the tool execution loop.
     if any_risky_action_denied and not any_tool_succeeded:
         error_msg = "I was unable to complete the task because a necessary action was denied by the user for safety reasons."
         print(f"\n🛑 {error_msg}")
@@ -156,9 +156,8 @@ async def orchestrate_agent_run(
             "response": error_msg, 
             "synthesis_prompt": "",
             "timings": timings,
-            }
+        }
             
-    # Join observations into a single string for analysis and prompt building.
     observation_text = "\n".join(observations)
 
     # Precise Failure Detection
@@ -206,4 +205,11 @@ async def orchestrate_agent_run(
     response_handler = ResponseHandler()
     synthesis_model = ai_settings.model_selection.synthesis
     synthesis_result = await response_handler.call_api(synthesis_prompt, model=synthesis_model)
-    timings["synthesis"] = synthesis_result
+    timings["synthesis"] = synthesis_result["duration"]
+    final_response = synthesis_result["content"]
+   
+    return {
+        "response": final_response,
+        "synthesis_prompt": synthesis_prompt,
+        "timings": timings,
+    }
