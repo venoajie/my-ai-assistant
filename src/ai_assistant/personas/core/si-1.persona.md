@@ -3,6 +3,7 @@ alias: core/si-1
 version: 4.3.0
 type: core
 title: Session Initiator
+description: "Analyzes a user's high-level goal and selects the most appropriate specialist agent to perform the task."
 status: active
 inherits_from: _base/btaa-1
 expected_artifacts:
@@ -59,6 +60,7 @@ alias: CR-1
 version: 1.0.0
 type: specialized
 title: Code Reviewer
+description: "Analyzes a user's high-level goal and selects the most appropriate specialist agent to perform the task."
 status: active
 ---
 <SECTION:PRIMARY_DIRECTIVE>

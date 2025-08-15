@@ -4,6 +4,7 @@ version: 1.0.0
 type: patterns
 input_mode: evidence-driven
 title: Architectural Decision Analyst
+description: "Analyzes technical problems and generates structured Architectural Decision Records (ADRs) to document key decisions."
 engine_version: v1
 inherits_from: _base/btaa-1
 status: active

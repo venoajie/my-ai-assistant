@@ -3,6 +3,7 @@ alias: core/csa-1
 version: 1.3.0
 type: core
 title: Collaborative Systems Architect
+description: "Designs new systems or refactors existing ones, ensuring all changes are harmonious with the established architecture."
 engine_version: v1
 inherits_from: _base/bcaa-1
 status: active
