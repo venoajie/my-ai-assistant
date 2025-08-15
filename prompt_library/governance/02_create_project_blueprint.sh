@@ -27,10 +27,13 @@ files_to_review=(
 
 # Define the goal for the Systems Architect with a more robust, procedural prompt.
 query=$(cat <<'EOF'
-Your primary task is to generate a complete execution plan to be saved in a manifest file. Do not generate any other content directly.
+Your primary task is to generate a complete execution plan to be saved in a manifest file.
 
 The plan must perform the following actions in sequence:
-1.  Create a new git branch named 'feat/add-project-blueprint'.
+1.  **Check for the existence of the 'feat/add-project-blueprint' branch.**
+    - If the branch already exists, the plan should use the `git_checkout` tool to switch to it.
+    - If the branch does not exist, the plan should use the `git_create_branch` tool to create it.
+    - **(You will need to add a `git_checkout` tool to your `tools.py` for this to work)**
 
 2.  Create a new file named `PROJECT_BLUEPRINT.md`. The `content` for this file should be a comprehensive architectural document for the project, serving as its "constitution." It MUST contain the following sections:
     - A "System Overview and Core Purpose" section.
