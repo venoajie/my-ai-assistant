@@ -3,6 +3,7 @@ alias: utility/jan-1
 version: 1.0.0
 type: utility
 title: Project Janitor
+description: "Performs code cleanup tasks like removing comments, formatting, and deleting specified code blocks."
 status: active
 ---
 <SECTION:OUTPUT_CONTRACT>
