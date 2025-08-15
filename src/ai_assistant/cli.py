@@ -176,6 +176,53 @@ def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBas
         print(f"   - ❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}", file=sys.stderr)
         return None
 
+
+def _run_prompt_sanity_checks(args: argparse.Namespace, query: str):
+    """
+    Analyzes the user's prompt and flags for common anti-patterns and
+    prints non-halting warnings to guide the user.
+    """
+    warnings = []
+    query_lower = query.lower()
+    
+    # Check 1: Missing Persona
+    if not args.persona:
+        warnings.append(
+            "You are running without a specific persona (--persona). "
+            "Results may be generic. For best results, select a specialist."
+        )
+
+    # Check 2 (NEW): Explicit high-risk action tag without the safe workflow
+    if "<action>" in query_lower and not args.output_dir:
+        warnings.append(
+            "CRITICAL: You used the <ACTION> tag to declare a high-risk operation "
+            "but did not use the --output-dir flag. This is highly discouraged. "
+            "Always use the two-stage workflow for actions."
+        )
+    # Check 3 (Fallback): Inferred risky action without the safe workflow
+    elif not "<action>" in query_lower:
+        risky_keywords = ["refactor", "fix", "modify", "commit", "change", "add", "create", "write"]
+        if any(keyword in query_lower for keyword in risky_keywords) and not args.output_dir:
+            warnings.append(
+                "Your prompt seems to request a system modification. For clarity and safety, "
+                "wrap your goal in <ACTION> tags and use the --output-dir flag."
+            )
+
+    # Check 4: Large batch-processing attempt
+    file_count = len(args.files) if args.files else 0
+    if file_count > 5:
+        warnings.append(
+            f"You have attached {file_count} files. Attempting to process many files in a "
+            "single prompt can lead to incomplete runs due to context limits. "
+            "Consider using a shell script to process files in a loop."
+        )
+
+    if warnings:
+        print("--- 💡 Prompting Best Practice Reminders ---", file=sys.stderr)
+        for i, warning in enumerate(warnings):
+            print(f"[{i+1}] ⚠️  {warning}", file=sys.stderr)
+        print("-------------------------------------------", file=sys.stderr)
+
 def main():
     """Synchronous entry point for the 'ai' command, required by pyproject.toml."""
     try:
@@ -208,6 +255,11 @@ async def async_main():
     parser.add_argument('--list-plugins', action='store_true', help='List available context plugins')
     
     args = parser.parse_args()
+    
+    # --- SANITY CHECK FUNCTION ---
+    user_query = ' '.join(args.query)
+    _run_prompt_sanity_checks(args, user_query)
+    # -----------------------------------------------
     
     if args.persona:
         manifest_path = Path.cwd() / "persona_manifest.yml"

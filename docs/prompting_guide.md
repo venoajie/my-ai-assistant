@@ -22,8 +22,17 @@ The single most important factor for achieving high-quality results is to **use 
 
 *   **DO State the Goal First and Clearly.**
     Start your prompt with the most important outcome.
-    *   **Good:** `ai --persona core/csa-1 "Refactor the attached database.py to use a connection pool."`
+    *   **Good:** `ai --persona core/csa-1 "<ACTION>Refactor the attached database.py to use a connection pool.</ACTION>"`
     *   **Bad:** `ai --persona core/csa-1 "So, I was looking at our database code, and I think it's a bit slow. Maybe we could make it better? I was thinking about connection pooling..."`
+
+*   **DO Use the `<ACTION>` Tag and Two-Stage Workflow for Any Changes.**
+    For any task that modifies files or Git, you **MUST** use the `--output-dir` flag. To make your intent clear to both the system and the AI, you **SHOULD** wrap your core objective in `<ACTION>` tags. This is the standardized pattern for declaring a high-risk operation.
+    *   **Best Practice:**
+        ```bash
+        ai --persona core/csa-1 --output-dir ./my_run \
+          "<ACTION>Generate a plan to refactor the database connection logic.</ACTION>"
+        ```
+    *   **Why?** Using the `<ACTION>` tag allows the system's pre-flight checks to reliably detect high-risk operations, even for new features, providing you with better safety reminders. It also provides a stronger signal to the AI.
 
 *   **DO Use the Two-Stage Workflow for Any Changes.**
     For any task that modifies files or Git, always use the `--output-dir` flag and the "generate a plan" phrasing. This leverages the system's best feature for safety and resilience.
@@ -43,11 +52,27 @@ The single most important factor for achieving high-quality results is to **use 
 *   **DON'T Be Vague or Conversational.**
     Avoid ambiguity. The AI will take your instructions literally. Phrases like "make it better," "clean this up," or "I think maybe" lead to unpredictable results.
 
-*   **DON'T Give Large, Undefined Repetitive Tasks.** (New Section)
-    When you need the AI to perform the same action on many files, it can sometimes take a "lazy" shortcut and only process a few of them. You must be explicit to prevent this.
-    *   **Bad (High Risk of Incomplete Work):** `"For EACH of the attached .persona.md files, your task is to write and add a concise, one-sentence description..."`
-    *   **Good (More Reliable):** `"Next, you must process EACH of the following persona files that were attached: - core/arc-1.persona.md - core/csa-1.persona.md ... (list all files explicitly) ... For each file in the list above, your plan must add a concise, one-sentence description..."`
-    *   **Why it's better:** Explicitly listing the items in the prompt forces the AI to acknowledge each one and makes it much harder for it to "forget" to complete the entire task.
+*   **DON'T Give the AI Large Batch-Processing Tasks in a Single Prompt.**
+    This is the most common cause of complex failures. The AI's context window is finite. If you provide too many files or too much text, the context will be truncated, and the AI will generate a plausible but **incomplete** plan based on the partial information it received.
+    *   **Bad (Guaranteed to Fail):** A single `ai` command that attaches 18 files and asks the AI to modify all of them.
+        ```bash
+        # This will fail due to context truncation.
+        ai --persona core/dca-1 --output-dir ./my_run \
+           -f file1.md -f file2.md ... (and 16 more files) \
+           "Add a description to all 18 of these files."
+        ```
+    *   **Good (Robust and Scalable):** Use a shell script to orchestrate multiple, small, focused calls to the AI, processing one file at a time.
+        ```bash
+        #!/bin/bash
+        files_to_process=(file1.md file2.md ...)
+        for file in "${files_to_process[@]}"; do
+          echo "Processing $file..."
+          ai --persona core/dca-1 --output-dir "./run_$file" \
+             -f "$file" "Add a description to this file and commit it."
+          ai-execute "./run_$file" --confirm
+        done
+        ```
+    *   **Key Takeaway:** For batch processing, use a shell script as the "conductor" to orchestrate multiple, small, focused calls to the AI "specialist."
 
 *   **DON'T Mix "Thinking" and "Doing" in a Single Prompt.**
     The AI is best at one of two things: analyzing a situation OR generating a plan/artifact. Don't ask it to do both.
@@ -71,6 +96,3 @@ The single most important factor for achieving high-quality results is to **use 
 
 *   **Caveat: Negative Constraints are Unreliable.**
     Telling the AI "Do not include a push step" is less reliable than giving it a positive list of actions that simply omits the push step. It's better to specify exactly what you *do* want.
-
-*   **Caveat: Large Inputs Can Reduce Reliability.**
-    Very large context windows (many large files) can sometimes cause even good models to fail at generating perfect JSON plans or to produce incomplete logical plans. If a complex task fails, your first debugging step should be to try and simplify the prompt or break the task into smaller batches.
