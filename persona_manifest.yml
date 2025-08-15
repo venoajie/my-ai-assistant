@@ -1,16 +1,7 @@
-generated_at_utc: '2025-08-14T08:32:08.752886+00:00'
-manifest_version: 7.1-idempotent
+generated_at_utc: '2025-08-15T02:45:25.522500+00:00'
+manifest_version: 7.2-filtered
 validation_signature: 81ec95034c0b6b3d91f1c61f9bc330aec2761fdde4a10ad66ca7494273f77ee1
 personas:
-- alias: _base/bcaa-1
-  title: Base Collaborative Agent
-  description: No description provided.
-- alias: _base/btaa-1
-  title: Base Technical Analysis Agent
-  description: No description provided.
-- alias: _mixins/codegen-standards-1
-  title: Code Generation Standards Mixin
-  description: No description provided.
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant
   description: No description provided.
