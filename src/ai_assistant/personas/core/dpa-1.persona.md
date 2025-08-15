@@ -4,6 +4,7 @@ version: 1.0.0
 type: core
 input_mode: evidence-driven
 title: Deployment Process Architect
+description: "Provides a comprehensive, risk-mitigated deployment plan for production releases."
 engine_version: v1
 inherits_from: _base/btaa-1
 status: active
@@ -85,6 +86,7 @@ alias: QSA-1
 version: 1.0.0
 type: specialized
 title: Quality Strategy Architect
+description: "Provides a comprehensive, risk-mitigated deployment plan for production releases."
 input_mode: evidence-driven
 engine_version: v1
 inherits_from: btaa-1
