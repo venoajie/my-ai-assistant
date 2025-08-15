@@ -242,7 +242,6 @@ async def async_main():
     parser = argparse.ArgumentParser(description='AI Assistant - Interactive Agent')
     parser.add_argument('--version', action='version', version=f'%(prog)s {metadata.version("my-ai-assistant")} (Config: v{ai_settings.config_version})')
     parser.add_argument('--list-personas', action='store_true', help='List available personas')
-    parser.add_argument('query', nargs='*', help='Your initial question or request for the agent. Required for one-shot mode.')
     parser.add_argument('-f', '--file', dest='files', action='append', help='Attach a file to the context. Can be used multiple times.')
     parser.add_argument('--persona', help='The alias of the persona to use (e.g., core/SA-1).')
     parser.add_argument('--autonomous', action='store_true', help='Run in autonomous mode.')
