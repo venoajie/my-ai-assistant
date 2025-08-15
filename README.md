@@ -459,4 +459,13 @@ You must commit the updated `persona_manifest.yml` along with your persona chang
 > # ... specific directives for this persona
 > ```
 > In this example, `csa-1` will first be composed with the universal `_mixins/codegen-standards-1` mixin, and then its explicit parent `_base/bcaa-1` will be prepended to its own body, creating a complete, multi-layered expert agent.
+
+## Advanced Guides & Best Practices
+
+For more detailed information on getting the most out of the assistant, please see our full documentation:
+
+-   **[Prompting Best Practices](./docs/prompting_guide.md)**: Learn how to write effective prompts to get reliable and powerful results.
+-   **[Persona Development Guide](./docs/personas.md)**: A deep dive into creating and governing custom personas.
+-   **[Plugin Architecture](./docs/plugins.md)**: How to extend the assistant with your own domain knowledge.
+
 ```
