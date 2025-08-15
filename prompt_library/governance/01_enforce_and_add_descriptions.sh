@@ -46,7 +46,7 @@ query=$(cat <<'EOF'
 Perform a critical documentation and governance update on the attached files.
 
 Generate a complete execution plan to be saved in a manifest file. The plan must perform the following actions in sequence:
-1.  Create a new git branch named 'fix/enforce-persona-descriptions'.
+1.  Create a new git branch named 'fix/enforce-persona-descriptions2'.
 
 2.  First, modify `persona_config.yml`. In this file, for the `core`, `patterns`, `domains`, and `utility` persona types, you MUST add `description` to their `required_keys` list. After this change, create a single commit for this file.
 
