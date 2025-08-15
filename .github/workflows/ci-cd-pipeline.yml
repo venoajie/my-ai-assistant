@@ -39,8 +39,8 @@ jobs:
         run: |
           # Use the GITHUB_WORKSPACE variable to provide an absolute path to the config file.
           # This is the robust way to handle paths in GitHub Actions.
-          run: python scripts/generate_manifest.py # Use generate_manifest for full validation
-      
+          python scripts/generate_manifest.py 
+          
   # This job runs in parallel with the tests.
   validate-manifest-integrity:
     name: Validate Manifest Integrity
