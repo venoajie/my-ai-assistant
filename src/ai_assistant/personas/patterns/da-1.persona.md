@@ -3,6 +3,7 @@ alias: patterns/da-1
 version: 1.0.0
 type: patterns
 title: Debugging Analyst
+description: "Diagnoses the root cause of bugs from error reports, stack traces, and relevant source code."
 engine_version: v1
 inherits_from: _base/btaa-1
 status: active
