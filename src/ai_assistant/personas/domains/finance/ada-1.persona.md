@@ -4,6 +4,7 @@ version: 1.0.0
 type: domains
 input_mode: evidence-driven
 title: API Contract Architect
+description: "Designs API contracts for financial services, focusing on REST and OpenAPI standards."
 engine_version: v1
 inherits_from: _base/btaa-1
 status: active
