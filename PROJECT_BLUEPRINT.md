@@ -1,18 +1,78 @@
-# AI Assistant: Your Command-Line Co-Pilot
+# PROJECT BLUEPRINT: AI Assistant
 
-For a detailed architectural overview, see [PROJECT_BLUEPRINT.md](PROJECT_BLUEPRINT.md).
+<!-- Version: 1.0 -->
 
-Welcome to the AI Assistant, a general-purpose, command-line tool designed to be your collaborative partner in software development. It can help you write code, debug complex issues, review architecture, and automate repetitive tasks, all from the comfort of your terminal.
+## 1. System Overview and Core Purpose
 
-Built with a pluggable architecture, it can be extended with domain-specific knowledge for any field, from trading and finance to web development and data science.
+This document is the canonical source of truth for the architectural principles and governance of the AI Assistant project. It serves as a "constitution" for human developers and a "README for the AI," ensuring that all development and AI-driven actions are aligned with the core design philosophy.
 
-## Key Features
+The system is a command-line-native, persona-driven agent designed to assist with software development tasks. Its primary purpose is to provide a safe, reliable, and extensible framework for leveraging Large Language Models to perform complex, multi-step operations on a local file system.
 
--   **Conversational & Stateful:** Engage in interactive sessions where the assistant remembers the context of your work.
--   **Expert Persona System:** Instruct the assistant to adopt specialized expert profiles for higher-quality, consistent results.
--   **File System Integration:** The assistant can read, analyze, and write files, enabling it to perform meaningful development tasks.
--   **Decoupled Execution (New!):** A robust two-stage workflow separates AI-driven analysis from deterministic execution, enhancing safety and resilience.
--   **Pluggable Architecture:** Easily extend the assistant's knowledge with custom "Context Plugins".
--   **Autonomous Mode:** Grant the assistant the ability to execute multi-step plans without supervision (use with caution).
--   **Layered Configuration:** Flexible configuration system that scales from personal preferences to project-specific settings.
--   **Asynchronous Core:** Built with an `async` core for a responsive feel and future-readiness for parallel tasks.
+---
+
+## 2. Core Architectural Principles
+
+The architecture is built on three foundational principles:
+
+### 2.1. Persona-First Operation
+The primary interface for quality and control is the **Persona System**. All complex tasks should be initiated through a specialized persona. This ensures that AI behavior is constrained, predictable, and follows a proven operational protocol, rather than relying on generic, ad-hoc prompting.
+
+### 2.2. Decoupled Execution
+A strict separation is maintained between **AI-driven analysis (thinking)** and **deterministic execution (doing)**. The AI's primary output for any task that modifies the system is a reviewable "Output Package." A separate, non-AI `executor` script then applies these changes. This provides a critical safety layer, enhances resilience, and improves auditability.
+
+### 2.3. Explicit Governance
+The behavior and structure of the persona ecosystem are not arbitrary. They are governed by a set of explicit, machine-readable rules in `persona_config.yml`. All personas are validated against these rules, and a cryptographically signed `persona_manifest.yml` ensures the application's runtime understanding of its capabilities is never out of sync with the committed source code.
+
+---
+
+## 3. Persona Directory & Chain of Command
+
+The persona ecosystem is a team of specialists with a clear hierarchy of responsibility.
+
+-   **`_base/` & `_mixins/` (Foundations):** These are not user-facing personas. They are abstract base classes and mixins that provide foundational behaviors (e.g., collaborative dialogue vs. technical analysis) and universal standards (e.g., code generation format) to all other personas through inheritance.
+
+-   **`core/` (The Architects):** This is the senior leadership team. These personas are responsible for high-level, cross-cutting concerns of the project itself, such as system architecture (`csa-1`), documentation (`dca-1`), and the governance of the persona system (`pa-1`).
+
+-   **`patterns/` (The Specialists):** These are expert individual contributors who solve common, recurring software development problems. This includes debugging (`da-1`), security auditing (`sva-1`), and quality assurance (`qsa-1`). They are the primary "doers" for day-to-day tasks.
+
+-   **`domains/` (The Domain Experts):** These are specialists with knowledge external to software engineering, such as finance or trading. They are brought in when a task requires specific, real-world domain expertise.
+
+---
+
+## 4. Data & State Contracts
+
+The primary data contract for the Decoupled Execution workflow is the **Output Package**.
+
+### 4.1. The Output Package Structure
+
+A standardized directory structure generated by the `ai --output-dir` command.
+
+```
+./[output_dir]/
+├── manifest.json         # The machine-readable plan of action.
+├── workspace/            # Contains the FULL content of all new or modified files.
+└── summary.md            # A human-readable summary of the changes.
+```
+
+### 4.2. The `manifest.json` Schema
+
+The `manifest.json` is the "blueprint for action" and the single source of truth for the `ai-execute` script.
+
+-   **`version` (string):** The schema version of the manifest.
+-   **`sessionId` (string):** A unique, timestamp-based ID for the generation run.
+-   **`generated_by` (string):** The alias of the persona that created the plan.
+-   **`actions` (array):** A sequential list of action objects to be executed.
+    -   **`type` (string):** The action to perform (e.g., `create_branch`, `apply_file_change`).
+    -   **`comment` (string):** The AI's "thought" or rationale for the action.
+    -   **...other parameters:** Action-specific fields (e.g., `branch_name`, `path`, `message`).
+```
+
+### Evaluation: Is this sufficient and appropriate?
+
+**Yes.** A document with the content above would be highly sufficient and appropriate because:
+
+1.  **It's High-Level:** It doesn't get bogged down in implementation details. It explains the *philosophy* and *structure*.
+2.  **It Defines the "Why":** It explains *why* the system is built the way it is (e.g., why decoupled execution is important).
+3.  **It Establishes Governance:** The "Persona Directory" section acts as a charter, defining the roles and responsibilities within the AI team, which is crucial for scaling the ecosystem.
+4.  **It's a "README for the AI":** When this document is attached to a future prompt, it gives the AI a perfect, concise summary of its own operating principles, leading to more consistent and aligned behavior.
+5.  **It Complements the `README.md`:** It doesn't repeat the installation or basic usage instructions. It's the next level of detail for someone who wants to understand the system's design.
