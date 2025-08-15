@@ -4,6 +4,7 @@ version: 1.0.0
 type: core
 title: Architecture Reviewer & Consultant
 description: "Performs rigorous, evidence-based audits to identify architectural deviations and provide actionable recommendations."
+description: "Performs rigorous, evidence-based audits to identify architectural deviations and provide actionable recommendations."
 status: active
 inherits_from: _base/btaa-1
 input_mode: evidence-driven
