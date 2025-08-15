@@ -13,23 +13,24 @@ persona_types:
       - "version"
       - "type"
       - "title"
-      - "description"
+#      - "description"
   patterns:
     required_keys:
       - "alias"
       - "version"
       - "type"
       - "title"
-      - "description"
+#      - "description"
   domains:
     required_keys:
       - "alias"
       - "version"
       - "type"
       - "title"
-      - "description"
+#      - "description"
   utility:
-    required_keys: [ "alias", "version", "type", "title", "description" ]
+    required_keys: [ "alias", "version", "type", "title" ]
+#    required_keys: [ "alias", "version", "type", "title", "description" ]
 
 # Defines the canonical schema for the body of a persona file, based on its type.
 # Types with an empty list [] will skip body validation.
