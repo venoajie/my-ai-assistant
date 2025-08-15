@@ -7,28 +7,23 @@ from pathlib import Path
 from datetime import datetime, timezone
 import sys
 
-# --- This is a necessary evil for runtime validation. ---
-# In a more mature package, PersonaValidator would be part of the src library.
-try:
-    sys.path.insert(0, str(Path.cwd()))
-    from scripts.persona_validator import PersonaValidator
-except ImportError:
-    print("FATAL: Could not import PersonaValidator from the 'scripts' directory.", file=sys.stderr)
-    print("Please ensure you are running this script from the project root.", file=sys.stderr)
-    sys.exit(1)
+# This script now directly imports the validator from its own directory.
+from persona_validator import PersonaValidator
+
 
 class ManifestGenerator:
     """
     Validates all persona files and generates a manifest with a cryptographic signature.
-    This script is now IDEMPOTENT: it will not rewrite the manifest if the content
+    This script is IDEMPOTENT: it will not rewrite the manifest if the content
     of the persona files has not changed.
     """
-    MANIFEST_VERSION = "7.1-idempotent"
+    MANIFEST_VERSION = "7.2-filtered"
 
     def __init__(self, project_root: Path):
         self.project_root = project_root
         self.personas_dir = self.project_root / "src" / "ai_assistant" / "personas"
-        self.validator = PersonaValidator(self.project_root / "persona_config.yml")
+        self.config_path = self.project_root / "persona_config.yml"
+        self.validator = PersonaValidator(self.config_path)
 
     def run(self):
         print(f"--- Generating Persona Manifest (v{self.MANIFEST_VERSION}) ---")
@@ -52,37 +47,34 @@ class ManifestGenerator:
             validated_persona_details.append({
                 "path": persona_path,
                 "alias": data['alias'],
+                "type": data['type'], # Store the type for filtering
                 "title": data.get('title', 'N/A'),
                 "description": data.get('description', 'No description provided.'),
-                "is_public": not data.get('is_private', False),
                 "content": content,
             })
         
         print(f"\n✓ All {len(validated_persona_details)} personas passed validation.")
 
         # --- IDEMPOTENCY CHECK ---
-        # 1. Generate the signature for the CURRENT state of the files.
         new_signature = self._calculate_signature(validated_persona_details)
-
-        # 2. Check if the existing manifest has the same signature.
         manifest_path = self.project_root / "persona_manifest.yml"
+        
         if self._is_manifest_up_to_date(manifest_path, new_signature):
             print("\n✓ Manifest is already up-to-date. No changes needed.")
             print(f"  - Validation Signature: {new_signature[:12]}...")
-            return # Exit without writing the file
+            return
 
-        # 3. If we are here, it means we need to generate a new manifest.
         print("\nℹ️ Persona changes detected or manifest is missing/corrupted. Regenerating...")
         self._write_manifest(manifest_path, new_signature, validated_persona_details)
+        
+        public_personas_count = sum(1 for p in validated_persona_details if not p['type'].startswith('_'))
         print(f"✓ Persona manifest successfully generated at: {manifest_path.relative_to(self.project_root)}")
-        public_personas = [p for p in validated_persona_details if p['is_public']]
-        print(f"  - Included {len(public_personas)} public personas in the list.")
+        print(f"  - Included {public_personas_count} public personas in the list.")
         print(f"  - Validation Signature: {new_signature[:12]}...")
 
     def _calculate_signature(self, persona_details: list) -> str:
         """Calculates a deterministic signature based on persona content and structure."""
         canonical_data = []
-        # Sort by alias to ensure the order is always the same
         for details in sorted(persona_details, key=lambda p: p['alias']):
             canonical_data.append({
                 "alias": details['alias'],
@@ -90,7 +82,6 @@ class ManifestGenerator:
                 "content_sha256": hashlib.sha256(details['content'].encode('utf-8')).hexdigest()
             })
         
-        # Use separators=(',', ':') to remove whitespace for a compact, consistent hash
         canonical_string = json.dumps(canonical_data, sort_keys=True, separators=(',', ':'))
         return hashlib.sha256(canonical_string.encode('utf-8')).hexdigest()
 
@@ -102,22 +93,19 @@ class ManifestGenerator:
         try:
             with open(manifest_path, "r", encoding="utf-8") as f:
                 existing_data = yaml.safe_load(f)
-            
-            # Ensure the file is not empty or malformed
             if not isinstance(existing_data, dict):
                 return False
-
             existing_signature = existing_data.get("validation_signature")
             return existing_signature == new_signature
         except (yaml.YAMLError, TypeError):
-            # If the file is corrupted, it's not up-to-date
             return False
 
     def _write_manifest(self, manifest_path: Path, signature: str, persona_details: list):
-        """Builds and writes the final manifest YAML file."""
+        """Builds and writes the final manifest YAML file, filtering for public personas."""
         public_personas = []
         for details in sorted(persona_details, key=lambda p: p['alias']):
-            if details['is_public']:
+            # CRITICAL FIX: Only include personas whose type does NOT start with '_'.
+            if not details['type'].startswith('_'):
                 public_personas.append({
                     "alias": details['alias'],
                     "title": details['title'],
@@ -135,6 +123,9 @@ class ManifestGenerator:
             yaml.dump(manifest_data, f, default_flow_style=False, sort_keys=False, indent=2)
 
 if __name__ == "__main__":
+    # Ensure the script can be run from the project root
     project_root_path = Path(__file__).parent.parent.resolve()
+    sys.path.insert(0, str(project_root_path))
+    
     generator = ManifestGenerator(project_root_path)
     generator.run()
