@@ -3,9 +3,10 @@
 # PROMPT: Enforce and Add Persona Descriptions (Final Resilient Version)
 #
 # DESCRIPTION:
-# This is the final, hardened version of the script. It avoids the deadlock
-# by replacing the complex 'ai' call inside the loop with a simple, reliable
-# 'sed' command for the repetitive text-editing task.
+# This is the final, hardened version of the script. It solves the stale
+# manifest deadlock by explicitly regenerating and committing the manifest
+# after all persona files have been updated, ensuring a valid state before
+# the final step.
 #
 
 set -e # Exit immediately if any command fails.
@@ -26,7 +27,7 @@ echo "✅ Git working directory is clean."
 echo "---"
 
 # --- STAGE 1: Cleanup & Branch Creation ---
-echo "🚀 [STAGE 1/3] Cleaning up and creating new branch: $branch_name"
+echo "🚀 [STAGE 1/5] Cleaning up and creating new branch: $branch_name"
 if git show-ref --quiet "refs/heads/$branch_name"; then
 	    echo "ℹ️  Stale branch '$branch_name' found from a previous run. Deleting it."
 	        git branch -D "$branch_name"
@@ -36,7 +37,7 @@ echo "✅ Branch created and checked out."
 echo "---"
 
 # --- STAGE 2: Iterative Persona Data Fixes ---
-echo "🚀 [STAGE 2/3] Iterating through persona files to add descriptions..."
+echo "🚀 [STAGE 2/5] Iterating through persona files to add descriptions..."
 
 files_to_update=(
 	    "src/ai_assistant/personas/core/arc-1.persona.md"
@@ -58,8 +59,6 @@ files_to_update=(
 									    "src/ai_assistant/personas/utility/jan-1.persona.md"
 								    )
 
-								    # This is a simple associative array (like a dictionary) for the descriptions.
-								    # We let the AI generate these once, then hardcode them for reliability.
 								    declare -A descriptions
 								    descriptions["arc-1"]="Performs rigorous, evidence-based audits to identify architectural deviations and provide actionable recommendations."
 								    descriptions["csa-1"]="Designs new systems or refactors existing ones, ensuring all changes are harmonious with the established architecture."
@@ -82,38 +81,36 @@ files_to_update=(
 
 								    for file_path in "${files_to_update[@]}"; do
 									        echo "   - Processing: $file_path"
-										    
-										    # Extract the base name (e.g., "arc-1") from the file path
-										        base_name=$(basename "$file_path" .persona.md)
+										    base_name=$(basename "$file_path" .persona.md)
+										        description_text=${descriptions[$base_name]}
 											    
-											    # Get the description from our associative array
-											        description_text=${descriptions[$base_name]}
-												    
-												    if [ -z "$description_text" ]; then
-													            echo "   - ❌ ERROR: No description found for $base_name. Skipping."
-														            continue
-															        fi
+											    if [ -z "$description_text" ]; then
+												            echo "   - ❌ ERROR: No description found for $base_name. Skipping."
+													            continue
+														        fi
 
-																    # Use 'sed' to insert the description line right after the 'title:' line.
-																        # This is a simple, reliable, and fast text-editing command.
-																	    sed -i "/^title:/a description: \"$description_text\"" "$file_path"
+															    sed -i "/^title:/a description: \"$description_text\"" "$file_path"
+															        git add "$file_path"
+																    git commit -m "docs(persona): Add description for $base_name"
+																        echo "   - ✅ Committed update for $file_path"
+																done
 
-																	        # Stage and commit the change
-																		    git add "$file_path"
-																		        git commit -m "docs(persona): Add description for $base_name"
-																			    
-																			    echo "   - ✅ Committed update for $file_path"
-																		    done
+																echo "✅ All persona files updated."
+																echo "---"
 
-																		    echo "✅ All persona files updated."
-																		    echo "---"
+																# --- STAGE 3: Resynchronize State ---
+																echo "🚀 [STAGE 3/5] Regenerating manifest to reflect new persona content..."
+																python scripts/generate_manifest.py
+																git add persona_manifest.yml
+																git commit -m "chore: Regenerate manifest after adding descriptions"
+																echo "✅ Manifest regenerated and committed."
+																echo "---"
 
-																		    # --- STAGE 3: Enforce Governance Rule ---
-																		    echo "🚀 [STAGE 3/4] Enforcing governance rule in persona_config.yml..."
-																		    # This is a complex, one-off task, so using the AI here is still appropriate.
-																		    config_output_dir="./ai_runs/enforce_rule_$(date +%s)"
+																# --- STAGE 4: Enforce Governance Rule ---
+																echo "🚀 [STAGE 4/5] Enforcing governance rule in persona_config.yml..."
+																config_output_dir="./ai_runs/enforce_rule_$(date +%s)"
 
-																		    config_query=$(cat <<'EOF'
+																config_query=$(cat <<'EOF'
 Generate an execution plan to perform the final governance update:
 1. Modify `persona_config.yml` to add `description` to the `required_keys` list for the `core`, `patterns`, `domains`, and `utility` types.
 2. Stage and commit the change to `persona_config.yml` with the message "feat(governance): Enforce description field in personas".
@@ -130,8 +127,8 @@ ai-execute "$config_output_dir" --confirm
 echo "✅ Governance rule enforced and committed."
 echo "---"
 
-# --- STAGE 4: Final Push ---
-echo "🚀 [STAGE 4/4] Pushing the completed branch to remote..."
+# --- STAGE 5: Final Push ---
+echo "🚀 [STAGE 5/5] Pushing the completed branch to remote..."
 git push --set-upstream origin "$branch_name"
 
 echo "🎉 Workflow complete. Persona governance has been strengthened and descriptions added."
