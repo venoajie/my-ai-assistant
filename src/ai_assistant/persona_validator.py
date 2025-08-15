@@ -1,4 +1,4 @@
-# scripts/persona_validator.py
+# src/ai_assistant/persona_validator.py
 import yaml
 from pathlib import Path
 import os
@@ -14,7 +14,12 @@ class PersonaValidator:
         self.persona_types = self.config.get('persona_types', {})
         self.body_schemas = self.config.get('body_schemas_by_type', {})
 
-    def _validate_frontmatter(self, data: dict, persona_type: str) -> (bool, str):
+    def _validate_frontmatter(
+        self, 
+        data: dict, 
+        persona_type: str,
+        ):
+        
         """Validates the YAML frontmatter dictionary."""
         if persona_type not in self.persona_types:
             return False, f"Frontmatter: Invalid persona type '{persona_type}'"
@@ -25,7 +30,12 @@ class PersonaValidator:
                 return False, f"Frontmatter: Missing required key '{key}' for type '{persona_type}'"
         return True, "OK"
 
-    def _validate_body(self, body_content: str, persona_type: str) -> (bool, str):
+    def _validate_body(
+        self, 
+        body_content: str, 
+        persona_type: str,
+        ):
+        
         """Validates that the persona body contains all required sections."""
         required_sections = self.body_schemas.get(persona_type, [])
         if not required_sections:
@@ -33,8 +43,6 @@ class PersonaValidator:
 
         missing_sections = []
         for section in required_sections:
-            # Use a regex to find <SECTION:SECTION_NAME> ... </SECTION:SECTION_NAME>
-            # This is more robust than a simple string search.
             pattern = re.compile(f"<SECTION:{section}>.*?</SECTION:{section}>", re.DOTALL)
             if not pattern.search(body_content):
                 missing_sections.append(section)
@@ -43,7 +51,12 @@ class PersonaValidator:
             return False, f"Body: Missing required sections: {', '.join(missing_sections)}"
         return True, "OK"
 
-    def validate_persona(self, persona_path: Path, personas_root: Path) -> (bool, str):
+    def validate_persona(
+        self, 
+        persona_path: Path, 
+        personas_root: Path,
+        ):
+        
         """
         Validates a single persona file against all loaded rules (frontmatter and body).
         Returns (True, "OK") on success or (False, "Error message") on failure.
@@ -54,7 +67,6 @@ class PersonaValidator:
             if len(parts) < 3:
                 return False, f"Malformed file (missing '---' separators)"
 
-            # --- Frontmatter Validation ---
             frontmatter_data = yaml.safe_load(parts[1])
             if not isinstance(frontmatter_data, dict):
                 return False, "Invalid YAML frontmatter (not a dictionary)"
@@ -64,13 +76,11 @@ class PersonaValidator:
             if not is_valid:
                 return False, reason
 
-            # --- Alias/Filename Validation ---
             expected_alias = str(persona_path.relative_to(personas_root)).replace(".persona.md", "").replace(os.path.sep, "/")
             actual_alias = frontmatter_data.get("alias")
             if not actual_alias or expected_alias.lower() != actual_alias.lower():
                 return False, f"Filename-Alias Mismatch: Path implies '{expected_alias}', but alias is '{actual_alias}'"
 
-            # --- Body Validation ---
             body_content = "---".join(parts[2:])
             is_valid, reason = self._validate_body(body_content, persona_type)
             if not is_valid:

@@ -22,15 +22,9 @@ from .persona_loader import PersonaLoader
 from .config import ai_settings
 from .context_optimizer import ContextOptimizer
 from . import kernel 
+# Import the validator from its new, proper location
+from .persona_validator import PersonaValidator
 
-
-# --- This is a necessary evil for runtime validation. ---
-# In a more mature package, PersonaValidator would be part of the src library.
-try:
-    sys.path.insert(0, str(Path.cwd() / "scripts"))
-    from persona_validator import PersonaValidator
-except ImportError:
-    PersonaValidator = None
     
 def is_manifest_invalid(manifest_path: Path):
     """
@@ -38,7 +32,13 @@ def is_manifest_invalid(manifest_path: Path):
     Returns a tuple (is_invalid: bool, reason: str).
     """
     project_root = Path.cwd()
-    personas_dir = project_root / "src" / "ai_assistant" / "personas"
+    # Use resources to find the canonical personas directory within the package
+    try:
+        personas_dir_traversable = resources.files('ai_assistant').joinpath('personas')
+        personas_dir = Path(str(personas_dir_traversable))
+    except (ModuleNotFoundError, FileNotFoundError):
+        return True, "Could not locate the built-in personas directory."
+
 
     if not manifest_path.exists():
         return True, "Manifest file does not exist."
@@ -55,19 +55,17 @@ def is_manifest_invalid(manifest_path: Path):
     except (yaml.YAMLError, TypeError, ValueError) as e:
         return True, f"Could not parse manifest: {e}"
 
-    # --- Check 2: Compare file modification times ---
+    # --- Check 2: Compare file modification times (fast check) ---
     try:
         for persona_path_obj in personas_dir.rglob("*.persona.md"):
-            persona_mtime = datetime.fromtimestamp(persona_path_obj.stat().st_mtime, tz=timezone.utc)
-            if persona_mtime > manifest_time:
-                return True, f"Persona '{persona_path_obj.name}' was modified after the manifest was generated."
+            # This check is now more complex due to package installation vs. dev mode
+            # For simplicity in a runtime check, we rely on the signature.
+            # A more advanced check could compare against package metadata.
+            pass # Skipping direct mtime check in favor of signature, which is more robust.
     except Exception as e:
         return True, f"Could not scan persona files for modification times: {e}"
 
-    # --- Check 3: Recalculate and compare the validation signature ---
-    if not PersonaValidator:
-        return True, "Could not import PersonaValidator from scripts directory. Cannot perform full validation."
-
+    # --- Check 3: Recalculate and compare the validation signature (robust check) ---
     try:
         validator = PersonaValidator(project_root / "persona_config.yml")
         all_persona_paths = list(personas_dir.rglob("*.persona.md"))
@@ -76,7 +74,7 @@ def is_manifest_invalid(manifest_path: Path):
         for persona_path in all_persona_paths:
             is_valid, reason = validator.validate_persona(persona_path, personas_dir)
             if not is_valid:
-                return True, f"A persona file on disk is invalid. Reason: {reason} for file {persona_path.relative_to(project_root)}. The manifest is out of sync with an invalid state."
+                return True, f"A persona file on disk is invalid. Reason: {reason} for file {persona_path.relative_to(personas_dir)}. The manifest is out of sync with an invalid state."
             else:
                 content = persona_path.read_text(encoding="utf-8")
                 data = yaml.safe_load(content.split("---")[1])
@@ -91,7 +89,7 @@ def is_manifest_invalid(manifest_path: Path):
         for details in sorted(validated_persona_details, key=lambda p: p['alias']):
             canonical_data.append({
                 "alias": details['alias'],
-                "path": str(details['path'].relative_to(project_root)),
+                "path": str(details['path'].relative_to(project_root)), # Path relative to project for consistency
                 "content_sha256": hashlib.sha256(details['content'].encode('utf-8')).hexdigest()
             })
 

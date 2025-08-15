@@ -7,23 +7,29 @@ from pathlib import Path
 from datetime import datetime, timezone
 import sys
 
-# This script now directly imports the validator from its own directory.
-from persona_validator import PersonaValidator
+# Add the project root to the path to allow importing from src
+project_root_path = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(project_root_path / 'src'))
 
+try:
+    from ai_assistant.persona_validator import PersonaValidator
+except ImportError:
+    print("FATAL: Could not import PersonaValidator.", file=sys.stderr)
+    print("Please ensure you are running this script from the project root and that src/ is importable.", file=sys.stderr)
+    sys.exit(1)
 
 class ManifestGenerator:
     """
     Validates all persona files and generates a manifest with a cryptographic signature.
-    This script is IDEMPOTENT: it will not rewrite the manifest if the content
+    This script is now IDEMPOTENT: it will not rewrite the manifest if the content
     of the persona files has not changed.
     """
-    MANIFEST_VERSION = "7.2-filtered"
+    MANIFEST_VERSION = "7.3-central-validator"
 
     def __init__(self, project_root: Path):
         self.project_root = project_root
         self.personas_dir = self.project_root / "src" / "ai_assistant" / "personas"
-        self.config_path = self.project_root / "persona_config.yml"
-        self.validator = PersonaValidator(self.config_path)
+        self.validator = PersonaValidator(self.project_root / "persona_config.yml")
 
     def run(self):
         print(f"--- Generating Persona Manifest (v{self.MANIFEST_VERSION}) ---")
@@ -47,7 +53,7 @@ class ManifestGenerator:
             validated_persona_details.append({
                 "path": persona_path,
                 "alias": data['alias'],
-                "type": data['type'], # Store the type for filtering
+                "type": data['type'],
                 "title": data.get('title', 'N/A'),
                 "description": data.get('description', 'No description provided.'),
                 "content": content,
@@ -104,7 +110,6 @@ class ManifestGenerator:
         """Builds and writes the final manifest YAML file, filtering for public personas."""
         public_personas = []
         for details in sorted(persona_details, key=lambda p: p['alias']):
-            # CRITICAL FIX: Only include personas whose type does NOT start with '_'.
             if not details['type'].startswith('_'):
                 public_personas.append({
                     "alias": details['alias'],
@@ -123,9 +128,5 @@ class ManifestGenerator:
             yaml.dump(manifest_data, f, default_flow_style=False, sort_keys=False, indent=2)
 
 if __name__ == "__main__":
-    # Ensure the script can be run from the project root
-    project_root_path = Path(__file__).parent.parent.resolve()
-    sys.path.insert(0, str(project_root_path))
-    
     generator = ManifestGenerator(project_root_path)
     generator.run()
