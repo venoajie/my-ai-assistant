@@ -11,8 +11,8 @@ class TestPersonaValidation(unittest.TestCase):
         This test ensures that all bundled personas adhere to the defined standards.
         """
         project_root = Path(__file__).parent.parent
-        script_path = project_root / "scripts" / "validate_personas.py"
-        
+        script_path = project_root / "src" / "ai_assistant" / "persona_validator.py"
+
         # We must use the same Python executable that is running the tests
         python_executable = sys.executable
         
