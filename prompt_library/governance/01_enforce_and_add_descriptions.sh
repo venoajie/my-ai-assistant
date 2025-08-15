@@ -1,14 +1,18 @@
 #!/bin/bash
 #
-# PROMPT: Enforce and Add Persona Descriptions (Idempotent Version)
+# PROMPT: Enforce and Add Persona Descriptions (Resilient Version)
 #
 # DESCRIPTION:
-# This script is hardened against partial-run failures and Git normalization
-# issues. It deletes each file before processing to ensure the subsequent
-# write and commit operations are always treated as a change by Git.
+# This is the final, hardened version of the script. It includes a critical
+# cleanup stage to delete the target branch if it exists from a previous
+# failed run. This ensures every execution starts from a pristine state.
 #
 
 set -e # Exit immediately if any command fails.
+
+# --- Configuration ---
+specialist_persona="core/dca-1"
+branch_name="fix/enforce-persona-descriptions"
 
 # --- PRE-FLIGHT CHECK ---
 echo "🔎 [PRE-FLIGHT] Checking for clean Git working directory..."
@@ -21,16 +25,16 @@ fi
 echo "✅ Git working directory is clean."
 echo "---"
 
-# --- Configuration ---
-specialist_persona="core/dca-1"
-branch_name="fix/enforce-persona-descriptions"
+# --- STAGE 1: Cleanup & Branch Creation ---
+echo "🚀 [STAGE 1/4] Cleaning up and creating new branch: $branch_name"
 
-# --- STAGE 1: Create Branch ---
-echo "🚀 [STAGE 1/4] Creating new branch: $branch_name"
-if ! git switch -c "$branch_name"; then
-    echo "ℹ️  Branch '$branch_name' already exists. Switching to it."
-    git switch "$branch_name"
+# CRITICAL: Check if the branch exists from a previous failed run and delete it.
+if git show-ref --quiet "refs/heads/$branch_name"; then
+    echo "ℹ️  Stale branch '$branch_name' found from a previous run. Deleting it."
+    git branch -D "$branch_name"
 fi
+
+git switch -c "$branch_name"
 echo "✅ Branch created and checked out."
 echo "---"
 
@@ -59,21 +63,12 @@ files_to_update=(
 
 for file_path in "${files_to_update[@]}"; do
     echo "   - Processing: $file_path"
-    
-    # --- CRITICAL IDEMPOTENCY FIX ---
-    # Ensure the file is restored to its original state from the repo,
-    # then delete it. This guarantees that the subsequent write is a
-    # clean creation that Git will always recognize as a change.
-    git restore "$file_path"
-    rm -f "$file_path"
-    # --------------------------------
-
     loop_output_dir="./ai_runs/update_$(basename "$file_path" .persona.md)_$(date +%s)"
     
     loop_query=$(cat <<EOF
-The file '$file_path' has been provided for context. Add a concise, one-sentence 'description' field to its YAML frontmatter.
+Based on the content of the attached file '$file_path', add a concise, one-sentence 'description' field to its YAML frontmatter.
 Generate a plan to:
-1. Create the file at '$file_path' with the updated content.
+1. Overwrite the file at '$file_path' with the updated content.
 2. Stage and commit this single file change with a commit message like "docs(persona): Add description for $(basename "$file_path" .persona.md)".
 EOF
 )
@@ -91,12 +86,29 @@ done
 echo "✅ All persona files updated."
 echo "---"
 
-# (Stages 3 and 4 remain the same)
-
 # --- STAGE 3: Enforce Governance Rule ---
 echo "🚀 [STAGE 3/4] Enforcing governance rule in persona_config.yml..."
-# ... (rest of stage 3) ...
+config_output_dir="./ai_runs/enforce_rule_$(date +%s)"
+
+config_query=$(cat <<'EOF'
+Generate an execution plan to perform the final governance update:
+1. Modify `persona_config.yml` to add `description` to the `required_keys` list for the `core`, `patterns`, `domains`, and `utility` types.
+2. Stage and commit the change to `persona_config.yml` with the message "feat(governance): Enforce description field in personas".
+EOF
+)
+
+ai --new-session \
+   --persona "$specialist_persona" \
+   --output-dir "$config_output_dir" \
+   -f persona_config.yml \
+   "$config_query"
+
+ai-execute "$config_output_dir" --confirm
+echo "✅ Governance rule enforced and committed."
+echo "---"
 
 # --- STAGE 4: Final Push ---
 echo "🚀 [STAGE 4/4] Pushing the completed branch to remote..."
-# ... (rest of stage 4) ...
+git push --set-upstream origin "$branch_name"
+
+echo "🎉 Workflow complete. Persona governance has been strengthened and descriptions added."
