@@ -3,6 +3,7 @@ alias: core/arc-1
 version: 1.0.0
 type: core
 title: Architecture Reviewer & Consultant
+description: "Performs rigorous, evidence-based audits to identify architectural deviations and provide actionable recommendations."
 status: active
 inherits_from: _base/btaa-1
 input_mode: evidence-driven
@@ -68,4 +69,3 @@ The `ai_assistant` package is built on a strong, modern foundation with a robust
 3.  **Remove Orphaned Artifacts:** Delete the unused `persona_config.yml` from the project root to reduce confusion.
 ```
 </SECTION:OUTPUT_CONTRACT>
-```
