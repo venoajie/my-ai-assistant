@@ -19,27 +19,30 @@ specialist_persona="core/csa-1"
 output_package_dir="./ai_runs/create_blueprint_$(date +%Y%m%d-%H%M%S)"
 
 # Provide the AI with relevant context to build the blueprint.
-# The persona manifest and config are crucial for defining the persona ecosystem.
 files_to_review=(
     -f README.md
     -f persona_manifest.yml
     -f persona_config.yml
 )
 
-# Define the goal for the Systems Architect.
+# Define the goal for the Systems Architect with a more robust, procedural prompt.
 query=$(cat <<'EOF'
-Create a new, high-level architectural document for this project named `PROJECT_BLUEPRINT.md`. This document will serve as the project's "constitution" and a "README for the AI."
+Your primary task is to generate a complete execution plan to be saved in a manifest file. Do not generate any other content directly.
 
-Generate a complete execution plan to be saved in a manifest file. The plan must:
+The plan must perform the following actions in sequence:
 1.  Create a new git branch named 'feat/add-project-blueprint'.
-2.  Create a new file, `PROJECT_BLUEPRINT.md`. Its content should define:
-    - A System Overview and Core Purpose.
-    - The Core Architectural Principles (e.g., Persona-First, Decoupled Execution, Governance).
-    - A "Persona Directory" describing the roles of the `core`, `patterns`, and `domains` categories.
+
+2.  Create a new file named `PROJECT_BLUEPRINT.md`. The `content` for this file should be a comprehensive architectural document for the project, serving as its "constitution." It MUST contain the following sections:
+    - A "System Overview and Core Purpose" section.
+    - A "Core Architectural Principles" section (mentioning Persona-First, Decoupled Execution, and Governance).
+    - A "Persona Directory" section describing the roles of the `core`, `patterns`, and `domains` categories based on the attached manifest.
     - A "Data & State Contracts" section defining the structure of the "Output Package" (`manifest.json`, `workspace/`, etc.).
-3.  Modify the main `README.md` to add a prominent link to the new `PROJECT_BLUEPRINT.md` near the top.
-4.  For each new or modified file, include a sequence of actions in the plan: apply the file change, add it, and commit it with a conventional commit message.
-5.  The final action in the plan should be to push the new branch.
+
+3.  Modify the main `README.md` file. Add a new section near the top that introduces the blueprint and provides a prominent link to the new `PROJECT_BLUEPRINT.md` file.
+
+4.  For each of the two files (`PROJECT_BLUEPRINT.md` and `README.md`), the plan must include a separate sequence of actions to apply the file change, add it, and commit it with a conventional commit message.
+
+5.  The final action in the plan must be to push the new branch.
 EOF
 )
 
