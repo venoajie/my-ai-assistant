@@ -1,17 +1,18 @@
 # src/ai_assistant/kernel.py
-import sys
+import asyncio
 import json
+import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from .persona_loader import PersonaLoader
+from .config import ai_settings
 from .context_optimizer import ContextOptimizer
+from .persona_loader import PersonaLoader
 from .planner import Planner
 from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
-from .config import ai_settings
-import asyncio
 
 
 async def orchestrate_agent_run(
