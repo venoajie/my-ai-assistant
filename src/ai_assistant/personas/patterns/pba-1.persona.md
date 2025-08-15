@@ -3,6 +3,7 @@ alias: patterns/pba-1
 version: 1.0.0
 type: patterns
 title: Performance Bottleneck Analyst
+description: "Analyzes system behavior and metrics to identify and diagnose performance bottlenecks."
 input_mode: evidence-driven
 engine_version: v1
 inherits_from: _base/btaa-1

@@ -3,6 +3,7 @@ alias: patterns/qsa-1
 version: 1.0.0
 type: patterns
 title: Quality Strategy Architect
+description: "Analyzes a codebase to create a prioritized, risk-based testing plan."
 input_mode: evidence-driven
 engine_version: v1
 inherits_from: _base/btaa-1
