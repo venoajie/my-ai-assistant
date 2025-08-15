@@ -59,6 +59,19 @@ ai [FLAGS] "Your goal in plain English"
 | `--autonomous` | Enables fully automatic mode; the AI will **not** ask for permission. | For well-defined tasks where you trust the AI to run without supervision. **Use with extreme caution.** |
 | `--output-dir <PATH>` | **(New)** Generates a reviewable "Output Package" instead of executing live. | For complex or risky tasks, this separates AI analysis from execution, allowing for manual review and safer application of changes. |
 
+
+### Understanding the System's Identifiers
+
+The assistant uses a few different IDs to manage its state. Understanding them is key to using the tool effectively.
+
+| Identifier | Purpose | Example |
+| :--- | :--- | :--- |
+| **Conversational Session ID** | Tracks the history of a single chat conversation. It's the name of your "chat log." | `50da951e-503a-4683-854e-807625431767` |
+| **Output Package Directory** | A user-defined path to store the artifacts for a single, specific task. | `ai_runs/summary_task_auto` |
+| **Manifest `sessionId`** | An internal timestamp inside `manifest.json` that uniquely identifies a single generation run. | `run-20231028-163000` |
+
+**Key Takeaway:** The **Conversational Session ID** is intentionally **decoupled** from the **Output Package**. You can use one long-running conversation to generate many different, separate output packages for various tasks.
+
 ## The Two-Stage Workflow: Analyze then Execute
 
 For any complex task that involves modifying files or interacting with Git, the recommended approach is the new two-stage workflow. This decouples the expensive, AI-driven analysis from the deterministic, safe execution of the plan. There are two ways to use this workflow: Manually for high-risk tasks, and automatically for trusted tasks.
