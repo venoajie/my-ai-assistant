@@ -88,7 +88,7 @@ Use the `--output-dir` flag to have the AI analyze your request and generate a s
 # The AI will analyze the request and create a package in './ai_runs/refactor-01'
 ai --new-session --persona core/csa-1 --output-dir ./ai_runs/refactor-01 \
   -f src/services/distributor.py \
-  "Refactor the 'distributor' service to improve its logging."
+  "<ACTION>Refactor the 'distributor' service to improve its logging.</ACTION>"
 ```
 
 This command creates a directory with the following structure:
