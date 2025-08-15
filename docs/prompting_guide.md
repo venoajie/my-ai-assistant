@@ -12,7 +12,7 @@ Your goal is to provide a clear, unambiguous "mission briefing" to a specialized
 
 The single most important factor for achieving high-quality results is to **use the right persona for the job**. The persona system is the foundation of this application's power.
 
--   **Why?** Personas are pre-loaded with a specific role, a core philosophy, and a structured operational protocol. Using `core/csa-1` doesn't just tell the AI to be a systems architect; it forces it to follow a proven, multi-step process for architectural tasks, leading to far more consistent and robust outputs than a generic prompt.
+-   **Why?** Personas are pre-programmed with a specific role, a core philosophy, and a structured operational protocol. Using `core/csa-1` doesn't just tell the AI to be a systems architect; it forces it to follow a proven, multi-step process for architectural tasks, leading to far more consistent and robust outputs than a generic prompt.
 
 -   **Action:** Before writing a prompt, check the `persona_manifest.yml` or run `ai --list-personas` to find the best specialist for your task.
 
@@ -43,6 +43,12 @@ The single most important factor for achieving high-quality results is to **use 
 *   **DON'T Be Vague or Conversational.**
     Avoid ambiguity. The AI will take your instructions literally. Phrases like "make it better," "clean this up," or "I think maybe" lead to unpredictable results.
 
+*   **DON'T Give Large, Undefined Repetitive Tasks.** (New Section)
+    When you need the AI to perform the same action on many files, it can sometimes take a "lazy" shortcut and only process a few of them. You must be explicit to prevent this.
+    *   **Bad (High Risk of Incomplete Work):** `"For EACH of the attached .persona.md files, your task is to write and add a concise, one-sentence description..."`
+    *   **Good (More Reliable):** `"Next, you must process EACH of the following persona files that were attached: - core/arc-1.persona.md - core/csa-1.persona.md ... (list all files explicitly) ... For each file in the list above, your plan must add a concise, one-sentence description..."`
+    *   **Why it's better:** Explicitly listing the items in the prompt forces the AI to acknowledge each one and makes it much harder for it to "forget" to complete the entire task.
+
 *   **DON'T Mix "Thinking" and "Doing" in a Single Prompt.**
     The AI is best at one of two things: analyzing a situation OR generating a plan/artifact. Don't ask it to do both.
     *   **Good (Analysis):** `ai --persona core/arc-1 "Analyze these two files and tell me the key differences."`
@@ -67,4 +73,4 @@ The single most important factor for achieving high-quality results is to **use 
     Telling the AI "Do not include a push step" is less reliable than giving it a positive list of actions that simply omits the push step. It's better to specify exactly what you *do* want.
 
 *   **Caveat: Large Inputs Can Reduce Reliability.**
-    Very large context windows (many large files) can sometimes cause even good models to fail at generating perfect JSON plans. If a complex task fails, your first debugging step should be to try and simplify the prompt or reduce the number of attached files to the absolute minimum required for the task.
+    Very large context windows (many large files) can sometimes cause even good models to fail at generating perfect JSON plans or to produce incomplete logical plans. If a complex task fails, your first debugging step should be to try and simplify the prompt or break the task into smaller batches.

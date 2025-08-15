@@ -19,8 +19,7 @@ set -e # Exit immediately if any command fails.
 specialist_persona="core/dca-1"
 output_package_dir="./ai_runs/enforce_descriptions_$(date +%Y%m%d-%H%M%S)"
 
-# Define all files that need to be updated. This includes the config file
-# and all personas that are currently missing a description.
+# Define all files that need to be updated.
 files_to_review=(
     -f persona_config.yml
     -f src/ai_assistant/personas/core/arc-1.persona.md
@@ -42,16 +41,37 @@ files_to_review=(
     -f src/ai_assistant/personas/utility/jan-1.persona.md
 )
 
-# Define the goal for the Documentation Architect.
+# Define the goal for the Documentation Architect with a more robust prompt.
 query=$(cat <<'EOF'
-Perform a documentation and governance update on the attached files.
+Perform a critical documentation and governance update on the attached files.
 
-Generate a complete execution plan to be saved in a manifest file. The plan must:
+Generate a complete execution plan to be saved in a manifest file. The plan must perform the following actions in sequence:
 1.  Create a new git branch named 'fix/enforce-persona-descriptions'.
-2.  First, modify `persona_config.yml`. For the `core`, `patterns`, `domains`, and `utility` persona types, add `description` to their `required_keys` list.
-3.  Next, for EACH of the attached `.persona.md` files, your task is to write and add a concise, one-sentence `description` field to its YAML frontmatter, explaining its core purpose.
-4.  For each modified file (`persona_config.yml` and all personas), include a sequence of actions in the plan: apply the file change, add it, and commit it with a conventional commit message.
-5.  The final action in the plan should be to push the new branch.
+
+2.  First, modify `persona_config.yml`. In this file, for the `core`, `patterns`, `domains`, and `utility` persona types, you MUST add `description` to their `required_keys` list. After this change, create a single commit for this file.
+
+3.  Next, you must process EACH of the following persona files that were attached:
+    - `core/arc-1.persona.md`
+    - `core/csa-1.persona.md`
+    - `core/dca-1.persona.md`
+    - `core/dpa-1.persona.md`
+    - `core/si-1.persona.md`
+    - `domains/finance/ada-1.persona.md`
+    - `domains/trading/qtsa-1.persona.md`
+    - `patterns/adr-1.persona.md`
+    - `patterns/bpr-1.persona.md`
+    - `patterns/da-1.persona.md`
+    - `patterns/pba-1.persona.md`
+    - `patterns/qsa-1.persona.md`
+    - `patterns/sia-1.persona.md`
+    - `patterns/sva-1.persona.md`
+    - `patterns/tae-1.persona.md`
+    - `utility/alignment-checker.persona.md`
+    - `utility/jan-1.persona.md`
+
+    For each file in the list above, your plan must add a concise, one-sentence `description` field to its YAML frontmatter explaining its core purpose. Each file modification must be followed by its own separate commit.
+
+4.  The final action in the plan must be to push the new branch.
 EOF
 )
 
