@@ -39,8 +39,36 @@ jobs:
         run: |
           # Use the GITHUB_WORKSPACE variable to provide an absolute path to the config file.
           # This is the robust way to handle paths in GitHub Actions.
-          python scripts/validate_personas.py --config ${{ github.workspace }}/persona_config.yml
+          run: python scripts/generate_manifest.py # Use generate_manifest for full validation
       
+  # This job runs in parallel with the tests.
+  validate-manifest-integrity:
+    name: Validate Manifest Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies for script
+        run: pip install pyyaml
+
+      - name: Regenerate manifest to check for diff
+        run: python scripts/generate_manifest.py
+
+      - name: Check for stale manifest
+        run: |
+          # This command checks if 'git status' is clean.
+          # If generate_manifest.py modified the manifest, this will detect it.
+          # `git diff --exit-code` will exit with 1 if there is a diff, failing the job.
+          git diff --exit-code --quiet persona_manifest.yml
+          echo "✅ Persona manifest is up-to-date."
+
+
       # 5. Run the main test suite (e.g., unittest)
       - name: Run Unit Tests
         run: python -m unittest discover tests
@@ -49,7 +77,7 @@ jobs:
   # It has a more specific trigger condition now.
   publish-to-pypi:
     name: Publish to PyPI
-    needs: test-and-validate
+    needs: [test-and-validate, validate-manifest-integrity]
     
     # --- Trigger Condition (MODIFIED) ---
     # This job ONLY runs if:
