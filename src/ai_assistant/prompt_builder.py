@@ -1,6 +1,7 @@
 # src\ai_assistant\prompt_builder.py
 import re
 from typing import Dict, List, Any, Optional
+import json
 
 class PromptBuilder:
     """
@@ -83,6 +84,38 @@ You MUST ONLY respond with the JSON plan, enclosed in ```json markdown tags.
 Important: Always use a JSON ARRAY of steps, even for single-step plans.
 
 JSON_PLAN:
+"""
+        return prompt
+
+
+    def build_critique_prompt(
+        self,
+        query: str,
+        plan: List[Dict[str, Any]],
+        persona_context: str
+    ) -> str:
+        """Builds the prompt for the Plan Validation Analyst."""
+        plan_str = json.dumps(plan, indent=2)
+        
+        prompt = f"""<SystemPrompt>
+{persona_context}
+</SystemPrompt>
+
+You are a skeptical "red team" analyst. Your sole purpose is to find flaws in a proposed plan.
+
+A user has made the following request:
+<UserRequest>
+{query}
+</UserRequest>
+
+An AI planner has generated the following execution plan to satisfy the request:
+<JSON_PLAN>
+```json
+{plan_str}
+```
+</JSON_PLAN>
+
+Critically evaluate this plan based on your operational protocol. Identify unstated assumptions, dangerous edge cases, security risks, or logical errors. Provide a concise, bulleted list of your findings. If the plan is sound, state that clearly.
 """
         return prompt
 

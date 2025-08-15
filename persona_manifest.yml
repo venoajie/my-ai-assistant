@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-15T11:45:13.719211+00:00'
+generated_at_utc: '2025-08-15T17:40:44.139042+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: ceeb7f3a0b9bc10083afc8a8a36e1d67968a70eba6718ba24be2e860a5c8ed57
+validation_signature: 1c43abd78ec8e6366f5d0fc197c41420c923456eead280fca349df0453c8444e
 personas:
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant
@@ -50,6 +50,10 @@ personas:
   title: Performance Bottleneck Analyst
   description: Analyzes system behavior and metrics to identify and diagnose performance
     bottlenecks.
+- alias: patterns/pva-1
+  title: Plan Validation Analyst
+  description: A skeptical analyst that reviews a proposed tool-use plan for flaws,
+    risks, and unstated assumptions.
 - alias: patterns/qsa-1
   title: Quality Strategy Architect
   description: Analyzes a codebase to create a prioritized, risk-based testing plan.

@@ -91,6 +91,33 @@ async def orchestrate_agent_run(
             "timings": timings
         }
 
+    # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
+    critique = None
+    if plan and any(step.get("tool_name") for step in plan):
+        print("🕵️  Submitting plan for adversarial validation...")
+        try:
+            critic_loader = PersonaLoader()
+            # The critic persona is hardcoded for reliability
+            _, critic_context = critic_loader.load_persona_content('patterns/pva-1')
+            
+            critique_prompt = prompt_builder.build_critique_prompt(
+                query=query,
+                plan=plan,
+                persona_context=critic_context
+            )
+            
+            response_handler = ResponseHandler()
+            # Use the faster planning model for the critique
+            critique_model = ai_settings.model_selection.planning
+            critique_result = await response_handler.call_api(critique_prompt, model=critique_model)
+            critique = critique_result["content"]
+            timings["critique"] = critique_result["duration"]
+            print("   ✅ Critique received.")
+        except Exception as e:
+            print(f"   - ⚠️ Warning: Could not perform plan validation. Reason: {e}")
+            critique = "Plan validation step failed due to an internal error."
+
+
     # --- OUTPUT-FIRST MODE (GENERATE PACKAGE) ---
     if output_dir:
         return await _handle_output_first_mode(plan, persona_alias, timings, output_dir)
@@ -125,6 +152,10 @@ async def orchestrate_agent_run(
         tool = TOOL_REGISTRY.get_tool(tool_name)
         if tool:
             if tool.is_risky and not is_autonomous:
+                if critique:
+                    print("\n--- 🧐 ADVERSARIAL CRITIQUE ---")
+                    print(critique)
+                    print("----------------------------")
                 confirm = await asyncio.to_thread(input, "      Proceed? [y/N]: ")
                 if confirm.lower().strip() != 'y':
                     print("    🚫 Action denied by user. Skipping step.")
