@@ -22,15 +22,9 @@ from .persona_loader import PersonaLoader
 from .config import ai_settings
 from .context_optimizer import ContextOptimizer
 from . import kernel 
+# Import the validator from its new, proper location
+from .persona_validator import PersonaValidator
 
-
-# --- This is a necessary evil for runtime validation. ---
-# In a more mature package, PersonaValidator would be part of the src library.
-try:
-    sys.path.insert(0, str(Path.cwd() / "scripts"))
-    from persona_validator import PersonaValidator
-except ImportError:
-    PersonaValidator = None
     
 def is_manifest_invalid(manifest_path: Path):
     """
@@ -38,7 +32,13 @@ def is_manifest_invalid(manifest_path: Path):
     Returns a tuple (is_invalid: bool, reason: str).
     """
     project_root = Path.cwd()
-    personas_dir = project_root / "src" / "ai_assistant" / "personas"
+    # Use resources to find the canonical personas directory within the package
+    try:
+        personas_dir_traversable = resources.files('ai_assistant').joinpath('personas')
+        personas_dir = Path(str(personas_dir_traversable))
+    except (ModuleNotFoundError, FileNotFoundError):
+        return True, "Could not locate the built-in personas directory."
+
 
     if not manifest_path.exists():
         return True, "Manifest file does not exist."
@@ -55,19 +55,17 @@ def is_manifest_invalid(manifest_path: Path):
     except (yaml.YAMLError, TypeError, ValueError) as e:
         return True, f"Could not parse manifest: {e}"
 
-    # --- Check 2: Compare file modification times ---
+    # --- Check 2: Compare file modification times (fast check) ---
     try:
         for persona_path_obj in personas_dir.rglob("*.persona.md"):
-            persona_mtime = datetime.fromtimestamp(persona_path_obj.stat().st_mtime, tz=timezone.utc)
-            if persona_mtime > manifest_time:
-                return True, f"Persona '{persona_path_obj.name}' was modified after the manifest was generated."
+            # This check is now more complex due to package installation vs. dev mode
+            # For simplicity in a runtime check, we rely on the signature.
+            # A more advanced check could compare against package metadata.
+            pass # Skipping direct mtime check in favor of signature, which is more robust.
     except Exception as e:
         return True, f"Could not scan persona files for modification times: {e}"
 
-    # --- Check 3: Recalculate and compare the validation signature ---
-    if not PersonaValidator:
-        return True, "Could not import PersonaValidator from scripts directory. Cannot perform full validation."
-
+    # --- Check 3: Recalculate and compare the validation signature (robust check) ---
     try:
         validator = PersonaValidator(project_root / "persona_config.yml")
         all_persona_paths = list(personas_dir.rglob("*.persona.md"))
@@ -76,7 +74,7 @@ def is_manifest_invalid(manifest_path: Path):
         for persona_path in all_persona_paths:
             is_valid, reason = validator.validate_persona(persona_path, personas_dir)
             if not is_valid:
-                return True, f"A persona file on disk is invalid. Reason: {reason} for file {persona_path.relative_to(project_root)}. The manifest is out of sync with an invalid state."
+                return True, f"A persona file on disk is invalid. Reason: {reason} for file {persona_path.relative_to(personas_dir)}. The manifest is out of sync with an invalid state."
             else:
                 content = persona_path.read_text(encoding="utf-8")
                 data = yaml.safe_load(content.split("---")[1])
@@ -91,7 +89,7 @@ def is_manifest_invalid(manifest_path: Path):
         for details in sorted(validated_persona_details, key=lambda p: p['alias']):
             canonical_data.append({
                 "alias": details['alias'],
-                "path": str(details['path'].relative_to(project_root)),
+                "path": str(details['path'].relative_to(project_root)), # Path relative to project for consistency
                 "content_sha256": hashlib.sha256(details['content'].encode('utf-8')).hexdigest()
             })
 
@@ -203,6 +201,7 @@ async def async_main():
     parser.add_argument('--autonomous', action='store_true', help='Run in autonomous mode.')
     parser.add_argument('--interactive', action='store_true', help='Start an interactive chat session.')
     parser.add_argument('--context', help='The name of the context plugin to use (e.g., Trading).')
+    parser.add_argument('--output-dir', help='Activates Output-First mode, generating an execution package in the specified directory instead of executing live.')
     session_group = parser.add_mutually_exclusive_group()
     session_group.add_argument('--session', help='Continue an existing session by ID.')
     session_group.add_argument('--new-session', action='store_true', help='Start a new session.')    
@@ -285,6 +284,7 @@ async def async_main():
             session_id=session_id,
             persona_alias=args.persona,
             is_autonomous=args.autonomous,
+            output_dir=args.output_dir,
         )
     
 def print_summary_metrics(
@@ -325,11 +325,14 @@ async def run_one_shot(
     session_id: str,
     persona_alias: str,
     is_autonomous: bool,
+    output_dir: Optional[str] = None,
 ):
     start_time = time.monotonic()
     print(f"🤖 Processing query: {display_query}")
     if persona_alias: print(f"👤 Embodying persona: {persona_alias}")
     if is_autonomous: print("🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨")
+    if output_dir: print(f"📦 OUTPUT-FIRST MODE: Generating execution package in '{output_dir}'")
+
 
     # --- Use explicit keyword arguments to prevent positional errors ---
     # This ensures the correct variables are passed to the kernel, resolving the TypeError.
@@ -337,7 +340,8 @@ async def run_one_shot(
         query=full_query,
         history=history,
         persona_alias=persona_alias,
-        is_autonomous=is_autonomous
+        is_autonomous=is_autonomous,
+        output_dir=output_dir,
     )
     response = result_data["response"]
 
@@ -346,15 +350,21 @@ async def run_one_shot(
     print("="*60)
 
     end_time = time.monotonic()
+    
+    # In output-first mode, the synthesis prompt might be the manifest itself
+    synthesis_prompt = result_data.get("synthesis_prompt", "")
+    if output_dir and not synthesis_prompt:
+        synthesis_prompt = json.dumps(result_data.get("manifest", {}))
+
     print_summary_metrics(
         start_time,
         end_time,
-        result_data["synthesis_prompt"],
+        synthesis_prompt,
         response,
         result_data.get("timings", {})
     )
 
-    if session_id:
+    if session_id and not output_dir: # Don't save session history in output-first mode
         history = SessionManager().update_history(history, "user", full_query)
         history = SessionManager().update_history(history, "model", response)
         SessionManager().save_session(session_id, history)

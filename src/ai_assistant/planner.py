@@ -18,7 +18,8 @@ class Planner:
         query: str,
         history: List[Dict[str, Any]] = None,
         persona_content: Optional[str] = None,
-        use_compact_protocol: bool = False  # Add the new argument here
+        use_compact_protocol: bool = False,
+        is_output_mode: bool = False,
     ) -> Tuple[List[Dict[str, Any]], float]:
         print("🤔 Generating execution plan...")
         tool_descriptions = TOOL_REGISTRY.get_tool_descriptions()
@@ -27,7 +28,8 @@ class Planner:
             tool_descriptions,
             history,
             persona_content,
-            use_compact_protocol=use_compact_protocol  # Pass the argument to the builder
+            use_compact_protocol=use_compact_protocol,
+            is_output_mode=is_output_mode,
         )
         
         planning_model = ai_settings.model_selection.planning

@@ -1,1 +1,0 @@
-The content of the architectural review report will be generated here, based on the analysis of 'prompt_builder.py' and 'persona_manifest.yml'.
