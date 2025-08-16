@@ -9,17 +9,22 @@ persona_types:
     required_keys: ["alias", "type", "status"]
   core:
     required_keys:
+      - "alias"
+      - "version"
       - "type"
       - "title"
       - "description"
   patterns:
     required_keys:
+      - "alias"
+      - "version"
       - "type"
       - "title"
       - "description"
   domains:
     required_keys:
       - "alias"
+      - "version"
       - "type"
       - "title"
       - "description"
