@@ -7,14 +7,14 @@ from pathlib import Path
 from datetime import datetime, timezone
 import sys
 
-# FIXED: Restore the robust sys.path manipulation.
-# This makes the script self-sufficient in finding the 'ai_assistant' package.
+# This sys.path manipulation is correct and necessary for this script.
 project_root_path = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(project_root_path / 'src'))
 
 try:
     from ai_assistant.persona_validator import PersonaValidator
-    from ai_assistant.utils.signature import calculate_persona_signature
+    # FIXED: Corrected the import path to remove the non-existent 'utils' directory.
+    from ai_assistant.signature import calculate_persona_signature
 except ImportError:
     print("FATAL: Could not import required modules.", file=sys.stderr)
     print("Please ensure you have installed the package in editable mode (e.g., 'pip install -e .') before running this script.", file=sys.stderr)

@@ -20,8 +20,9 @@ from .persona_loader import PersonaLoader
 from .persona_validator import PersonaValidator
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from .session_manager import SessionManager
-from .utils.colors import Colors
-from .utils.signature import calculate_persona_signature
+# FIXED: Corrected the import paths to use relative imports from the correct location.
+from .colors import Colors
+from .signature import calculate_persona_signature
 
     
 def is_manifest_invalid(manifest_path: Path):
