@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from .config import ai_settings
-from .context_optimizer import ContextOptimizer
 from .persona_loader import PersonaLoader
 from .planner import Planner
 from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
+from .utils.context_optimizer import ContextOptimizer
 
 
 async def orchestrate_agent_run(
