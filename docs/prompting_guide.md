@@ -96,3 +96,23 @@ The single most important factor for achieving high-quality results is to **use 
 
 *   **Caveat: Negative Constraints are Unreliable.**
     Telling the AI "Do not include a push step" is less reliable than giving it a positive list of actions that simply omits the push step. It's better to specify exactly what you *do* want.
+
+
+### The Safety Net: Adversarial Validation (New Section)
+
+To increase safety, the AI Assistant uses an "Adversarial Validation Chain." After the Planner generates an execution plan but before you are asked to confirm it, the plan is passed to a skeptical critic persona (`patterns/pva-1`). This critic's job is to find potential flaws, risks, or unstated assumptions.
+
+You will see this critique in your terminal right before the confirmation prompt for any risky action.
+
+**Example of the User Experience:**
+```
+🚀 Executing adaptive plan...
+  - Executing Step 1: write_file(...)
+
+--- 🧐 ADVERSARIAL CRITIQUE ---
+- **Assumption Risk:** The plan assumes the parent directory for the new file already exists. The `write_file` step may fail if it does not.
+- **Recommendation:** Add a `run_shell` step with `mkdir -p` before the `write_file` step to ensure the target directory exists.
+----------------------------
+      Proceed? [y/N]:
+```
+This gives you a "second opinion" from the AI itself, helping you make a more informed decision about whether to proceed.

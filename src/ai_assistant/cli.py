@@ -354,10 +354,14 @@ def print_summary_metrics(
     response_tokens = optimizer.estimate_tokens(final_response)
     total_tokens = prompt_tokens + response_tokens
 
-    # --- Build a detailed timing string ---
+    # --- Build a detailed timing string (MODIFIED) ---
     timing_parts = [f"Total: {total_duration:.2f}s"]
     if "planning" in timings:
         timing_parts.append(f"Planning: {timings.get('planning', 0):.2f}s")
+    # --- ADD THIS BLOCK ---
+    if "critique" in timings:
+        timing_parts.append(f"Critique: {timings.get('critique', 0):.2f}s")
+    # ----------------------
     if "synthesis" in timings:
         timing_parts.append(f"Synthesis: {timings.get('synthesis', 0):.2f}s")
     
@@ -368,8 +372,6 @@ def print_summary_metrics(
           f"Time ({time_str}) | " 
           f"Est. Tokens: {total_tokens} (Prompt: {prompt_tokens}, Response: {response_tokens})")
     print("-" * 60)
-
-
 async def run_one_shot(
     full_query: str,
     display_query: str,

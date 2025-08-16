@@ -25,6 +25,21 @@ You can also list them from the command line:
 ai --list-personas
 ```
 
+
+### Bundled Personas
+
+Here is a list of the primary persona examples included with the assistant.
+
+| Alias | Category | Title | Use Case |
+| :--- | :--- | :--- | :--- |
+| `core/arc-1` | Core | Architecture Reviewer | Audits a system's source code and provides a structured, actionable report. |
+| `core/csa-1` | Core | Systems Architect | Designs new systems or refactors existing ones, ensuring architectural integrity. |
+... (list continues) ...
+| `patterns/qsa-1` | Patterns | Quality Strategy Architect | Analyzes a codebase to create a prioritized, risk-based testing plan. |
+| **`patterns/pva-1`** | **Patterns** | **Plan Validation Analyst** | **(New)** A skeptical critic that reviews proposed execution plans for flaws and risks. |
+| `patterns/sva-1` | Patterns | Security Auditor | Reviews code with an adversarial mindset to find potential vulnerabilities. |
+
+
 ## Creating Your Own Personas
 
 You can easily create your own expert personas to teach the assistant about your specific domain.
@@ -54,3 +69,5 @@ The application will always check your user directory first, so you can add your
 
 This document will explain the plugin architecture and provide a step-by-step tutorial for creating your own custom context plugins to inject domain-specific knowledge into the AI Assistant.
 ```
+
+

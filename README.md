@@ -10,6 +10,7 @@ Built with a pluggable architecture, it can be extended with domain-specific kno
 -   **Expert Persona System:** Instruct the assistant to adopt specialized expert profiles for higher-quality, consistent results.
 -   **File System Integration:** The assistant can read, analyze, and write files, enabling it to perform meaningful development tasks.
 -   **Decoupled Execution (New!):** A robust two-stage workflow separates AI-driven analysis from deterministic execution, enhancing safety and resilience.
+-   **Adversarial Plan Validation (New!):** Before execution, plans are reviewed by a skeptical AI critic to identify potential flaws and risks, providing an extra layer of safety.
 -   **Pluggable Architecture:** Easily extend the assistant's knowledge with custom "Context Plugins".
 -   **Autonomous Mode:** Grant the assistant the ability to execute multi-step plans without supervision (use with caution).
 -   **Layered Configuration:** Flexible configuration system that scales from personal preferences to project-specific settings.
@@ -310,6 +311,21 @@ ai --new-session "${files[@]}" "Compare these two service implementations."
 ---
 
 ## Advanced Workflows
+
+Workflow Prerequisite: A Clean Git State (New Section)
+The AI Assistant's automation scripts are powerful but are designed to operate on a clean, known state. If a script fails mid-run, it can leave your local repository in a "dirty" or inconsistent state (e.g., with uncommitted file changes). This can cause subsequent runs to fail.
+Before running a complex automation script, it is a best practice to ensure your working directory is clean. If you encounter persistent, confusing errors, the safest course of action is to perform a hard reset to get back to a pristine state.
+The Standard Cleanup Procedure:
+# WARNING: These commands will permanently delete all uncommitted changes and untracked files.
+
+# 1. Switch to your main development branch (e.g., 'develop')
+git switch develop
+
+# 2. Reset your local files to be an exact match of the last commit
+git reset --hard HEAD
+
+# 3. Remove all untracked files and directories (like leftover ai_runs/)
+git clean -df
 
 ### Building a Prompt Library (Recommended Best Practice)
 

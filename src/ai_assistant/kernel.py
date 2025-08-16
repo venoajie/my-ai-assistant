@@ -108,8 +108,13 @@ async def orchestrate_agent_run(
             
             response_handler = ResponseHandler()
             # Use the faster planning model for the critique
-            critique_model = ai_settings.model_selection.planning
-            critique_result = await response_handler.call_api(critique_prompt, model=critique_model)
+            critique_model = ai_settings.model_selection.critique
+            critique_gen_config = ai_settings.generation_params.critique.model_dump()
+            critique_result = await response_handler.call_api(
+                critique_prompt, 
+                model=critique_model,
+                generation_config=critique_gen_config
+            )
             critique = critique_result["content"]
             timings["critique"] = critique_result["duration"]
             print("   ✅ Critique received.")

@@ -20,6 +20,9 @@ The primary interface for quality and control is the **Persona System**. All com
 ### 2.2. Decoupled Execution
 A strict separation is maintained between **AI-driven analysis (thinking)** and **deterministic execution (doing)**. The AI's primary output for any task that modifies the system is a reviewable "Output Package." A separate, non-AI `executor` script then applies these changes. This provides a critical safety layer, enhances resilience, and improves auditability.
 
+#### 2.2.1. Adversarial Validation (New)
+To enhance the safety of the "thinking" phase, the system employs an Adversarial Validation Chain. After an initial execution plan is generated, it is passed to a specialized, skeptical "critic" persona. This critic's sole purpose is to identify potential flaws, unstated assumptions, and risks in the plan. The resulting critique is then presented to the human operator alongside the plan, providing a deeper layer of analysis before any action is confirmed. This principle acts as an automated "red team" review for the AI's own logic.
+
 ### 2.3. Explicit Governance
 The behavior and structure of the persona ecosystem are not arbitrary. They are governed by a set of explicit, machine-readable rules in `persona_config.yml`. All personas are validated against these rules, and a cryptographically signed `persona_manifest.yml` ensures the application's runtime understanding of its capabilities is never out of sync with the committed source code.
 
