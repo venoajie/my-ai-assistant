@@ -58,15 +58,9 @@ The `ai_assistant` package is built on a strong, modern foundation with a robust
 - **Modern Packaging (`pyproject.toml`):** Correctly implemented with script entry points and package data.
 - **Pluggable Architecture (`entry-points`):** The use of `importlib.metadata` for dynamic plugin loading is a best practice.
 - **Secure Tooling (`_security_guards.py`):** The `RunShellCommandTool` includes multiple, critical security layers.
-
 ### 2. Weaknesses, Gaps, and Flaws
-- **Inconsistent Context Handling:** Context from files and plugins is injected differently in interactive vs. one-shot modes, leading to unpredictable behavior.
-- **Incomplete Example Plugin:** The `trading_plugin.py` is not fully implemented and does not serve as a useful template for new developers.
-- **Orphaned Configuration:** The `persona_config.yml` file in the project root is unused and should be removed.
-
-### 3. Prioritized Action Plan
-1.  **Unify Context Handling:** Refactor `cli.py` to treat context from all sources (files, plugins) uniformly, injecting it into the session history in a consistent manner.
-2.  **Complete the Example Plugin:** Fully implement `trading_plugin.py` to demonstrate a real-world, query-aware plugin.
-3.  **Remove Orphaned Artifacts:** Delete the unused `persona_config.yml` from the project root to reduce confusion.
+- **Inconsistent Context Handling (TD-001):** Context from files and plugins is injected differently in interactive vs. one-shot modes, leading to unpredictable behavior.
+- **Incomplete Plugin Example (TD-002):** The `trading_plugin.py` is not fully implemented and does not serve as a useful template for new developers.
+- **Lack of Comprehensive Testing (TD-003):** The absence of a unit and integration test suite poses a significant risk to long-term maintainability and introduces the possibility of regressions.
 ```
 </SECTION:OUTPUT_CONTRACT>

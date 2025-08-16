@@ -32,12 +32,7 @@ The single most important factor for achieving high-quality results is to **use 
         ai --persona core/csa-1 --output-dir ./my_run \
           "<ACTION>Generate a plan to refactor the database connection logic.</ACTION>"
         ```
-    *   **Why?** Using the `<ACTION>` tag allows the system's pre-flight checks to reliably detect high-risk operations, even for new features, providing you with better safety reminders. It also provides a stronger signal to the AI.
-
-*   **DO Use the Two-Stage Workflow for Any Changes.**
-    For any task that modifies files or Git, always use the `--output-dir` flag and the "generate a plan" phrasing. This leverages the system's best feature for safety and resilience.
-    *   **Good:** `"Generate a complete execution plan to be saved in a manifest file. The plan must..."`
-    *   **Bad:** `"Fix the bug in this file and commit it."`
+    *   **Why?** This leverages the system's best features for safety and resilience. It also provides a stronger signal to the AI and allows the system's pre-flight checks to provide better safety reminders.
 
 *   **DO Provide All Necessary Context with `-f` Flags.**
     The AI cannot see your file system. If a change in `kernel.py` might affect `planner.py`, attach both. The more relevant context you provide, the better the AI's solution will be.
@@ -61,27 +56,35 @@ The single most important factor for achieving high-quality results is to **use 
            -f file1.md -f file2.md ... (and 16 more files) \
            "Add a description to all 18 of these files."
         ```
-    *   **Good (Robust and Scalable):** Use a shell script to orchestrate multiple, small, focused calls to the AI, processing one file at a time.
+    *   **Good (Robust and Scalable):** Use a shell script to orchestrate multiple, small, focused calls to the AI, processing one file at a time. This is the exact pattern used by the most successful and resilient automation scripts.
         ```bash
         #!/bin/bash
+        set -e # Exit immediately if any command fails
+        
         files_to_process=(file1.md file2.md ...)
+        
         for file in "${files_to_process[@]}"; do
           echo "Processing $file..."
-          ai --persona core/dca-1 --output-dir "./run_$file" \
-             -f "$file" "Add a description to this file and commit it."
-          ai-execute "./run_$file" --confirm
+          output_dir="./run_$(basename "$file")"
+          
+          # Generate the plan for a SINGLE file
+          ai --persona core/dca-1 --output-dir "$output_dir" \
+             -f "$file" "<ACTION>Add a description to this file and commit it.</ACTION>"
+          
+          # Execute the plan for that SINGLE file
+          ai-execute "$output_dir" --confirm
         done
         ```
-    *   **Key Takeaway:** For batch processing, use a shell script as the "conductor" to orchestrate multiple, small, focused calls to the AI "specialist."
+    *   **Key Takeaway:** For batch processing, use a shell script as the **"conductor"** to orchestrate multiple, small, focused calls to the AI **"specialist."**
 
 *   **DON'T Mix "Thinking" and "Doing" in a Single Prompt.**
-    The AI is best at one of two things: analyzing a situation OR generating a plan/artifact. Don't ask it to do both.
+    The AI is best at one of two things: analyzing a situation OR generating a plan/artifact. Don't ask it to do both. The most effective automation scripts perform simple, deterministic actions (like `git add`, `git commit`, looping through files) themselves and only call the AI for the complex "thinking" parts.
     *   **Good (Analysis):** `ai --persona core/arc-1 "Analyze these two files and tell me the key differences."`
     *   **Good (Generation):** `ai --persona core/csa-1 "Generate a plan to refactor file_A to be more like file_B."`
     *   **Bad:** `"Can you look at these files and figure out what's wrong, and then fix it and commit it?"`
 
 *   **DON'T Rely on the AI for "Creative" Git Operations.**
-    The AI is excellent at following a simple, procedural sequence like `branch -> change -> add -> commit`. It is not good at complex Git tasks like interactive rebasing, cherry-picking, or resolving merge conflicts.
+    The AI is excellent at following a simple, procedural sequence like `branch -> change -> add -> commit`. It is not good at complex Git tasks like interactive rebasing, cherry-picking, or resolving merge conflicts. These should be handled by your orchestration script.
 
 *   **DON'T Assume the AI Remembers Things Outside the Current Context.**
     Unless you are using a `--session`, the AI has no memory of past runs. Each command is stateless. If a task requires knowledge from a previous run, you must either use a session or re-attach the relevant files.
@@ -92,15 +95,15 @@ The single most important factor for achieving high-quality results is to **use 
     If, and **only if**, a specialized persona for your specific, nuanced task does not exist, you can use the "Act As" tactic to provide a temporary, inline role. This is a fallback, not a replacement for using a proper persona.
     *   **Use Case:** You need a quick security review, but a full `patterns/sva-1` (Security Vulnerability Auditor) persona doesn't exist yet.
     *   **Example:** `ai --persona core/arc-1 "Analyze the attached auth.py file. **For this task, act as a senior security reviewer** and generate a report highlighting potential vulnerabilities like injection risks or improper error handling."`
-    *   This works by layering a specific instruction *on top of* a capable base persona (`arc-1` is a good choice for analysis).
+    *   This works by layering a specific instruction *on top of* a capable base persona (`core/arc-1` is a good choice for analysis).
 
 *   **Caveat: Negative Constraints are Unreliable.**
     Telling the AI "Do not include a push step" is less reliable than giving it a positive list of actions that simply omits the push step. It's better to specify exactly what you *do* want.
 
 
-### The Safety Net: Adversarial Validation (New Section)
+### The Safety Net: Adversarial Validation
 
-To increase safety, the AI Assistant uses an "Adversarial Validation Chain." After the Planner generates an execution plan but before you are asked to confirm it, the plan is passed to a skeptical critic persona (`patterns/pva-1`). This critic's job is to find potential flaws, risks, or unstated assumptions.
+To increase safety, the AI Assistant uses an "Adversarial Validation Chain." After the Planner generates an execution plan but before you are asked to confirm it, the plan is passed to a skeptical critic persona. This critic's job is to find potential flaws, risks, or unstated assumptions.
 
 You will see this critique in your terminal right before the confirmation prompt for any risky action.
 
@@ -116,3 +119,4 @@ You will see this critique in your terminal right before the confirmation prompt
       Proceed? [y/N]:
 ```
 This gives you a "second opinion" from the AI itself, helping you make a more informed decision about whether to proceed.
+```

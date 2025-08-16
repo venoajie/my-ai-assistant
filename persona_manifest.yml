@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-15T17:40:44.139042+00:00'
+generated_at_utc: '2025-08-16T08:55:18.937046+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: 1c43abd78ec8e6366f5d0fc197c41420c923456eead280fca349df0453c8444e
+validation_signature: 32248b3c18cc90699356c43fa2d57d1515abdc6ddab5ccffc8b9f251003ac5f1
 personas:
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant

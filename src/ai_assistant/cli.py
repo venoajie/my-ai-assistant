@@ -257,10 +257,8 @@ async def async_main():
 
     args = parser.parse_args()
     
-    # --- SANITY CHECK FUNCTION ---
     user_query = ' '.join(args.query)
     _run_prompt_sanity_checks(args, user_query)
-    # -----------------------------------------------
     
     if args.persona:
         manifest_path = Path.cwd() / "persona_manifest.yml"
@@ -280,10 +278,15 @@ async def async_main():
             print(f"  - {p}")
         sys.exit(0)
         
-    # --- UNIFIED CONTEXT HANDLING (TD-001) ---
-    # # This logic is now centralized before either mode (one-shot or interactive) is run.
+    if args.list_personas:
+        print("Built-in Personas:")
+        for p in PersonaLoader().list_builtin_personas():
+            print(f" - {p}")
+        sys.exit(0) 
+        
     session_manager = SessionManager()
     history = []
+    session_id = None
     if args.new_session or (args.interactive and not args.session):
         session_id = session_manager.start_new_session()
         print(f"✨ Starting new session: {session_id}")
@@ -295,22 +298,8 @@ async def async_main():
         session_id = session_manager.start_new_session()
         print(f"✨ Starting new session (implicit): {session_id}")
 
-    session_manager = SessionManager()
-    session_id = args.session
-    
-    query = ' '.join(args.query)
-    user_query = ' '.join(args.query)
-    
     full_context_str = ""
     context_plugin = load_context_plugin(args.context)
-        
-    # If any context was built, inject it into the history now.
-    if full_context_str:
-        print("Injecting file/plugin context into session history.")
-        context_message = "The following context from files and/or plugins has been attached to our session:\n\n" + full_context_str
-        history = session_manager.update_history(history, "user", context_message)
-        history = session_manager.update_history(history, "model", "Acknowledged. I will use the provided context in our conversation.")
-
     if context_plugin:
         print("   - ✅ Plugin loaded successfully.")
         plugin_context = context_plugin.get_context(user_query, args.files or [])
@@ -320,12 +309,14 @@ async def async_main():
         file_context = build_file_context(args.files, user_query)
         full_context_str += file_context
 
-    if args.list_personas:
-        print("Built-in Personas:")
-        for p in PersonaLoader().list_builtin_personas():
-            print(f" - {p}")
-        sys.exit(0) 
-        
+    # --- UNIFIED CONTEXT INJECTION (TD-001 FIX) ---
+    # If any context was built, inject it into the history now. This ensures
+    # both interactive and one-shot modes start with the same context.
+    if full_context_str:
+        print("Injecting file/plugin context into session history.")
+        context_message = "The following context from files and/or plugins has been attached to our session:\n\n" + full_context_str
+        history = session_manager.update_history(history, "user", context_message)
+        history = session_manager.update_history(history, "model", "Acknowledged. I will use the provided context in our conversation.")
 
     if args.interactive:
         await run_interactive_session(
@@ -335,14 +326,11 @@ async def async_main():
             args.autonomous,
         )
     else:
-        if not query.strip():
-            parser.error("The 'query' argument is required in one-shot mode unless files are provided.")
-        
-        # --- Combine the pre-built context with the query ---
-        final_query = full_context_str + query
+        if not user_query.strip() and not full_context_str:
+            parser.error("The 'query' argument is required in one-shot mode unless files or context are provided.")
         
         await run_one_shot(
-            full_query=final_query,
+            query=user_query,
             display_query=user_query,
             history=history,
             session_id=session_id,
@@ -360,25 +348,24 @@ def print_summary_metrics(
     """Prints the processing time and estimated token usage."""
     total_duration = end_time - start_time
     timings = metrics.get("timings", {})
-    # --- Aggregate token counts from all stages ---
     planning_tokens = metrics.get("tokens", {}).get("planning", {}).get("total", 0)
     critique_tokens = metrics.get("tokens", {}).get("critique", {}).get("total", 0)
     synthesis_tokens = metrics.get("tokens", {}).get("synthesis", {}).get("total", 0)
     total_tokens = planning_tokens + critique_tokens + synthesis_tokens
-    # --- Build a detailed timing string (MODIFIED) ---
+    
     timing_parts = [f"Total: {total_duration:.2f}s"]
     if "planning" in timings:
         timing_parts.append(f"Planning: {timings.get('planning', 0):.2f}s")
-
     if "critique" in timings:
         timing_parts.append(f"Critique: {timings.get('critique', 0):.2f}s")
-
     if "synthesis" in timings:
         timing_parts.append(f"Synthesis: {timings.get('synthesis', 0):.2f}s")
     
     time_str = " | ".join(timing_parts)
     token_str = f"Total: {total_tokens}"
-    if planning_tokens > 0: token_str += f" (P: {planning_tokens}, C: {critique_tokens}, S: {synthesis_tokens})"
+    if planning_tokens > 0 or critique_tokens > 0 or synthesis_tokens > 0:
+        token_str += f" (P: {planning_tokens}, C: {critique_tokens}, S: {synthesis_tokens})"
+        
     print("-" * 60)
     print(f"📊 Metrics: "
            f"Time ({time_str}) | "            
@@ -400,9 +387,6 @@ async def run_one_shot(
     if is_autonomous: print("🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨")
     if output_dir: print(f"📦 OUTPUT-FIRST MODE: Generating execution package in '{output_dir}'")
 
-
-    # --- Use explicit keyword arguments to prevent positional errors ---
-    # This ensures the correct variables are passed to the kernel, resolving the TypeError.
     result_data = await kernel.orchestrate_agent_run(
         query=query,
         history=history,
@@ -424,7 +408,6 @@ async def run_one_shot(
          )
 
     if session_id and not output_dir: # Don't save session history in output-first mode
-        # Save the actual user query, not the one with context prepended
         history = SessionManager().update_history(history, "user", query)        
         history = SessionManager().update_history(history, "model", response)
         SessionManager().save_session(session_id, history)
@@ -448,11 +431,14 @@ async def run_interactive_session(
                 break
 
             start_time = time.monotonic()
-            history = session_manager.update_history(history, "user", query)
+            
+            # The history already contains the initial context from the CLI call.
+            # We only need to add the new user query.
+            current_turn_history = session_manager.update_history(list(history), "user", query)
             
             result_data = await kernel.orchestrate_agent_run(
                 query=query,
-                history=history,
+                history=current_turn_history, # Pass the history with the latest query
                 persona_alias=persona_alias,
                 is_autonomous=is_autonomous,
             )
@@ -470,7 +456,8 @@ async def run_interactive_session(
                 result_data.get("metrics", {}),
                 )
 
-            history = session_manager.update_history(history, "model", response)
+            # Update the main history object for the next loop iteration
+            history = session_manager.update_history(current_turn_history, "model", response)
             session_manager.save_session(session_id, history)
         except Exception as e:
             print(f"\n❌ An unexpected error occurred: {e}")
