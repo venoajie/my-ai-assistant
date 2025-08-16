@@ -20,6 +20,8 @@ from .persona_loader import PersonaLoader
 from .persona_validator import PersonaValidator
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from .session_manager import SessionManager
+from .utils.colors import Colors
+from .utils.signature import calculate_persona_signature
 
     
 def is_manifest_invalid(manifest_path: Path):
@@ -80,17 +82,8 @@ def is_manifest_invalid(manifest_path: Path):
                     "content": content,
                 })
 
-        # This logic MUST EXACTLY MATCH generate_manifest.py
-        canonical_data = []
-        for details in sorted(validated_persona_details, key=lambda p: p['alias']):
-            canonical_data.append({
-                "alias": details['alias'],
-                "path": str(details['path'].relative_to(project_root)), # Path relative to project for consistency
-                "content_sha256": hashlib.sha256(details['content'].encode('utf-8')).hexdigest(),
-            })
-
-        canonical_string = json.dumps(canonical_data, sort_keys=True, separators=(',', ':'))
-        recalculated_signature = hashlib.sha256(canonical_string.encode('utf-8')).hexdigest()
+        # Use the centralized signature calculation function
+        recalculated_signature = calculate_persona_signature(validated_persona_details, project_root)
 
         if recalculated_signature != stored_signature:
             return True, "Persona file structure or content has changed since last validation. The signature does not match."
@@ -112,16 +105,16 @@ def build_file_context(
     
     MAX_FILE_SIZE = MAX_FILE_SIZE = ai_settings.general.max_file_size_mb * 1024 * 1024
     context_str = ""
-    print("📎 Attaching files to context...")
+    print(f"{Colors.CYAN}📎 Attaching files to context...{Colors.RESET}")
     optimizer = ContextOptimizer()
     for file_path_str in files:
         path = Path(file_path_str)
         if not path.exists():
-            print(f"   - ⚠️  Warning: File not found, skipping: {file_path_str}")
+            print(f"   - {Colors.YELLOW}⚠️  Warning: File not found, skipping: {file_path_str}{Colors.RESET}")
             continue
         
         if path.stat().st_size > MAX_FILE_SIZE:
-            print(f"   - ⚠️  Warning: File exceeds 5MB limit, skipping: {file_path_str}")
+            print(f"   - {Colors.YELLOW}⚠️  Warning: File exceeds 5MB limit, skipping: {file_path_str}{Colors.RESET}")
             continue
 
         try:
@@ -135,12 +128,12 @@ def build_file_context(
             )
 
             if len(compressed_content) < len(content):
-                print(f"   - ℹ️  Compressed for relevance: {file_path_str}")
+                print(f"   - {Colors.BLUE}ℹ️  Compressed for relevance: {file_path_str}{Colors.RESET}")
 
             context_str += f"<AttachedFile path=\"{file_path_str}\">\n{compressed_content}\n</AttachedFile>\n\n"
-            print(f"   - ✅ Attached: {file_path_str}")
+            print(f"   - {Colors.GREEN}✅ Attached: {file_path_str}{Colors.RESET}")
         except Exception as e:
-            print(f"   - ❌ Error reading file {file_path_str}: {e}")
+            print(f"   - {Colors.RED}❌ Error reading file {file_path_str}: {e}{Colors.RESET}")
             
     return context_str
 
@@ -159,21 +152,21 @@ def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBas
     if not plugin_name:
         return None
 
-    print(f"🔌 Loading context plugin: {plugin_name}...")
+    print(f"{Colors.MAGENTA}🔌 Loading context plugin: {plugin_name}...{Colors.RESET}")
     try:
         # Find the specific entry point by name
         entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
         plugin_entry = next((ep for ep in entry_points if ep.name == plugin_name.lower()), None)
 
         if not plugin_entry:
-            print(f"   - ❌ Error: Plugin '{plugin_name}' is not a registered entry point.", file=sys.stderr)
+            print(f"   - {Colors.RED}❌ Error: Plugin '{plugin_name}' is not a registered entry point.{Colors.RESET}", file=sys.stderr)
             return None
 
         # Load the class from the entry point and instantiate it
         plugin_class = plugin_entry.load()
         return plugin_class(project_root=Path.cwd())
     except Exception as e:
-        print(f"   - ❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}", file=sys.stderr)
+        print(f"   - {Colors.RED}❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}{Colors.RESET}", file=sys.stderr)
         return None
 
 def _run_prompt_sanity_checks(args: argparse.Namespace, query: str):
@@ -219,17 +212,17 @@ def _run_prompt_sanity_checks(args: argparse.Namespace, query: str):
         )
 
     if warnings:
-        print("--- 💡 Prompting Best Practice Reminders ---", file=sys.stderr)
+        print(f"{Colors.YELLOW}--- 💡 Prompting Best Practice Reminders ---{Colors.RESET}", file=sys.stderr)
         for i, warning in enumerate(warnings):
-            print(f"[{i+1}] ⚠️  {warning}", file=sys.stderr)
-        print("-------------------------------------------", file=sys.stderr)
+            print(f"[{i+1}] {Colors.YELLOW}⚠️  {warning}{Colors.RESET}", file=sys.stderr)
+        print(f"{Colors.YELLOW}-------------------------------------------{Colors.RESET}", file=sys.stderr)
 
 def main():
     """Synchronous entry point for the 'ai' command, required by pyproject.toml."""
     try:
         asyncio.run(async_main())
     except KeyboardInterrupt:
-        print("\n👋 Exiting.")
+        print(f"\n{Colors.CYAN}👋 Exiting.{Colors.RESET}")
 
 async def async_main():
     """The core asynchronous logic of the application."""
@@ -237,7 +230,7 @@ async def async_main():
     try:
         ResponseHandler().check_api_keys()
     except APIKeyNotFoundError as e:
-        print(f"\n❌ CONFIGURATION ERROR: {e}", file=sys.stderr)
+        print(f"\n{Colors.RED}❌ CONFIGURATION ERROR: {e}{Colors.RESET}", file=sys.stderr)
         sys.exit(1)
     
     parser = argparse.ArgumentParser(description='AI Assistant - Interactive Agent')
@@ -264,13 +257,13 @@ async def async_main():
         manifest_path = Path.cwd() / "persona_manifest.yml"
         invalid, reason = is_manifest_invalid(manifest_path)
         if invalid:
-            print(f"🛑 HALTING: The persona manifest is invalid. Reason: {reason}", file=sys.stderr)
-            print("Please run 'python scripts/generate_manifest.py' to fix it.", file=sys.stderr)
+            print(f"{Colors.RED}🛑 HALTING: The persona manifest is invalid. Reason: {reason}{Colors.RESET}", file=sys.stderr)
+            print(f"{Colors.YELLOW}Please run 'python scripts/generate_manifest.py' to fix it.{Colors.RESET}", file=sys.stderr)
             sys.exit(1)
-        print("✅ Persona manifest is valid and up-to-date.")
+        print(f"{Colors.GREEN}✅ Persona manifest is valid and up-to-date.{Colors.RESET}")
         
     if args.list_plugins:
-        print("Available Context Plugins:")
+        print(f"{Colors.BOLD}Available Context Plugins:{Colors.RESET}")
         plugins = list_available_plugins()
         if not plugins:
             print("  No plugins found.")
@@ -279,7 +272,7 @@ async def async_main():
         sys.exit(0)
         
     if args.list_personas:
-        print("Built-in Personas:")
+        print(f"{Colors.BOLD}Built-in Personas:{Colors.RESET}")
         for p in PersonaLoader().list_builtin_personas():
             print(f" - {p}")
         sys.exit(0) 
@@ -289,19 +282,19 @@ async def async_main():
     session_id = None
     if args.new_session or (args.interactive and not args.session):
         session_id = session_manager.start_new_session()
-        print(f"✨ Starting new session: {session_id}")
+        print(f"{Colors.CYAN}✨ Starting new session: {session_id}{Colors.RESET}")
     elif args.session:
         session_id = args.session
-        print(f"🔄 Continuing session: {session_id}")
+        print(f"{Colors.CYAN}🔄 Continuing session: {session_id}{Colors.RESET}")
         history = session_manager.load_session(session_id) or []
     else:
         session_id = session_manager.start_new_session()
-        print(f"✨ Starting new session (implicit): {session_id}")
+        print(f"{Colors.CYAN}✨ Starting new session (implicit): {session_id}{Colors.RESET}")
 
     full_context_str = ""
     context_plugin = load_context_plugin(args.context)
     if context_plugin:
-        print("   - ✅ Plugin loaded successfully.")
+        print(f"   - {Colors.GREEN}✅ Plugin loaded successfully.{Colors.RESET}")
         plugin_context = context_plugin.get_context(user_query, args.files or [])
         full_context_str += plugin_context
                 
@@ -313,7 +306,7 @@ async def async_main():
     # If any context was built, inject it into the history now. This ensures
     # both interactive and one-shot modes start with the same context.
     if full_context_str:
-        print("Injecting file/plugin context into session history.")
+        print(f"{Colors.BLUE}Injecting file/plugin context into session history.{Colors.RESET}")
         context_message = "The following context from files and/or plugins has been attached to our session:\n\n" + full_context_str
         history = session_manager.update_history(history, "user", context_message)
         history = session_manager.update_history(history, "model", "Acknowledged. I will use the provided context in our conversation.")
@@ -353,7 +346,7 @@ def print_summary_metrics(
     synthesis_tokens = metrics.get("tokens", {}).get("synthesis", {}).get("total", 0)
     total_tokens = planning_tokens + critique_tokens + synthesis_tokens
     
-    timing_parts = [f"Total: {total_duration:.2f}s"]
+    timing_parts = [f"Total: {Colors.BOLD}{total_duration:.2f}s{Colors.RESET}"]
     if "planning" in timings:
         timing_parts.append(f"Planning: {timings.get('planning', 0):.2f}s")
     if "critique" in timings:
@@ -362,14 +355,14 @@ def print_summary_metrics(
         timing_parts.append(f"Synthesis: {timings.get('synthesis', 0):.2f}s")
     
     time_str = " | ".join(timing_parts)
-    token_str = f"Total: {total_tokens}"
+    token_str = f"Total: {Colors.BOLD}{total_tokens}{Colors.RESET}"
     if planning_tokens > 0 or critique_tokens > 0 or synthesis_tokens > 0:
         token_str += f" (P: {planning_tokens}, C: {critique_tokens}, S: {synthesis_tokens})"
         
     print("-" * 60)
-    print(f"📊 Metrics: "
-           f"Time ({time_str}) | "            
-          f"Est. Tokens: {token_str}")
+    print(f"📊 {Colors.CYAN}Metrics:{Colors.RESET} "
+           f"{Colors.BLUE}Time ({time_str}){Colors.RESET} | "            
+          f"{Colors.MAGENTA}Est. Tokens: {token_str}{Colors.RESET}")
     print("-" * 60)
     
 async def run_one_shot(
@@ -382,10 +375,10 @@ async def run_one_shot(
     output_dir: Optional[str] = None,
 ):
     start_time = time.monotonic()
-    print(f"🤖 Processing query: {display_query}")
-    if persona_alias: print(f"👤 Embodying persona: {persona_alias}")
-    if is_autonomous: print("🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨")
-    if output_dir: print(f"📦 OUTPUT-FIRST MODE: Generating execution package in '{output_dir}'")
+    print(f"{Colors.BLUE}🤖 Processing query: {display_query}{Colors.RESET}")
+    if persona_alias: print(f"{Colors.MAGENTA}👤 Embodying persona: {persona_alias}{Colors.RESET}")
+    if is_autonomous: print(f"{Colors.RED}{Colors.BOLD}🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨{Colors.RESET}")
+    if output_dir: print(f"{Colors.CYAN}📦 OUTPUT-FIRST MODE: Generating execution package in '{output_dir}'{Colors.RESET}")
 
     result_data = await kernel.orchestrate_agent_run(
         query=query,
@@ -411,7 +404,7 @@ async def run_one_shot(
         history = SessionManager().update_history(history, "user", query)        
         history = SessionManager().update_history(history, "model", response)
         SessionManager().save_session(session_id, history)
-        print(f"💾 Session {session_id} saved.")
+        print(f"{Colors.GREEN}💾 Session {session_id} saved.{Colors.RESET}")
 
 async def run_interactive_session(
     history: List,
@@ -420,13 +413,13 @@ async def run_interactive_session(
     is_autonomous: bool,
     ):
     print("Entering interactive mode. Type 'exit' or 'quit' to end the session.")
-    if persona_alias: print(f"👤 Embodying persona: {persona_alias}")
-    if is_autonomous: print("🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨")
+    if persona_alias: print(f"{Colors.MAGENTA}👤 Embodying persona: {persona_alias}{Colors.RESET}")
+    if is_autonomous: print(f"{Colors.RED}{Colors.BOLD}🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨{Colors.RESET}")
 
     session_manager = SessionManager()
     while True:
         try:
-            query = await asyncio.to_thread(input, "\n> ")
+            query = await asyncio.to_thread(input, f"\n{Colors.GREEN}> {Colors.RESET}")
             if query.lower() in ["exit", "quit"]:
                 break
 
@@ -460,10 +453,10 @@ async def run_interactive_session(
             history = session_manager.update_history(current_turn_history, "model", response)
             session_manager.save_session(session_id, history)
         except Exception as e:
-            print(f"\n❌ An unexpected error occurred: {e}")
+            print(f"\n{Colors.RED}❌ An unexpected error occurred: {e}{Colors.RESET}")
             history = session_manager.update_history(history, "system_error", str(e))
             session_manager.save_session(session_id, history)
-    print("👋 Exiting interactive session.")
+    print(f"{Colors.CYAN}👋 Exiting interactive session.{Colors.RESET}")
 
 
 if __name__ == "__main__":
