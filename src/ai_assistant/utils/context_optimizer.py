@@ -1,6 +1,6 @@
-# src/ai_assistant/context_optimizer.py
+# src/ai_assistant/utils/context_optimizer.py
 from typing import Set, List
-from .config import ai_settings
+from ..config import ai_settings
 
 class ContextOptimizer:
     """
