@@ -9,18 +9,17 @@ import yaml
 from importlib import metadata, resources
 from datetime import datetime
 import time
-import hashlib
-import json
 
 from . import kernel 
 from .config import ai_settings
 from .context_plugin import ContextPluginBase
-from .context_optimizer import ContextOptimizer
 from .persona_loader import PersonaLoader
-from .persona_validator import PersonaValidator
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from .session_manager import SessionManager
 from .utils.colors import Colors
+from .utils.context_optimizer import ContextOptimizer
+from .utils.persona_validator import PersonaValidator
+from .utils.result_presenter import present_result
 from .utils.signature import calculate_persona_signature
 
     
@@ -359,11 +358,11 @@ def print_summary_metrics(
     if planning_tokens > 0 or critique_tokens > 0 or synthesis_tokens > 0:
         token_str += f" (P: {planning_tokens}, C: {critique_tokens}, S: {synthesis_tokens})"
         
-    print("-" * 60)
+    print(f"{Colors.DIM}{'-' * 60}{Colors.RESET}")
     print(f"📊 {Colors.CYAN}Metrics:{Colors.RESET} "
            f"{Colors.BLUE}Time ({time_str}){Colors.RESET} | "            
           f"{Colors.MAGENTA}Est. Tokens: {token_str}{Colors.RESET}")
-    print("-" * 60)
+    print(f"{Colors.DIM}{'-' * 60}{Colors.RESET}")
     
 async def run_one_shot(
     query: str,
@@ -389,9 +388,9 @@ async def run_one_shot(
     )
     response = result_data["response"]
 
-    print("\n" + "="*60)
-    print(response)
-    print("="*60)
+    print("\n" + f"{Colors.DIM}{'='*60}{Colors.RESET}")
+    print(present_result(response))
+    print(f"{Colors.DIM}{'='*60}{Colors.RESET}")
 
     end_time = time.monotonic()
     print_summary_metrics(
@@ -438,9 +437,9 @@ async def run_interactive_session(
             
             response = result_data["response"]
 
-            print("\n" + "="*60)
-            print(response)
-            print("="*60)
+            print("\n" + f"{Colors.DIM}{'='*60}{Colors.RESET}")
+            print(present_result(response))
+            print(f"{Colors.DIM}{'='*60}{Colors.RESET}")
 
             end_time = time.monotonic()
             print_summary_metrics(

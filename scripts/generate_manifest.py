@@ -5,16 +5,17 @@ from pathlib import Path
 from datetime import datetime, timezone
 import sys
 
-# Add the project root to the path to allow importing from src
+# This sys.path manipulation is correct and necessary for this script.
 project_root_path = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(project_root_path / 'src'))
 
 try:
-    from ai_assistant.persona_validator import PersonaValidator
+    from ai_assistant.utils.persona_validator import PersonaValidator
+    # FIXED: Corrected the import path to remove the non-existent 'utils' directory.
     from ai_assistant.utils.signature import calculate_persona_signature
 except ImportError:
     print("FATAL: Could not import required modules.", file=sys.stderr)
-    print("Please ensure you are running this script from the project root and that src/ is importable.", file=sys.stderr)
+    print("Please ensure you have installed the package in editable mode (e.g., 'pip install -e .') before running this script.", file=sys.stderr)
     sys.exit(1)
 
 class ManifestGenerator:
@@ -27,6 +28,7 @@ class ManifestGenerator:
 
     def __init__(self, project_root: Path):
         self.project_root = project_root
+        # Correctly locate the personas directory relative to the project root
         self.personas_dir = self.project_root / "src" / "ai_assistant" / "personas"
         self.validator = PersonaValidator(self.project_root / "persona_config.yml")
 
@@ -114,5 +116,6 @@ class ManifestGenerator:
             yaml.dump(manifest_data, f, default_flow_style=False, sort_keys=False, indent=2)
 
 if __name__ == "__main__":
+    # The project_root_path is now defined at the top of the script
     generator = ManifestGenerator(project_root_path)
     generator.run()

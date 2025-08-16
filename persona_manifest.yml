@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-16T09:47:05.901319+00:00'
+generated_at_utc: '2025-08-16T13:23:56.827562+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: 4bc8a74c47f0cd5e4f426ec7abc98e110e6206def2ee61ed682f399a0b550959
+validation_signature: 63f23fb20320a064b3f9cb17baca4c3b1211c0d119eed32d7228c081516494bf
 personas:
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant
@@ -22,6 +22,10 @@ personas:
   title: Persona Architect
   description: A specialist meta-persona that designs, refines, and governs the entire
     persona ecosystem, focusing on prompt reliability, efficiency, and strategic growth.
+- alias: core/pmo-1
+  title: Project Manager & Orchestrator
+  description: Manages a multi-stage software development project by maintaining a
+    state file and orchestrating other specialist personas.
 - alias: core/si-1
   title: Session Initiator
   description: Analyzes a user's high-level goal and selects the most appropriate
