@@ -119,4 +119,3 @@ You will see this critique in your terminal right before the confirmation prompt
       Proceed? [y/N]:
 ```
 This gives you a "second opinion" from the AI itself, helping you make a more informed decision about whether to proceed.
-```
