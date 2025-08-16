@@ -59,7 +59,6 @@ The `ai_assistant` package is built on a strong, modern foundation with a robust
 - **Pluggable Architecture (`entry-points`):** The use of `importlib.metadata` for dynamic plugin loading is a best practice.
 - **Secure Tooling (`_security_guards.py`):** The `RunShellCommandTool` includes multiple, critical security layers.
 ### 2. Weaknesses, Gaps, and Flaws
-- **Inconsistent Context Handling (TD-001):** Context from files and plugins is injected differently in interactive vs. one-shot modes, leading to unpredictable behavior.
 - **Incomplete Plugin Example (TD-002):** The `trading_plugin.py` is not fully implemented and does not serve as a useful template for new developers.
 - **Lack of Comprehensive Testing (TD-003):** The absence of a unit and integration test suite poses a significant risk to long-term maintainability and introduces the possibility of regressions.
 ```

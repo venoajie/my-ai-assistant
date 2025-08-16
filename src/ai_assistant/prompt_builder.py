@@ -51,7 +51,7 @@ class PromptBuilder:
     - **Step C:** Place the ENTIRE, new, complete file content into the `content` argument of the `write_file` tool.
     - **Step D:** Use the exact file path from the `<AttachedFile path="...">` attribute for the `path` argument.
     - **You are FORBIDDEN from using placeholders, comments like "... rest of file ...", or generating only a diff.** This is not optional. Your job is to generate the complete, final code.
-4.  **Summarize, Don't Write:** For read-only tasks (e.g., "summarize", "compare"), if the necessary context is already provided, your plan MUST be an empty array `[]`.
+4.  **Summarize, Don't Read:** For read-only tasks (e.g., "summarize", "compare", "analyze"), if the necessary context is already provided in `<AttachedFile>` tags, your plan MUST be an empty array `[]`. You are FORBIDDEN from using `read_file` on a file that is already attached to the user's request.
 {output_mode_heuristic}
 ---
 <Example>
@@ -69,6 +69,20 @@ I need to read the project's README.md file.
     }}
   }}
 ]
+```
+</JSON_PLAN>
+</Example>
+---
+<Example>
+<UserRequest>
+<AttachedFile path="src/main.py">
+# Contents of main.py
+</AttachedFile>
+Analyze the attached file and tell me what it does.
+</UserRequest>
+<JSON_PLAN>
+```json
+[]
 ```
 </JSON_PLAN>
 </Example>

@@ -26,6 +26,7 @@ source_files_for_context=(
     -f "TECHNICAL_DEBT.md"
     -f "scripts/generate_manifest.py"
     -f "src/ai_assistant/cli.py"
+    -f "src/ai_assistant/_security_guards.py"
     -f "src/ai_assistant/persona_validator.py"
 )
 
