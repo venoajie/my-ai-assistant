@@ -6,7 +6,7 @@ import asyncio
 import time
 
 from .config import ai_settings
-from .context_optimizer import ContextOptimizer
+from .utils.context_optimizer import ContextOptimizer
 
 class APIKeyNotFoundError(Exception):
     """Custom exception for missing API keys."""
