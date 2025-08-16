@@ -1,6 +1,4 @@
 # src/ai_assistant/cli.py 
-#!/usr/bin/env python3
-
 
 import argparse
 import asyncio
@@ -8,22 +6,20 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import sys
 import yaml
-from importlib import metadata
-from datetime import datetime, timezone
-from importlib import resources
+from importlib import metadata, resources
+from datetime import datetime
 import time
 import hashlib
 import json
 
-from .response_handler import ResponseHandler, APIKeyNotFoundError
-from .context_plugin import ContextPluginBase
-from .session_manager import SessionManager
-from .persona_loader import PersonaLoader
-from .config import ai_settings
-from .context_optimizer import ContextOptimizer
 from . import kernel 
-# Import the validator from its new, proper location
+from .config import ai_settings
+from .context_plugin import ContextPluginBase
+from .context_optimizer import ContextOptimizer
+from .persona_loader import PersonaLoader
 from .persona_validator import PersonaValidator
+from .response_handler import ResponseHandler, APIKeyNotFoundError
+from .session_manager import SessionManager
 
     
 def is_manifest_invalid(manifest_path: Path):
@@ -90,7 +86,7 @@ def is_manifest_invalid(manifest_path: Path):
             canonical_data.append({
                 "alias": details['alias'],
                 "path": str(details['path'].relative_to(project_root)), # Path relative to project for consistency
-                "content_sha256": hashlib.sha256(details['content'].encode('utf-8')).hexdigest()
+                "content_sha256": hashlib.sha256(details['content'].encode('utf-8')).hexdigest(),
             })
 
         canonical_string = json.dumps(canonical_data, sort_keys=True, separators=(',', ':'))
@@ -105,7 +101,11 @@ def is_manifest_invalid(manifest_path: Path):
     return False, "Manifest is valid and up-to-date."
 
 
-def build_file_context(files: List[str], query: str) -> str:
+def build_file_context(
+    files: List[str],
+    query: str,
+    ) -> str:
+    
     """Reads multiple files and formats them into a single context string."""
     if not files:
         return ""
@@ -176,7 +176,6 @@ def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBas
         print(f"   - ❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}", file=sys.stderr)
         return None
 
-
 def _run_prompt_sanity_checks(args: argparse.Namespace, query: str):
     """
     Analyzes the user's prompt and flags for common anti-patterns and
@@ -193,7 +192,8 @@ def _run_prompt_sanity_checks(args: argparse.Namespace, query: str):
         )
 
     # Check 2 (NEW): Explicit high-risk action tag without the safe workflow
-    if "<action>" in query_lower and not args.output_dir:
+    if "<action>" in query_lower \
+        and not args.output_dir:
         warnings.append(
             "CRITICAL: You used the <ACTION> tag to declare a high-risk operation "
             "but did not use the --output-dir flag. This is highly discouraged. "
@@ -202,7 +202,8 @@ def _run_prompt_sanity_checks(args: argparse.Namespace, query: str):
     # Check 3 (Fallback): Inferred risky action without the safe workflow
     elif not "<action>" in query_lower:
         risky_keywords = ["refactor", "fix", "modify", "commit", "change", "add", "create", "write"]
-        if any(keyword in query_lower for keyword in risky_keywords) and not args.output_dir:
+        if any(keyword in query_lower for keyword in risky_keywords) \
+            and not args.output_dir:
             warnings.append(
                 "Your prompt seems to request a system modification. For clarity and safety, "
                 "wrap your goal in <ACTION> tags and use the --output-dir flag."
@@ -279,13 +280,37 @@ async def async_main():
             print(f"  - {p}")
         sys.exit(0)
         
+    # --- UNIFIED CONTEXT HANDLING (TD-001) ---
+    # # This logic is now centralized before either mode (one-shot or interactive) is run.
+    session_manager = SessionManager()
+    history = []
+    if args.new_session or (args.interactive and not args.session):
+        session_id = session_manager.start_new_session()
+        print(f"✨ Starting new session: {session_id}")
+    elif args.session:
+        session_id = args.session
+        print(f"🔄 Continuing session: {session_id}")
+        history = session_manager.load_session(session_id) or []
+    else:
+        session_id = session_manager.start_new_session()
+        print(f"✨ Starting new session (implicit): {session_id}")
+
     session_manager = SessionManager()
     session_id = args.session
+    
     query = ' '.join(args.query)
     user_query = ' '.join(args.query)
     
     full_context_str = ""
     context_plugin = load_context_plugin(args.context)
+        
+    # If any context was built, inject it into the history now.
+    if full_context_str:
+        print("Injecting file/plugin context into session history.")
+        context_message = "The following context from files and/or plugins has been attached to our session:\n\n" + full_context_str
+        history = session_manager.update_history(history, "user", context_message)
+        history = session_manager.update_history(history, "model", "Acknowledged. I will use the provided context in our conversation.")
+
     if context_plugin:
         print("   - ✅ Plugin loaded successfully.")
         plugin_context = context_plugin.get_context(user_query, args.files or [])
@@ -301,17 +326,6 @@ async def async_main():
             print(f" - {p}")
         sys.exit(0) 
         
-    session_manager = SessionManager()
-    session_id = args.session
-
-
-    history = []
-    if args.new_session or (args.interactive and not args.session):
-        session_id = session_manager.start_new_session()
-        print(f"✨ Starting new session: {session_id}")
-    elif session_id:
-        print(f"🔄 Continuing session: {session_id}")
-        history = session_manager.load_session(session_id) or []
 
     if args.interactive:
         await run_interactive_session(
@@ -319,11 +333,9 @@ async def async_main():
             session_id,
             args.persona,
             args.autonomous,
-            # Pass the pre-built context to the interactive session
-            initial_file_context=full_context_str
         )
     else:
-        if not query.strip() and not full_context_str:
+        if not query.strip():
             parser.error("The 'query' argument is required in one-shot mode unless files are provided.")
         
         # --- Combine the pre-built context with the query ---
@@ -331,7 +343,7 @@ async def async_main():
         
         await run_one_shot(
             full_query=final_query,
-            display_query=query,
+            display_query=user_query,
             history=history,
             session_id=session_id,
             persona_alias=args.persona,
@@ -342,38 +354,39 @@ async def async_main():
 def print_summary_metrics(
     start_time: float,
     end_time: float,
-    synthesis_prompt: str,
-    final_response: str,
-    timings: Dict[str, float],
+    metrics: Dict[str, Any],
     ):
     
     """Prints the processing time and estimated token usage."""
     total_duration = end_time - start_time
-    optimizer = ContextOptimizer()
-    prompt_tokens = optimizer.estimate_tokens(synthesis_prompt)
-    response_tokens = optimizer.estimate_tokens(final_response)
-    total_tokens = prompt_tokens + response_tokens
-
+    timings = metrics.get("timings", {})
+    # --- Aggregate token counts from all stages ---
+    planning_tokens = metrics.get("tokens", {}).get("planning", {}).get("total", 0)
+    critique_tokens = metrics.get("tokens", {}).get("critique", {}).get("total", 0)
+    synthesis_tokens = metrics.get("tokens", {}).get("synthesis", {}).get("total", 0)
+    total_tokens = planning_tokens + critique_tokens + synthesis_tokens
     # --- Build a detailed timing string (MODIFIED) ---
     timing_parts = [f"Total: {total_duration:.2f}s"]
     if "planning" in timings:
         timing_parts.append(f"Planning: {timings.get('planning', 0):.2f}s")
-    # --- ADD THIS BLOCK ---
+
     if "critique" in timings:
         timing_parts.append(f"Critique: {timings.get('critique', 0):.2f}s")
-    # ----------------------
+
     if "synthesis" in timings:
         timing_parts.append(f"Synthesis: {timings.get('synthesis', 0):.2f}s")
     
     time_str = " | ".join(timing_parts)
-
+    token_str = f"Total: {total_tokens}"
+    if planning_tokens > 0: token_str += f" (P: {planning_tokens}, C: {critique_tokens}, S: {synthesis_tokens})"
     print("-" * 60)
     print(f"📊 Metrics: "
-          f"Time ({time_str}) | " 
-          f"Est. Tokens: {total_tokens} (Prompt: {prompt_tokens}, Response: {response_tokens})")
+           f"Time ({time_str}) | "            
+          f"Est. Tokens: {token_str}")
     print("-" * 60)
+    
 async def run_one_shot(
-    full_query: str,
+    query: str,
     display_query: str,
     history: List,
     session_id: str,
@@ -391,7 +404,7 @@ async def run_one_shot(
     # --- Use explicit keyword arguments to prevent positional errors ---
     # This ensures the correct variables are passed to the kernel, resolving the TypeError.
     result_data = await kernel.orchestrate_agent_run(
-        query=full_query,
+        query=query,
         history=history,
         persona_alias=persona_alias,
         is_autonomous=is_autonomous,
@@ -404,22 +417,15 @@ async def run_one_shot(
     print("="*60)
 
     end_time = time.monotonic()
-    
-    # In output-first mode, the synthesis prompt might be the manifest itself
-    synthesis_prompt = result_data.get("synthesis_prompt", "")
-    if output_dir and not synthesis_prompt:
-        synthesis_prompt = json.dumps(result_data.get("manifest", {}))
-
     print_summary_metrics(
-        start_time,
-        end_time,
-        synthesis_prompt,
-        response,
-        result_data.get("timings", {})
-    )
+         start_time,
+         end_time,
+         result_data.get("metrics", {}),
+         )
 
     if session_id and not output_dir: # Don't save session history in output-first mode
-        history = SessionManager().update_history(history, "user", full_query)
+        # Save the actual user query, not the one with context prepended
+        history = SessionManager().update_history(history, "user", query)        
         history = SessionManager().update_history(history, "model", response)
         SessionManager().save_session(session_id, history)
         print(f"💾 Session {session_id} saved.")
@@ -429,16 +435,10 @@ async def run_interactive_session(
     session_id: str,
     persona_alias: str,
     is_autonomous: bool,
-    initial_file_context: str = "", # --- Receive pre-built context ---
     ):
     print("Entering interactive mode. Type 'exit' or 'quit' to end the session.")
     if persona_alias: print(f"👤 Embodying persona: {persona_alias}")
     if is_autonomous: print("🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨")
-
-    if initial_file_context:
-        print("The content of the attached files has been added to the start of this session's context.")
-        history = SessionManager().update_history(history, "user", initial_file_context + "The preceding file(s) have been attached for context in this session.")
-        history = SessionManager().update_history(history, "model", "Acknowledged. I will use the content of the attached files as context for our conversation.")
 
     session_manager = SessionManager()
     while True:
@@ -467,9 +467,7 @@ async def run_interactive_session(
             print_summary_metrics(
                 start_time, 
                 end_time, 
-                result_data["synthesis_prompt"], 
-                response,
-                result_data.get("timings", {}),
+                result_data.get("metrics", {}),
                 )
 
             history = session_manager.update_history(history, "model", response)
