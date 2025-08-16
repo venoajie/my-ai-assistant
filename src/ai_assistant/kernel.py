@@ -1,15 +1,18 @@
 # src/ai_assistant/kernel.py
+import asyncio
+import json
 import sys
+from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from .persona_loader import PersonaLoader
+from .config import ai_settings
 from .context_optimizer import ContextOptimizer
+from .persona_loader import PersonaLoader
 from .planner import Planner
 from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
-from .config import ai_settings
-import asyncio
 
 
 async def orchestrate_agent_run(
@@ -17,10 +20,19 @@ async def orchestrate_agent_run(
     history: List[Dict[str, Any]],
     persona_alias: Optional[str] = None,
     is_autonomous: bool = False,
+    output_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
 
-    timings = {}
-    
+    metrics = {
+        "timings": {},
+        "tokens": {
+            "planning": {}, 
+            "critique": {},
+            "synthesis": {},
+            }
+        }
+    timings = metrics["timings"]
+
     # --- PERSONA LOADING ---
     persona_directives: Optional[str] = None
     persona_context: Optional[str] = None
@@ -34,8 +46,7 @@ async def orchestrate_agent_run(
             print(error_msg, file=sys.stderr)
             return {
                 "response": error_msg, 
-                "synthesis_prompt": "",
-                "timings": timings,
+                "metrics": metrics,
                 }
 
     # --- PRE-PROCESSING & COMPRESSION LOGIC ---
@@ -56,16 +67,17 @@ async def orchestrate_agent_run(
 
     # --- PLANNING ---
     planner = Planner()
-    # Pass the full, un-parsed persona context to the planner for now.
-    # A future enhancement could be to make the planner directive-aware.
-    plan, planning_duration = await planner.create_plan(
-        optimized_query,
-        history,
-        persona_context,
-        use_compact_protocol
-    )
-    timings["planning"] = planning_duration
+    plan, planning_result = await planner.create_plan(
+         optimized_query,
+         history,
+         persona_context,
+         use_compact_protocol,
+         is_output_mode=(output_dir is not None),
+         )
     
+    timings["planning"] = planning_result["duration"]
+    metrics["tokens"]["planning"] = planning_result["tokens"]
+     
     prompt_builder = PromptBuilder()
 
     # --- DIRECT RESPONSE (NO TOOLS) ---
@@ -81,14 +93,55 @@ async def orchestrate_agent_run(
         response_handler = ResponseHandler()
         synthesis_model = ai_settings.model_selection.synthesis
         synthesis_result = await response_handler.call_api(direct_prompt, model=synthesis_model)
-        timings["synthesis"] = synthesis_result["duration"]
+        metrics["timings"]["synthesis"] = synthesis_result["duration"]
+        metrics["tokens"]["synthesis"] = synthesis_result["tokens"]        
         return {
-            "response": synthesis_result["content"],
-            "synthesis_prompt": direct_prompt,
-            "timings": timings
-        }
+            "response": synthesis_result["content"], 
+            "metrics": metrics,        }
 
-    # --- ADAPTIVE AGENT KERNEL (TOOL EXECUTION) ---
+    # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
+    critique = None
+    if plan and any(step.get("tool_name") for step in plan):
+        print("🕵️  Submitting plan for adversarial validation...")
+        try:
+            critic_loader = PersonaLoader()
+            # The critic persona is hardcoded for reliability
+            _, critic_context = critic_loader.load_persona_content('patterns/pva-1')
+            
+            critique_prompt = prompt_builder.build_critique_prompt(
+                query=query,
+                plan=plan,
+                persona_context=critic_context
+            )
+            
+            response_handler = ResponseHandler()
+            # Use the faster planning model for the critique
+            critique_model = ai_settings.model_selection.critique
+            critique_gen_config = ai_settings.generation_params.critique.model_dump()
+            critique_result = await response_handler.call_api(
+                critique_prompt, 
+                model=critique_model,
+                generation_config=critique_gen_config
+            )
+            critique = critique_result["content"]
+            metrics["timings"]["critique"] = critique_result["duration"]
+            metrics["tokens"]["critique"] = critique_result["tokens"]     
+            print("   ✅ Critique received.")
+        except Exception as e:
+            print(f"   - ⚠️ Warning: Could not perform plan validation. Reason: {e}")
+            critique = "Plan validation step failed due to an internal error."
+
+
+    # --- OUTPUT-FIRST MODE (GENERATE PACKAGE) ---
+    if output_dir:
+        return await _handle_output_first_mode(
+            plan, 
+            persona_alias,
+            metrics, 
+            output_dir,
+            )
+
+    # --- LIVE MODE (TOOL EXECUTION) ---
     print("🚀 Executing adaptive plan...")
     observations = []
     step_results: Dict[int, str] = {}
@@ -96,7 +149,6 @@ async def orchestrate_agent_run(
     any_risky_action_denied = False
 
     for i, step in enumerate(plan):
-        # ... (Tool execution loop remains unchanged) ...
         step_num = i + 1
         if "condition" in step:
             cond = step["condition"]
@@ -119,6 +171,10 @@ async def orchestrate_agent_run(
         tool = TOOL_REGISTRY.get_tool(tool_name)
         if tool:
             if tool.is_risky and not is_autonomous:
+                if critique:
+                    print("\n--- 🧐 ADVERSARIAL CRITIQUE ---")
+                    print(critique)
+                    print("----------------------------")
                 confirm = await asyncio.to_thread(input, "      Proceed? [y/N]: ")
                 if confirm.lower().strip() != 'y':
                     print("    🚫 Action denied by user. Skipping step.")
@@ -148,7 +204,10 @@ async def orchestrate_agent_run(
     if any_risky_action_denied and not any_tool_succeeded:
         error_msg = "I was unable to complete the task because a necessary action was denied by the user for safety reasons."
         print(f"\n🛑 {error_msg}")
-        return { "response": error_msg, "synthesis_prompt": "", "timings": timings }
+        return {
+            "response": error_msg, 
+            "metrics": metrics,
+            }
             
     observation_text = "\n".join(observations)
 
@@ -196,11 +255,109 @@ async def orchestrate_agent_run(
     response_handler = ResponseHandler()
     synthesis_model = ai_settings.model_selection.synthesis
     synthesis_result = await response_handler.call_api(synthesis_prompt, model=synthesis_model)
-    timings["synthesis"] = synthesis_result["duration"]
+    metrics["timings"]["synthesis"] = synthesis_result["duration"]
+    metrics["tokens"]["synthesis"] = synthesis_result["tokens"]
     final_response = synthesis_result["content"]
    
     return {
         "response": final_response,
-        "synthesis_prompt": synthesis_prompt,
-        "timings": timings,
+        "metrics": metrics,
+    }
+
+async def _handle_output_first_mode(
+    plan: List[Dict[str, Any]],
+    persona_alias: str,
+    metrics: Dict[str, Any],
+    output_dir_str: str,
+) -> Dict[str, Any]:
+    """Handles the logic for generating an output package instead of executing live."""
+    print("📦 Generating execution package...")
+    output_dir = Path(output_dir_str)
+    workspace_dir = output_dir / "workspace"
+    
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        workspace_dir.mkdir(exist_ok=True)
+    except OSError as e:
+        error_msg = f"❌ Error creating output directory '{output_dir}': {e}"
+        return {
+            "response": error_msg, 
+            "metrics": metrics,
+            }
+
+    manifest = {
+        "version": "1.0",
+        "sessionId": f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+        "generated_by": persona_alias,
+        "actions": [],
+    }
+    
+    summary_parts = ["# AI-Generated Change Summary\n"]
+    
+    tool_map = {
+        "write_file": "apply_file_change",
+        "git_create_branch": "create_branch",
+        "git_add": "git_add",
+        "git_commit": "git_commit",
+        "git_push": "git_push",
+    }
+
+    for step in plan:
+        tool_name = step.get("tool_name")
+        args = step.get("args", {})
+        thought = step.get("thought", "No thought provided.")
+        
+        action_type = tool_map.get(tool_name)
+        if not action_type:
+            print(f"  - ⚠️ Skipping unsupported tool '{tool_name}' in output-first mode.")
+            continue
+
+        action = {"type": action_type, "comment": thought}
+        
+        if tool_name == "write_file":
+            path_str = args.get("path")
+            content = args.get("content")
+            if not path_str or content is None:
+                print(f"  - ⚠️ Skipping invalid write_file step: missing path or content.")
+                continue
+            
+            # Write content to workspace
+            target_path_in_workspace = workspace_dir / path_str
+            target_path_in_workspace.parent.mkdir(parents=True, exist_ok=True)
+            target_path_in_workspace.write_text(content, encoding='utf-8')
+            
+            action["source"] = f"workspace/{path_str}"
+            action["target"] = path_str
+            summary_parts.append(f"## Modify `{path_str}`\n\n**Reason:** {thought}\n\n```diff\n# Diff view not yet implemented. Full content written.\n```\n")
+
+        elif tool_name == "git_create_branch":
+            action["branch_name"] = args.get("branch_name")
+            summary_parts.append(f"### Create Branch\n- **Name:** `{action['branch_name']}`\n- **Reason:** {thought}\n")
+        
+        elif tool_name == "git_add":
+            action["path"] = args.get("path")
+            summary_parts.append(f"### Stage File\n- **Path:** `{action['path']}`\n")
+
+        elif tool_name == "git_commit":
+            action["message"] = args.get("commit_message")
+            summary_parts.append(f"### Commit Changes\n- **Message:** `{action['message']}`\n")
+        
+        elif tool_name == "git_push":
+            summary_parts.append(f"### Push Branch\n- Pushes the current branch to remote 'origin'.\n")
+
+        manifest["actions"].append(action)
+        print(f"  - ✅ Packaged action: {action_type}")
+
+    # Write manifest and summary
+    (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+    (output_dir / "summary.md").write_text("\n".join(summary_parts), encoding='utf-8')
+
+    final_message = f"✅ Successfully generated execution package in '{output_dir}'.\n" \
+                    f"   - Review the plan in '{output_dir / 'summary.md'}'\n" \
+                    f"   - To apply, run: ai-execute \"{output_dir}\" --confirm"
+
+    return {
+        "response": final_message,
+        "manifest": manifest,
+        "metrics": metrics,
     }

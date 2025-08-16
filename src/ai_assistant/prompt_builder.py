@@ -1,6 +1,7 @@
 # src\ai_assistant\prompt_builder.py
 import re
 from typing import Dict, List, Any, Optional
+import json
 
 class PromptBuilder:
     """
@@ -14,7 +15,8 @@ class PromptBuilder:
         tool_descriptions: str,
         history: List[Dict[str, Any]] = None,
         persona_content: str = None,
-        use_compact_protocol: bool = False
+        use_compact_protocol: bool = False,
+        is_output_mode: bool = False,
         ) -> str:
         """
         Builds the prompt for the Planner, instructing it to create a JSON tool plan.
@@ -23,6 +25,10 @@ class PromptBuilder:
         persona_section = ""
         if persona_content:
             persona_section = f"<Persona>\n{persona_content}\n</Persona>\n\n"
+
+        output_mode_heuristic = ""
+        if is_output_mode:
+            output_mode_heuristic = """5.  **OUTPUT-FIRST MODE:** You are in a special mode where your plan will NOT be executed directly. Instead, it will be saved to a manifest file. Your plan must be a complete, end-to-end sequence of actions (e.g., create branch, write file, add, commit, push) that can be executed by a separate, non-AI tool. Do not use read-only tools like `list_files` unless their output is critical for a subsequent step's condition. Your primary goal is to generate a complete and executable action plan."""
 
         prompt = f"""{persona_section}You are a planning agent. Your SOLE purpose is to convert a user's request into a structured JSON plan of tool calls. You must adhere strictly to the provided tool signatures and planning heuristics.
 
@@ -45,8 +51,8 @@ class PromptBuilder:
     - **Step C:** Place the ENTIRE, new, complete file content into the `content` argument of the `write_file` tool.
     - **Step D:** Use the exact file path from the `<AttachedFile path="...">` attribute for the `path` argument.
     - **You are FORBIDDEN from using placeholders, comments like "... rest of file ...", or generating only a diff.** This is not optional. Your job is to generate the complete, final code.
-4.  **Summarize, Don't Write:** For read-only tasks (e.g., "summarize", "compare"), if the necessary context is already provided, your plan MUST be an empty array `[]`.
-
+4.  **Summarize, Don't Read:** For read-only tasks (e.g., "summarize", "compare", "analyze"), if the necessary context is already provided in `<AttachedFile>` tags, your plan MUST be an empty array `[]`. You are FORBIDDEN from using `read_file` on a file that is already attached to the user's request.
+{output_mode_heuristic}
 ---
 <Example>
 <UserRequest>
@@ -67,6 +73,20 @@ I need to read the project's README.md file.
 </JSON_PLAN>
 </Example>
 ---
+<Example>
+<UserRequest>
+<AttachedFile path="src/main.py">
+# Contents of main.py
+</AttachedFile>
+Analyze the attached file and tell me what it does.
+</UserRequest>
+<JSON_PLAN>
+```json
+[]
+```
+</JSON_PLAN>
+</Example>
+---
 
 {history_section}
 <UserRequest>
@@ -78,6 +98,38 @@ You MUST ONLY respond with the JSON plan, enclosed in ```json markdown tags.
 Important: Always use a JSON ARRAY of steps, even for single-step plans.
 
 JSON_PLAN:
+"""
+        return prompt
+
+
+    def build_critique_prompt(
+        self,
+        query: str,
+        plan: List[Dict[str, Any]],
+        persona_context: str
+    ) -> str:
+        """Builds the prompt for the Plan Validation Analyst."""
+        plan_str = json.dumps(plan, indent=2)
+        
+        prompt = f"""<SystemPrompt>
+{persona_context}
+</SystemPrompt>
+
+You are a skeptical "red team" analyst. Your sole purpose is to find flaws in a proposed plan.
+
+A user has made the following request:
+<UserRequest>
+{query}
+</UserRequest>
+
+An AI planner has generated the following execution plan to satisfy the request:
+<JSON_PLAN>
+```json
+{plan_str}
+```
+</JSON_PLAN>
+
+Critically evaluate this plan based on your operational protocol. Identify unstated assumptions, dangerous edge cases, security risks, or logical errors. Provide a concise, bulleted list of your findings. If the plan is sound, state that clearly.
 """
         return prompt
 

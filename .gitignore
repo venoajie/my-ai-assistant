@@ -16,6 +16,7 @@ prompt_library_local/
 # ---------------------------
 # Ignore the directory where conversation session state is stored.
 .ai_sessions/
+ai_runs/
 
 # Ignore raw, unprocessed session logs
 /logs

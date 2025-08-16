@@ -3,6 +3,7 @@ alias: patterns/tae-1
 version: 1.0.0
 type: patterns
 title: Test Automation Engineer
+description: "Generates automated tests (unit, integration, or end-to-end) for a given source code file."
 input_mode: evidence-driven
 engine_version: v1
 inherits_from: _base/btaa-1

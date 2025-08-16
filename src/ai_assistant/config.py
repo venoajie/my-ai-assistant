@@ -1,9 +1,8 @@
 # ai_assistant/config.py
 
-import os
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
 from importlib import resources
 
@@ -11,6 +10,7 @@ from importlib import resources
 class ModelSelectionConfig(BaseModel):
     planning: str
     synthesis: str
+    critique: str
     
 class GeneralConfig(BaseModel):
     personas_directory: str
@@ -20,7 +20,10 @@ class GeneralConfig(BaseModel):
 
 class ContextOptimizerConfig(BaseModel):
     max_tokens: int
-    prompt_compression_threshold: int = Field(default=0, description="Token count above which to use compact prompts. 0 to disable.")
+    prompt_compression_threshold: int = Field(
+        default=0, 
+        description="Token count above which to use compact prompts. 0 to disable.",
+        )
 
 class GitToolConfig(BaseModel):
     branch_prefix: str
@@ -42,6 +45,7 @@ class GenerationParams(BaseModel):
 class GenerationConfig(BaseModel):
     planning: GenerationParams
     synthesis: GenerationParams
+    critique: GenerationParams
 
 class ProviderConfig(BaseModel):
     api_key_env: str
@@ -78,26 +82,36 @@ def load_ai_settings() -> AIConfig:
     if user_config_path.exists():
         with open(user_config_path, 'r') as f:
             user_config = yaml.safe_load(f)
-        config_data = deep_merge(config_data, user_config)
+        config_data = deep_merge(
+            config_data, 
+            user_config,
+            )
     
     # 3. Load project config overrides
     project_config_path = Path.cwd() / ".ai_config.yml"
     if project_config_path.exists():
         with open(project_config_path, 'r') as f:
             project_config = yaml.safe_load(f)
-        config_data = deep_merge(config_data, project_config)
+        config_data = deep_merge(
+            config_data, 
+            project_config,
+            )
     
     return AIConfig.model_validate(config_data)
 
 def deep_merge(base: Dict, update: Dict) -> Dict:
     """Deep merge two dictionaries"""
     for key, value in update.items():
-        if isinstance(value, dict) and key in base and isinstance(base[key], dict):
-            base[key] = deep_merge(base[key], value)
+        if isinstance(value, dict) \
+            and key in base \
+                and isinstance(base[key], dict):
+            base[key] = deep_merge(
+                base[key], 
+                value,
+                )
         else:
             base[key] = value
     return base
-
 
 # --- Global Singleton Instance ---
 ai_settings = load_ai_settings()

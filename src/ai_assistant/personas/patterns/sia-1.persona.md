@@ -4,6 +4,7 @@ version: 1.0.0
 type: patterns
 input_mode: evidence-driven
 title: Systems Integrity Analyst
+description: "Audits system configurations and state to ensure they align with a declared 'source of truth' document."
 engine_version: v1
 inherits_from: _base/btaa-1
 status: active

@@ -1,12 +1,12 @@
 # src/ai_assistant/response_handler.py
 import os
-import json
 import aiohttp 
 from typing import Optional, Dict, Any
 import asyncio
 import time
 
 from .config import ai_settings
+from .context_optimizer import ContextOptimizer
 
 class APIKeyNotFoundError(Exception):
     """Custom exception for missing API keys."""
@@ -20,7 +20,7 @@ class ResponseHandler:
             for model_name in provider_config.models:
                 self.model_to_provider_map[model_name] = {
                     "provider_name": provider_name,
-                    "config": provider_config
+                    "config": provider_config,
                 }
 
     def check_api_keys(self):
@@ -41,6 +41,7 @@ class ResponseHandler:
         """Calls the specified AI model asynchronously with enhanced error handling."""
         if model not in self.model_to_provider_map:
             return {
+                "tokens": {"prompt": 0, "response": 0, "total": 0},
                 "content": f"❌ ERROR: Model '{model}' is not configured.", 
                 "duration": 0, 
                 "provider_name": "internal",
@@ -65,15 +66,40 @@ class ResponseHandler:
 
                     content = ""
                     if provider_name == "gemini":
-                        content = await self._call_gemini(session, prompt, model, provider_config, final_gen_config)
+                        content = await self._call_gemini(
+                            session, 
+                            prompt, 
+                            model, 
+                            provider_config, 
+                            final_gen_config,
+                            )
                     elif provider_name == "deepseek":
-                        content = await self._call_deepseek(session, prompt, model, provider_config, final_gen_config)
+                        content = await self._call_deepseek(
+                            session,
+                            prompt, 
+                            model, 
+                            provider_config, 
+                            final_gen_config,
+                            )
                     else:
                         content = f"❌ ERROR: No call implementation for provider '{provider_name}'."
 
                     duration = time.monotonic() - start_time # --- Calculate duration ---
 
-                    return {"content": content, "duration": duration, "provider_name": provider_name}
+                    optimizer = ContextOptimizer()
+                    prompt_tokens = optimizer.estimate_tokens(prompt)
+                    response_tokens = optimizer.estimate_tokens(content)
+                    
+                    return {
+                        "content": content, 
+                        "duration": duration, 
+                        "provider_name": provider_name,
+                        "tokens": {
+                            "prompt": prompt_tokens, 
+                            "response": response_tokens, 
+                            "total": prompt_tokens + response_tokens,
+                            },
+                        }
 
                 except (
                     aiohttp.ClientResponseError, 
@@ -90,6 +116,7 @@ class ResponseHandler:
                         # This is now for non-5xx HTTP errors or other unexpected ValueErrors
                         error_msg = f"❌ ERROR: Non-retriable API error for model {model}: {e}"
                         print()
+                        # Return empty metrics on failure
                         return {
                             "content": error_msg, 
                             "duration": time.monotonic() - start_time, 
@@ -99,6 +126,7 @@ class ResponseHandler:
                     # Catch-all for any other unexpected errors
                     error_msg = f"❌ ERROR: An unexpected error occurred during API call for model {model}: {e}"
                     print()
+                    # Return empty metrics on failure
                     return {
                         "content": error_msg,
                         "duration": time.monotonic() - start_time, 
@@ -112,6 +140,7 @@ class ResponseHandler:
 
         final_error_msg = f"❌ ERROR: API call for model {model} failed after {max_retries} attempts."
         print()
+        # Return empty metrics on failure
         return {
             "content": final_error_msg, 
             "duration": time.monotonic() - start_time, 

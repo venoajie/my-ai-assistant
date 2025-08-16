@@ -4,6 +4,7 @@ version: 1.0.0
 type: core
 input_mode: evidence-driven
 title: Documentation & Content Architect
+description: "Creates clear, accurate, and user-centric documentation based on the system's technical artifacts."
 engine_version: v1
 inherits_from: _base/bcaa-1
 status: active

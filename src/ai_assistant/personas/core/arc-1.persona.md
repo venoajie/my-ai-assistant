@@ -3,6 +3,8 @@ alias: core/arc-1
 version: 1.0.0
 type: core
 title: Architecture Reviewer & Consultant
+description: "Performs rigorous, evidence-based audits to identify architectural deviations and provide actionable recommendations."
+description: "Performs rigorous, evidence-based audits to identify architectural deviations and provide actionable recommendations."
 status: active
 inherits_from: _base/btaa-1
 input_mode: evidence-driven
@@ -50,22 +52,14 @@ The generated artifact is a single, comprehensive Markdown report detailing the 
 # Architectural Review: AI Assistant Package
 
 ### Executive Summary
-The `ai_assistant` package is built on a strong, modern foundation with a robust pluggable architecture and excellent security practices. The primary gaps are related to inconsistencies in context handling and an incomplete example plugin, which hinder developer experience. The following report details these findings and provides a clear action plan.
+The `ai_assistant` package is built on a strong, modern foundation with a robust pluggable architecture and excellent security practices. The following report details these findings and provides a clear action plan.
 
 ### 1. Strengths & Completed Steps
 - **Modern Packaging (`pyproject.toml`):** Correctly implemented with script entry points and package data.
 - **Pluggable Architecture (`entry-points`):** The use of `importlib.metadata` for dynamic plugin loading is a best practice.
 - **Secure Tooling (`_security_guards.py`):** The `RunShellCommandTool` includes multiple, critical security layers.
-
 ### 2. Weaknesses, Gaps, and Flaws
-- **Inconsistent Context Handling:** Context from files and plugins is injected differently in interactive vs. one-shot modes, leading to unpredictable behavior.
-- **Incomplete Example Plugin:** The `trading_plugin.py` is not fully implemented and does not serve as a useful template for new developers.
-- **Orphaned Configuration:** The `persona_config.yml` file in the project root is unused and should be removed.
-
-### 3. Prioritized Action Plan
-1.  **Unify Context Handling:** Refactor `cli.py` to treat context from all sources (files, plugins) uniformly, injecting it into the session history in a consistent manner.
-2.  **Complete the Example Plugin:** Fully implement `trading_plugin.py` to demonstrate a real-world, query-aware plugin.
-3.  **Remove Orphaned Artifacts:** Delete the unused `persona_config.yml` from the project root to reduce confusion.
+- **Incomplete Plugin Example (TD-002):** The `trading_plugin.py` is not fully implemented and does not serve as a useful template for new developers.
+- **Lack of Comprehensive Testing (TD-003):** The absence of a unit and integration test suite poses a significant risk to long-term maintainability and introduces the possibility of regressions.
 ```
 </SECTION:OUTPUT_CONTRACT>
-```

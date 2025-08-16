@@ -1,68 +1,79 @@
-generated_at_utc: '2025-08-14T08:32:08.752886+00:00'
-manifest_version: 7.1-idempotent
-validation_signature: 81ec95034c0b6b3d91f1c61f9bc330aec2761fdde4a10ad66ca7494273f77ee1
+generated_at_utc: '2025-08-16T09:47:05.901319+00:00'
+manifest_version: 7.3-central-validator
+validation_signature: 4bc8a74c47f0cd5e4f426ec7abc98e110e6206def2ee61ed682f399a0b550959
 personas:
-- alias: _base/bcaa-1
-  title: Base Collaborative Agent
-  description: No description provided.
-- alias: _base/btaa-1
-  title: Base Technical Analysis Agent
-  description: No description provided.
-- alias: _mixins/codegen-standards-1
-  title: Code Generation Standards Mixin
-  description: No description provided.
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant
-  description: No description provided.
+  description: Performs rigorous, evidence-based audits to identify architectural
+    deviations and provide actionable recommendations.
 - alias: core/csa-1
   title: Collaborative Systems Architect
-  description: No description provided.
+  description: Designs new systems or refactors existing ones, ensuring all changes
+    are harmonious with the established architecture.
 - alias: core/dca-1
   title: Documentation & Content Architect
-  description: No description provided.
+  description: Creates clear, accurate, and user-centric documentation based on the
+    system's technical artifacts.
 - alias: core/dpa-1
   title: Deployment Process Architect
-  description: No description provided.
+  description: Provides a comprehensive, risk-mitigated deployment plan for production
+    releases.
 - alias: core/pa-1
   title: Persona Architect
   description: A specialist meta-persona that designs, refines, and governs the entire
     persona ecosystem, focusing on prompt reliability, efficiency, and strategic growth.
 - alias: core/si-1
   title: Session Initiator
-  description: No description provided.
+  description: Analyzes a user's high-level goal and selects the most appropriate
+    specialist agent to perform the task.
 - alias: domains/finance/ada-1
   title: API Contract Architect
-  description: No description provided.
+  description: Designs API contracts for financial services, focusing on REST and
+    OpenAPI standards.
 - alias: domains/trading/qtsa-1
   title: Quantitative Strategy Analyst
-  description: No description provided.
+  description: Guides the development of formal, testable trading strategy blueprints
+    from high-level concepts.
 - alias: patterns/adr-1
   title: Architectural Decision Analyst
-  description: No description provided.
+  description: Analyzes technical problems and generates structured Architectural
+    Decision Records (ADRs) to document key decisions.
 - alias: patterns/bpr-1
   title: Best Practices Reviewer
-  description: No description provided.
+  description: Acts as a senior peer reviewer for code quality, style, and adherence
+    to established best practices.
 - alias: patterns/da-1
   title: Debugging Analyst
-  description: No description provided.
+  description: Diagnoses the root cause of bugs from error reports, stack traces,
+    and relevant source code.
 - alias: patterns/pba-1
   title: Performance Bottleneck Analyst
-  description: No description provided.
+  description: Analyzes system behavior and metrics to identify and diagnose performance
+    bottlenecks.
+- alias: patterns/pva-1
+  title: Plan Validation Analyst
+  description: A skeptical analyst that reviews a proposed tool-use plan for flaws,
+    risks, and unstated assumptions.
 - alias: patterns/qsa-1
   title: Quality Strategy Architect
-  description: No description provided.
+  description: Analyzes a codebase to create a prioritized, risk-based testing plan.
 - alias: patterns/sia-1
   title: Systems Integrity Analyst
-  description: No description provided.
+  description: Audits system configurations and state to ensure they align with a
+    declared 'source of truth' document.
 - alias: patterns/sva-1
   title: Security Vulnerability Auditor
-  description: No description provided.
+  description: Reviews code with an adversarial mindset to find potential security
+    vulnerabilities.
 - alias: patterns/tae-1
   title: Test Automation Engineer
-  description: No description provided.
+  description: Generates automated tests (unit, integration, or end-to-end) for a
+    given source code file.
 - alias: utility/alignment-checker
   title: Mandate Alignment Checker
-  description: No description provided.
+  description: Performs a semantic check to ensure a specialist's proposed plan aligns
+    with the user's original mandate.
 - alias: utility/jan-1
   title: Project Janitor
-  description: No description provided.
+  description: Performs code cleanup tasks like removing comments, formatting, and
+    deleting specified code blocks.

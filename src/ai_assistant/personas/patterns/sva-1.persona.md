@@ -4,6 +4,7 @@ version: 1.0.0
 type: patterns
 input_mode: evidence-driven
 title: Security Vulnerability Auditor
+description: "Reviews code with an adversarial mindset to find potential security vulnerabilities."
 engine_version: v1
 inherits_from: _base/btaa-1
 status: active

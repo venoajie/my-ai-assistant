@@ -18,8 +18,9 @@ class Planner:
         query: str,
         history: List[Dict[str, Any]] = None,
         persona_content: Optional[str] = None,
-        use_compact_protocol: bool = False  # Add the new argument here
-    ) -> Tuple[List[Dict[str, Any]], float]:
+        use_compact_protocol: bool = False,
+        is_output_mode: bool = False,
+        ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         print("🤔 Generating execution plan...")
         tool_descriptions = TOOL_REGISTRY.get_tool_descriptions()
         prompt = self.prompt_builder.build_planning_prompt(
@@ -27,7 +28,8 @@ class Planner:
             tool_descriptions,
             history,
             persona_content,
-            use_compact_protocol=use_compact_protocol  # Pass the argument to the builder
+            use_compact_protocol=use_compact_protocol,
+            is_output_mode=is_output_mode,
         )
         
         planning_model = ai_settings.model_selection.planning
@@ -43,20 +45,19 @@ class Planner:
         )
 
         response_text = api_result["content"]
-        planning_duration = api_result["duration"]
 
         plan = self._extract_and_validate_plan(response_text)
 
         if not plan:
             if isinstance(plan, list):
                 print("✅ Plan generated successfully (No tool execution required).")
-            # --- Return duration even for no-op plans ---
-            return plan, planning_duration
+            # --- Return full result  even for no-op plans ---
+            return plan, api_result
                     
         print("✅ Plan generated successfully.")
         for i, step in enumerate(plan):
             print(f"  - Step {i+1}: {step.get('thought', '')} -> {step.get('tool_name')}({step.get('args', {})})")
-        return  plan, planning_duration
+        return  plan, api_result
         
     def _extract_and_validate_plan(self, response_text: str) -> List[Dict[str, Any]]:
         """Extracts, sanitizes, repairs, and validates a JSON plan from raw LLM text."""
