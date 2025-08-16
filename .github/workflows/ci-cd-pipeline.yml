@@ -33,9 +33,9 @@ jobs:
           pip install -e .[test]
       
       - name: Validate Persona Standards
-        run: python scripts/generate_manifest.py
+        # FIXED: Use PYTHONPATH to make the 'src' directory importable
+        run: PYTHONPATH=src python scripts/generate_manifest.py
           
-      # MOVED: This step now runs here, after all other validation.
       - name: Run Unit Tests
         run: python -m unittest discover tests
 
@@ -52,12 +52,12 @@ jobs:
         with:
           python-version: '3.12'
       
-      # ADDED: This job now installs the package, which also installs pyyaml.
       - name: Install package
         run: pip install -e .
 
       - name: Regenerate manifest to check for diff
-        run: python scripts/generate_manifest.py
+        # FIXED: Use PYTHONPATH to make the 'src' directory importable
+        run: PYTHONPATH=src python scripts/generate_manifest.py
 
       - name: Check for stale manifest
         run: |
