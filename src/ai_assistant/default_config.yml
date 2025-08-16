@@ -27,15 +27,14 @@ generation_params:
     temperature: 0.05
     max_tokens: 512
   synthesis:
-    temperature: 0.015
+    temperature: 0.15
     topP: 0.95
     topK: 40
     max_tokens: 8192
-  synthesis:
+  critique:
     temperature: 0.1
     topP: 0.95
     topK: 40
-    max_tokens: 8192
 providers:
   gemini:
     api_key_env: "GEMINI_API_KEY"
