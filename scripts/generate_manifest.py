@@ -1,9 +1,15 @@
 # scripts\generate_manifest.py
 
 import yaml
+import hashlib
+import json
 from pathlib import Path
 from datetime import datetime, timezone
 import sys
+
+# NOTE: The sys.path manipulation has been removed.
+# This script now relies on the 'ai_assistant' package being installed
+# in the environment (e.g., via `pip install -e .`).
 
 try:
     from ai_assistant.persona_validator import PersonaValidator
