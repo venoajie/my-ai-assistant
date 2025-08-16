@@ -81,4 +81,3 @@ ai --new-session --context DataScience \
 ```
 
 The AI will now receive the extra context you defined, leading to a more informed and accurate response.
-```

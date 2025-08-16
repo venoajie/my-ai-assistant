@@ -74,5 +74,3 @@ git reset --hard HEAD
 
 # 3. Remove all untracked files and directories (like leftover ai_runs/)
 git clean -df
-```
-```

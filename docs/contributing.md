@@ -39,4 +39,3 @@ This file is the definitive source of truth for the schemas of all major interna
 -   The structure of the **Output Package Manifest** used by the `ai-execute` script.
 
 Before modifying any component that produces or consumes one of these data structures, please consult `system_contracts.yml` to ensure your changes are compatible with the established contract.
-```

@@ -97,5 +97,3 @@ chmod +x my_task.sh
 
 # 2. Run it
 ./my_task.sh
-```
-```
