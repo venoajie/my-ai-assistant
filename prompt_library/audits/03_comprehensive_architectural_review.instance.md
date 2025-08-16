@@ -23,6 +23,82 @@ persona_alias: core/arc-1
         <!-- The Constitution of the Project -->
         <Inject src="PROJECT_BLUEPRINT.md"/>
         <Inject src="TECHNICAL_DEBT.md"/>
+        <StaticFile path="docs/system_contracts.yml">
+# Version: 1.0
+# Description: This file is the canonical, machine-readable data dictionary for the AI Assistant.
+# It defines the schema and purpose of all major internal data contracts.
+
+contracts:
+  - name: Persona File
+    path: "src/ai_assistant/personas/**/*.persona.md"
+    type: File (Markdown with YAML Frontmatter)
+    description: "The source of truth for an AI agent's identity, protocol, and capabilities. It is the core component of the Persona-First architecture."
+    schema:
+      - field: frontmatter
+        type: YAML
+        description: "Contains structured metadata like alias, title, and inheritance rules, governed by persona_config.yml."
+      - field: body
+        type: Markdown (with custom XML-style tags)
+        description: "Contains the persona's core philosophy, directives, and operational protocol in a semi-structured format."
+
+  - name: Session History
+    path: ".ai_sessions/session_*.json"
+    type: JSON File
+    description: "A chronological log of a single conversation between a user and the AI assistant. Managed by the SessionManager."
+    schema:
+      - field: role
+        type: string
+        description: "The originator of the message (e.g., 'user', 'model', 'system_error')."
+      - field: content
+        type: string
+        description: "The textual content of the message."
+
+  - name: Execution Plan
+    source: Planner
+    type: In-Memory Python List of Dictionaries
+    description: "The AI-generated, structured plan of tool calls to be executed by the Kernel or packaged by the Executor."
+    schema:
+      - field: thought
+        type: string
+        description: "The AI's rationale for choosing the tool and arguments."
+      - field: tool_name
+        type: string
+        description: "The name of the tool to be executed, which must exist in the TOOL_REGISTRY."
+      - field: args
+        type: dict
+        description: "A dictionary of arguments to be passed to the tool."
+      - field: condition
+        type: dict (optional)
+        description: "A block that makes the step's execution conditional on the output of a previous step."
+
+  - name: Output Package Manifest
+    path: "[output_dir]/manifest.json"
+    type: JSON File
+    description: "The machine-readable 'blueprint for action' generated in Output-First mode. It is the single source of truth for the `ai-execute` script."
+    schema:
+      - field: version
+        type: string
+        description: "The schema version of the manifest."
+      - field: sessionId
+        type: string
+        description: "A unique, timestamp-based ID for the generation run."
+      - field: generated_by
+        type: string
+        description: "The alias of the persona that created the plan."
+      - field: actions
+        type: array
+        description: "A sequential list of action objects to be executed."
+        schema:
+          - field: type
+            type: string
+            description: "The action to perform (e.g., 'create_branch', 'apply_file_change')."
+          - field: comment
+            type: string
+            description: "The AI's 'thought' or rationale for the action."
+          - field: ...other_params
+            type: any
+            description: "Action-specific fields (e.g., 'branch_name', 'path', 'message')."
+        </StaticFile>
         <StaticFile path="persona_config.yml">
         # persona_config.yml
 # This file is the single source of truth for persona architectural rules.
