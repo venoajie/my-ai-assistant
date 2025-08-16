@@ -23,8 +23,16 @@ async def orchestrate_agent_run(
     output_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
 
-    timings = {}
-    
+    metrics = {
+        "timings": {},
+        "tokens": {
+            "planning": {}, 
+            "critique": {},
+            "synthesis": {},
+            }
+        }
+    timings = metrics["timings"]
+
     # --- PERSONA LOADING ---
     persona_directives: Optional[str] = None
     persona_context: Optional[str] = None
@@ -38,8 +46,7 @@ async def orchestrate_agent_run(
             print(error_msg, file=sys.stderr)
             return {
                 "response": error_msg, 
-                "synthesis_prompt": "",
-                "timings": timings,
+                "metrics": metrics,
                 }
 
     # --- PRE-PROCESSING & COMPRESSION LOGIC ---
@@ -60,15 +67,17 @@ async def orchestrate_agent_run(
 
     # --- PLANNING ---
     planner = Planner()
-    plan, planning_duration = await planner.create_plan(
-        optimized_query,
-        history,
-        persona_context,
-        use_compact_protocol,
-        is_output_mode=(output_dir is not None)
-    )
-    timings["planning"] = planning_duration
+    plan, planning_result = await planner.create_plan(
+         optimized_query,
+         history,
+         persona_context,
+         use_compact_protocol,
+         is_output_mode=(output_dir is not None),
+         )
     
+    timings["planning"] = planning_result["duration"]
+    metrics["tokens"]["planning"] = planning_result["tokens"]
+     
     prompt_builder = PromptBuilder()
 
     # --- DIRECT RESPONSE (NO TOOLS) ---
@@ -84,12 +93,11 @@ async def orchestrate_agent_run(
         response_handler = ResponseHandler()
         synthesis_model = ai_settings.model_selection.synthesis
         synthesis_result = await response_handler.call_api(direct_prompt, model=synthesis_model)
-        timings["synthesis"] = synthesis_result["duration"]
+        metrics["timings"]["synthesis"] = synthesis_result["duration"]
+        metrics["tokens"]["synthesis"] = synthesis_result["tokens"]        
         return {
-            "response": synthesis_result["content"],
-            "synthesis_prompt": direct_prompt,
-            "timings": timings
-        }
+            "response": synthesis_result["content"], 
+            "metrics": metrics,        }
 
     # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
     critique = None
@@ -116,7 +124,8 @@ async def orchestrate_agent_run(
                 generation_config=critique_gen_config
             )
             critique = critique_result["content"]
-            timings["critique"] = critique_result["duration"]
+            metrics["timings"]["critique"] = critique_result["duration"]
+            metrics["tokens"]["critique"] = critique_result["tokens"]     
             print("   ✅ Critique received.")
         except Exception as e:
             print(f"   - ⚠️ Warning: Could not perform plan validation. Reason: {e}")
@@ -125,7 +134,12 @@ async def orchestrate_agent_run(
 
     # --- OUTPUT-FIRST MODE (GENERATE PACKAGE) ---
     if output_dir:
-        return await _handle_output_first_mode(plan, persona_alias, timings, output_dir)
+        return await _handle_output_first_mode(
+            plan, 
+            persona_alias,
+            metrics, 
+            output_dir,
+            )
 
     # --- LIVE MODE (TOOL EXECUTION) ---
     print("🚀 Executing adaptive plan...")
@@ -190,7 +204,10 @@ async def orchestrate_agent_run(
     if any_risky_action_denied and not any_tool_succeeded:
         error_msg = "I was unable to complete the task because a necessary action was denied by the user for safety reasons."
         print(f"\n🛑 {error_msg}")
-        return { "response": error_msg, "synthesis_prompt": "", "timings": timings }
+        return {
+            "response": error_msg, 
+            "metrics": metrics,
+            }
             
     observation_text = "\n".join(observations)
 
@@ -238,19 +255,19 @@ async def orchestrate_agent_run(
     response_handler = ResponseHandler()
     synthesis_model = ai_settings.model_selection.synthesis
     synthesis_result = await response_handler.call_api(synthesis_prompt, model=synthesis_model)
-    timings["synthesis"] = synthesis_result["duration"]
+    metrics["timings"]["synthesis"] = synthesis_result["duration"]
+    metrics["tokens"]["synthesis"] = synthesis_result["tokens"]
     final_response = synthesis_result["content"]
    
     return {
         "response": final_response,
-        "synthesis_prompt": synthesis_prompt,
-        "timings": timings,
+        "metrics": metrics,
     }
 
 async def _handle_output_first_mode(
     plan: List[Dict[str, Any]],
     persona_alias: str,
-    timings: Dict[str, float],
+    metrics: Dict[str, Any],
     output_dir_str: str,
 ) -> Dict[str, Any]:
     """Handles the logic for generating an output package instead of executing live."""
@@ -263,13 +280,16 @@ async def _handle_output_first_mode(
         workspace_dir.mkdir(exist_ok=True)
     except OSError as e:
         error_msg = f"❌ Error creating output directory '{output_dir}': {e}"
-        return {"response": error_msg, "synthesis_prompt": "", "timings": timings}
+        return {
+            "response": error_msg, 
+            "metrics": metrics,
+            }
 
     manifest = {
         "version": "1.0",
         "sessionId": f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
         "generated_by": persona_alias,
-        "actions": []
+        "actions": [],
     }
     
     summary_parts = ["# AI-Generated Change Summary\n"]
@@ -339,5 +359,5 @@ async def _handle_output_first_mode(
     return {
         "response": final_message,
         "manifest": manifest,
-        "timings": timings
+        "metrics": metrics,
     }
