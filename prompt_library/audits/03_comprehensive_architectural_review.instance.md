@@ -24,7 +24,7 @@ persona_alias: core/arc-1
         <Inject src="PROJECT_BLUEPRINT.md"/>
         <Inject src="TECHNICAL_DEBT.md"/>
         <StaticFile path="docs/system_contracts.yml">
-# Version: 1.0
+# Version: 1.1
 # Description: This file is the canonical, machine-readable data dictionary for the AI Assistant.
 # It defines the schema and purpose of all major internal data contracts.
 
@@ -52,6 +52,21 @@ contracts:
       - field: content
         type: string
         description: "The textual content of the message."
+
+  - name: Project State File
+    path: "PROJECT_STATE.md"
+    type: Markdown File
+    description: "The single source of truth for a long-running, multi-agent project. It is created and managed by the `pmo-1` persona to maintain state across multiple CLI invocations."
+    schema:
+      - field: metadata
+        type: Key-Value List
+        description: "Contains high-level project status, version, and the original goal."
+      - field: Project Plan
+        type: Markdown Section
+        description: "Defines the sequence of phases, the specialist persona assigned to each, and their dependency relationships."
+      - field: Artifact Sections
+        type: Markdown Sections
+        description: "Dedicated sections (e.g., 'Requirements', 'Architecture') that are populated by specialist personas as the project progresses."
 
   - name: Execution Plan
     source: Planner
