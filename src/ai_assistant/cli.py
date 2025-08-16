@@ -252,7 +252,8 @@ async def async_main():
     session_group.add_argument('--session', help='Continue an existing session by ID.')
     session_group.add_argument('--new-session', action='store_true', help='Start a new session.')    
     parser.add_argument('--list-plugins', action='store_true', help='List available context plugins')
-    
+    parser.add_argument('query', nargs='*', help="Your request for the agent. For tasks that modify files, wrap your goal in <ACTION> tags.")
+
     args = parser.parse_args()
     
     # --- SANITY CHECK FUNCTION ---
