@@ -1,8 +1,7 @@
 # .github/workflows/ci-cd-pipeline.yml
 name: Python Package CI/CD
 
-# --- Trigger Conditions (MODIFIED) ---
-# This workflow now runs on pushes and PRs to BOTH 'develop' and 'main'
+# --- Trigger Conditions ---
 on:
   push:
     branches: [ "main", "develop" ]
@@ -20,7 +19,6 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
-      # (No changes to the steps in this job)
       - name: Check out code
         uses: actions/checkout@v4
 
@@ -34,13 +32,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[test]
       
-      # 4. Run Persona Validation
       - name: Validate Persona Standards
-        run: |
-          # Use the GITHUB_WORKSPACE variable to provide an absolute path to the config file.
-          # This is the robust way to handle paths in GitHub Actions.
-          python scripts/generate_manifest.py 
+        run: python scripts/generate_manifest.py
           
+      # MOVED: This step now runs here, after all other validation.
+      - name: Run Unit Tests
+        run: python -m unittest discover tests
+
   # This job runs in parallel with the tests.
   validate-manifest-integrity:
     name: Validate Manifest Integrity
@@ -54,8 +52,9 @@ jobs:
         with:
           python-version: '3.12'
       
-      - name: Install dependencies for script
-        run: pip install pyyaml
+      # ADDED: This job now installs the package, which also installs pyyaml.
+      - name: Install package
+        run: pip install -e .
 
       - name: Regenerate manifest to check for diff
         run: python scripts/generate_manifest.py
@@ -65,25 +64,19 @@ jobs:
           # This command checks if 'git status' is clean.
           # If generate_manifest.py modified the manifest, this will detect it.
           # `git diff --exit-code` will exit with 1 if there is a diff, failing the job.
-          git diff --exit-code --quiet persona_manifest.yml
+          if ! git diff --exit-code --quiet persona_manifest.yml; then
+            echo "❌ ERROR: persona_manifest.yml is out of date."
+            echo "Please run 'python scripts/generate_manifest.py' locally and commit the changes."
+            exit 1
+          fi
           echo "✅ Persona manifest is up-to-date."
 
-
-      # 5. Run the main test suite (e.g., unittest)
-      - name: Run Unit Tests
-        run: python -m unittest discover tests
-
   # This job builds and publishes the package to PyPI.
-  # It has a more specific trigger condition now.
   publish-to-pypi:
     name: Publish to PyPI
     needs: [test-and-validate, validate-manifest-integrity]
     
-    # --- Trigger Condition (MODIFIED) ---
-    # This job ONLY runs if:
-    # 1. The event is a 'push' (not a PR).
-    # 2. The push is to the 'main' branch.
-    # 3. The push includes a new tag that starts with 'v'.
+    # This job ONLY runs on a tagged push to main
     if: |
       github.event_name == 'push' && 
       github.ref_type == 'tag' &&
@@ -92,7 +85,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # (No changes to the steps in this job)
       - name: Check out code
         uses: actions/checkout@v4
 

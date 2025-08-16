@@ -1,21 +1,16 @@
 # scripts\generate_manifest.py
 
 import yaml
-import hashlib
-import json
 from pathlib import Path
 from datetime import datetime, timezone
 import sys
 
-# Add the project root to the path to allow importing from src
-project_root_path = Path(__file__).parent.parent.resolve()
-sys.path.insert(0, str(project_root_path / 'src'))
-
 try:
     from ai_assistant.persona_validator import PersonaValidator
+    from ai_assistant.utils.signature import calculate_persona_signature
 except ImportError:
-    print("FATAL: Could not import PersonaValidator.", file=sys.stderr)
-    print("Please ensure you are running this script from the project root and that src/ is importable.", file=sys.stderr)
+    print("FATAL: Could not import required modules.", file=sys.stderr)
+    print("Please ensure you have installed the package in editable mode (e.g., 'pip install -e .') before running this script.", file=sys.stderr)
     sys.exit(1)
 
 class ManifestGenerator:
@@ -28,6 +23,7 @@ class ManifestGenerator:
 
     def __init__(self, project_root: Path):
         self.project_root = project_root
+        # Correctly locate the personas directory relative to the project root
         self.personas_dir = self.project_root / "src" / "ai_assistant" / "personas"
         self.validator = PersonaValidator(self.project_root / "persona_config.yml")
 
@@ -62,7 +58,7 @@ class ManifestGenerator:
         print(f"\n✓ All {len(validated_persona_details)} personas passed validation.")
 
         # --- IDEMPOTENCY CHECK ---
-        new_signature = self._calculate_signature(validated_persona_details)
+        new_signature = calculate_persona_signature(validated_persona_details, self.project_root)
         manifest_path = self.project_root / "persona_manifest.yml"
         
         if self._is_manifest_up_to_date(manifest_path, new_signature):
@@ -77,19 +73,6 @@ class ManifestGenerator:
         print(f"✓ Persona manifest successfully generated at: {manifest_path.relative_to(self.project_root)}")
         print(f"  - Included {public_personas_count} public personas in the list.")
         print(f"  - Validation Signature: {new_signature[:12]}...")
-
-    def _calculate_signature(self, persona_details: list) -> str:
-        """Calculates a deterministic signature based on persona content and structure."""
-        canonical_data = []
-        for details in sorted(persona_details, key=lambda p: p['alias']):
-            canonical_data.append({
-                "alias": details['alias'],
-                "path": str(details['path'].relative_to(self.project_root)),
-                "content_sha256": hashlib.sha256(details['content'].encode('utf-8')).hexdigest()
-            })
-        
-        canonical_string = json.dumps(canonical_data, sort_keys=True, separators=(',', ':'))
-        return hashlib.sha256(canonical_string.encode('utf-8')).hexdigest()
 
     def _is_manifest_up_to_date(self, manifest_path: Path, new_signature: str) -> bool:
         """Checks if the on-disk manifest exists and has the same signature."""
@@ -128,5 +111,6 @@ class ManifestGenerator:
             yaml.dump(manifest_data, f, default_flow_style=False, sort_keys=False, indent=2)
 
 if __name__ == "__main__":
+    project_root_path = Path(__file__).parent.parent.resolve()
     generator = ManifestGenerator(project_root_path)
     generator.run()
