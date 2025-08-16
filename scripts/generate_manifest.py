@@ -7,9 +7,10 @@ from pathlib import Path
 from datetime import datetime, timezone
 import sys
 
-# NOTE: The sys.path manipulation has been removed.
-# This script now relies on the 'ai_assistant' package being installed
-# in the environment (e.g., via `pip install -e .`).
+# FIXED: Restore the robust sys.path manipulation.
+# This makes the script self-sufficient in finding the 'ai_assistant' package.
+project_root_path = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(project_root_path / 'src'))
 
 try:
     from ai_assistant.persona_validator import PersonaValidator
@@ -117,6 +118,6 @@ class ManifestGenerator:
             yaml.dump(manifest_data, f, default_flow_style=False, sort_keys=False, indent=2)
 
 if __name__ == "__main__":
-    project_root_path = Path(__file__).parent.parent.resolve()
+    # The project_root_path is now defined at the top of the script
     generator = ManifestGenerator(project_root_path)
     generator.run()

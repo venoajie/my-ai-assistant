@@ -33,8 +33,8 @@ jobs:
           pip install -e .[test]
       
       - name: Validate Persona Standards
-        # FIXED: Use PYTHONPATH to make the 'src' directory importable
-        run: PYTHONPATH=src python scripts/generate_manifest.py
+        # FIXED: Removed PYTHONPATH. The script now handles its own path.
+        run: python scripts/generate_manifest.py
           
       - name: Run Unit Tests
         run: python -m unittest discover tests
@@ -56,8 +56,8 @@ jobs:
         run: pip install -e .
 
       - name: Regenerate manifest to check for diff
-        # FIXED: Use PYTHONPATH to make the 'src' directory importable
-        run: PYTHONPATH=src python scripts/generate_manifest.py
+        # FIXED: Removed PYTHONPATH. The script now handles its own path.
+        run: python scripts/generate_manifest.py
 
       - name: Check for stale manifest
         run: |
