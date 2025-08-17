@@ -314,15 +314,14 @@ async def async_main():
 
     full_context_str = ""
     context_plugin = load_context_plugin(args.context)
-    # --- Automatic Domain-Based Plugin Loading ---
+    # --- Automatic Domain-Based Plugin Loading ---                
     if args.persona and args.persona.startswith('domains/'):
         parts = args.persona.split('/')
         if len(parts) > 1:
-            # This logic can be made more robust to handle sub-domains
             domain_name = parts[1]
-            plugin_name_to_load = f"domains.{domain_name}"
+            # CORRECTED: Use a hyphen to match the new entry point name in pyproject.toml
+            plugin_name_to_load = f"domains-{domain_name}" 
             print(f"{Colors.MAGENTA}🔌 Persona domain '{domain_name}' detected. Attempting to auto-load context plugin...{Colors.RESET}")
-            # The load_context_plugin function would be used here
             context_plugin = load_context_plugin(plugin_name_to_load)
             
     # --- Manual Override ---

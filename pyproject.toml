@@ -1,3 +1,8 @@
+# pyproject.toml
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "my-ai-assistant"
 version = "1.2.0"
@@ -16,10 +21,10 @@ ai = "ai_assistant.cli:main"
 ai-execute = "ai_assistant.executor:main"
 
 [project.entry-points."ai_assistant.context_plugins"]
-# New convention: domains.<domain_name>
-domains.programming = "ai_assistant.plugins.domains.programming.context:ProgrammingContextPlugin"
-domains.finance = "ai_assistant.plugins.domains.finance.context:FinanceContextPlugin"
-domains.trading = "ai_assistant.plugins.domains.trading.context:TradingContextPlugin"
+# CORRECTED: Use hyphens for entry point names. These are just strings.
+"domains-programming" = "ai_assistant.plugins.domains.programming.context:ProgrammingContextPlugin"
+"domains-finance" = "ai_assistant.plugins.domains.finance.context:FinanceContextPlugin"
+"domains-trading" = "ai_assistant.plugins.domains.trading.context:TradingContextPlugin"
 
 [project.optional-dependencies]
 test = [
@@ -40,8 +45,3 @@ ai_assistant = [
     "personas/**/*.md",
     "personas/**/*.py"
 ]
-
-[build-system]
-requires = ["setuptools>=65.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
