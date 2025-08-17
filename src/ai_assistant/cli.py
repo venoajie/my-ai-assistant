@@ -9,20 +9,18 @@ import yaml
 from importlib import metadata, resources
 from datetime import datetime
 import time
-import hashlib
-import json
 
 from . import kernel 
 from .config import ai_settings
 from .context_plugin import ContextPluginBase
-from .utils.context_optimizer import ContextOptimizer
 from .persona_loader import PersonaLoader
-from .utils.persona_validator import PersonaValidator
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from .session_manager import SessionManager
-from .colors import Colors
+from .utils.context_optimizer import ContextOptimizer
+from .utils.persona_validator import PersonaValidator
+from .utils.colors import Colors
 from .utils.signature import calculate_persona_signature
-from .result_presenter import present_result
+from .utils.result_presenter import present_result
 
     
 def is_manifest_invalid(manifest_path: Path):
