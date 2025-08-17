@@ -21,6 +21,8 @@ SHELL_COMMAND_BLOCKLIST = (
     r'\bchmod\s+777',       # Overly permissive permissions
     r'\bcurl.*\|\s*sh',     # Pipe to shell from web
     r'\bwget.*\|\s*sh',
+    r'\bwget\s+.*-O\s+/',     # overwriting system files
+    r'\bchown\b|\bchgrp\b' # privilege elevation
     r'\bmv\s+.*\s+~\/',   # Moving files to home directory
     r'\bfind\b.*-delete\b', # Find command with delete action
     r'\brm\s+.*\*',         # Remove with wildcards
