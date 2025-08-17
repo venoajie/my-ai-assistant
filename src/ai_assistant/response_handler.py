@@ -138,6 +138,16 @@ class ResponseHandler:
                     print(f"   ...Waiting {wait_time}s before retrying.")
                     await asyncio.sleep(wait_time)
 
+                else:
+                    # On final failure, return the full data structure with zeroed tokens.
+                    print("\n   ...API call failed after all retries.")
+                    return {
+                        "content": error_msg,
+                        "duration": time.monotonic() - start_time,
+                        "provider_name": provider_name,
+                        "tokens": {"prompt": 0, "response": 0, "total": 0},
+                    }
+                    
         final_error_msg = f"❌ ERROR: API call for model {model} failed after {max_retries} attempts."
         print()
         # Return empty metrics on failure
