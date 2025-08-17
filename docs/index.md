@@ -1,3 +1,6 @@
+
+<!-- FILENAME: docs/index.md -->
+```markdown
 # AI Assistant Documentation
 
 Welcome to the official documentation for the AI Assistant. This site provides in-depth guides to help you get the most out of the tool, whether you are a new user or an experienced developer looking to contribute.
@@ -13,6 +16,7 @@ Welcome to the official documentation for the AI Assistant. This site provides i
 ### Advanced Workflows
 -   **[Orchestrating Multi-Agent Projects](./orchestrating_projects.md):** A guide to using the Project Manager (`pmo-1`) persona to manage complex, multi-stage projects from start to finish.
 -   **[Safe Multi-Stage Refactoring](./multi_stage_refactoring.md):** The official guide for performing complex, multi-step file modifications safely and reliably.
+-   **[Performing Live System Checks](./live_system_checks.md):** Learn how to use the AI to safely diagnose the status of running applications and services.
 -   **[Advanced Usage](./advanced_usage.md):** For experienced users. Learn how to build a reusable prompt library and use the powerful autonomous mode safely.
 
 ## For Developers & Contributors
