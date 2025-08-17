@@ -20,7 +20,9 @@ class GeneralConfig(BaseModel):
     auto_inject_files: List[str] = Field(default_factory=list)
     critique_persona_alias: str
     failure_persona_alias: str
-
+    # Define the path for project-specific plugins
+    local_plugins_directory: str = ".ai/plugins"
+    
 class ContextOptimizerConfig(BaseModel):
     max_tokens: int
     prompt_compression_threshold: int = Field(

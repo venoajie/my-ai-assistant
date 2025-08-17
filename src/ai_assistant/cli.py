@@ -1,14 +1,16 @@
 # src/ai_assistant/cli.py 
 
-import argparse
-import asyncio
+from datetime import datetime
+from importlib import metadata, resources
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+import argparse
+import asyncio
+import importlib.util
+import inspect
 import sys
-import yaml
-from importlib import metadata, resources
-from datetime import datetime
 import time
+import yaml
 
 from . import kernel 
 from .config import ai_settings
@@ -21,6 +23,26 @@ from .utils.persona_validator import PersonaValidator
 from .utils.colors import Colors
 from .utils.signature import calculate_persona_signature
 from .utils.result_presenter import present_result
+
+
+def list_available_plugins() -> List[str]:
+    """Dynamically discovers available plugins from both entry points and the local project directory."""
+    discovered_plugins = []
+    
+    # 1. Load built-in plugins via entry points (existing logic)
+    entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
+    for entry in entry_points:
+        discovered_plugins.append(entry.name)
+        
+    # 2. Discover and load local, project-specific plugins
+    local_plugins_path = Path.cwd() / ai_settings.general.local_plugins_directory
+    if local_plugins_path.is_dir():
+        for file_path in local_plugins_path.glob("*.py"):
+            plugin_name = file_path.stem.replace("_plugin", "")
+            if plugin_name not in discovered_plugins:
+                 discovered_plugins.append(f"{plugin_name} (local)")
+
+    return sorted(discovered_plugins)
 
     
 def is_manifest_invalid(manifest_path: Path):
@@ -292,6 +314,23 @@ async def async_main():
 
     full_context_str = ""
     context_plugin = load_context_plugin(args.context)
+    # --- Automatic Domain-Based Plugin Loading ---
+    if args.persona and args.persona.startswith('domains/'):
+        parts = args.persona.split('/')
+        if len(parts) > 1:
+            # This logic can be made more robust to handle sub-domains
+            domain_name = parts[1]
+            plugin_name_to_load = f"domains.{domain_name}"
+            print(f"{Colors.MAGENTA}🔌 Persona domain '{domain_name}' detected. Attempting to auto-load context plugin...{Colors.RESET}")
+            # The load_context_plugin function would be used here
+            context_plugin = load_context_plugin(plugin_name_to_load)
+            
+    # --- Manual Override ---
+    # If the user specifies --context, it overrides the automatic one.
+    if args.context:
+        print(f"{Colors.YELLOW}--context flag provided, overriding any auto-loaded plugin.{Colors.RESET}")
+        context_plugin = load_context_plugin(args.context)
+
     if context_plugin:
         print(f"   - {Colors.GREEN}✅ Plugin loaded successfully.{Colors.RESET}")
         plugin_context = context_plugin.get_context(user_query, args.files or [])

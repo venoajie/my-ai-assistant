@@ -16,7 +16,10 @@ ai = "ai_assistant.cli:main"
 ai-execute = "ai_assistant.executor:main"
 
 [project.entry-points."ai_assistant.context_plugins"]
-trading = "ai_assistant.plugins.trading_plugin:TradingContextPlugin"
+# New convention: domains.<domain_name>
+domains.programming = "ai_assistant.plugins.domains.programming.context:ProgrammingContextPlugin"
+domains.finance = "ai_assistant.plugins.domains.finance.context:FinanceContextPlugin"
+domains.trading = "ai_assistant.plugins.domains.trading.context:TradingContextPlugin"
 
 [project.optional-dependencies]
 test = [
