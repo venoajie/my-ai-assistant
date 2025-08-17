@@ -34,7 +34,7 @@ The tool will only ever capture a maximum of **10,000 characters of standard out
 
 ## The Safety Mechanism: Always in Control
 
-Even with these safeguards, the system's [Safety Model](./safety_model.md) protects you. Any plan that uses `run_shell` will **always** halt and ask for your explicit manual approval before any command is executed.
+Even with these safeguards, the system's [Safety Model](./safety_model.md) protects you. Any plan that uses `run_shell` will **always** halt and ask for your explicit manual approval before any command is executed. If you approve the plan by typing `y`, the command runs. **If you deny the plan by typing `N`, the entire task is aborted instantly, and the AI will not proceed to synthesize a final answer.**
 
 ---
 

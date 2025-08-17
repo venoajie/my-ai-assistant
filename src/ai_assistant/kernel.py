@@ -7,12 +7,32 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from .config import ai_settings
+from .utils.context_optimizer import ContextOptimizer
 from .persona_loader import PersonaLoader
 from .planner import Planner
 from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
-from .utils.context_optimizer import ContextOptimizer
+
+
+async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Uses the cia-1 persona to find and inject the AGENTS.md file content.
+    This runs as a preliminary, low-cost step before the main orchestration.
+    """
+    agents_md_path = Path.cwd() / "AGENTS.md"
+    if agents_md_path.exists():
+        print(f"ℹ️  Found AGENTS.md. Injecting project context...")
+        try:
+            content = agents_md_path.read_text(encoding='utf-8')
+            context_str = f"<InjectedProjectContext file_path='AGENTS.md'>\n{content}\n</InjectedProjectContext>"
+            
+            # Prepend the context to the history for the planner
+            history.insert(0, {"role": "system", "content": context_str})
+            return history
+        except Exception as e:
+            print(f"⚠️  Warning: Could not read or inject AGENTS.md. Reason: {e}")
+    return history
 
 
 async def orchestrate_agent_run(
@@ -32,6 +52,9 @@ async def orchestrate_agent_run(
             }
         }
     timings = metrics["timings"]
+
+    # --- NATIVE CONTEXT INJECTION ---
+    history = await _inject_project_context(history)
 
     # --- PERSONA LOADING ---
     persona_directives: Optional[str] = None
@@ -145,7 +168,6 @@ async def orchestrate_agent_run(
     print("🚀 Executing adaptive plan...")
     observations = []
     step_results: Dict[int, str] = {}
-    any_tool_succeeded = False
     any_risky_action_denied = False
 
     for i, step in enumerate(plan):
@@ -180,14 +202,14 @@ async def orchestrate_agent_run(
                     print("    🚫 Action denied by user. Skipping step.")
                     observations.append(f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\nAction denied by user.\n</Observation>")
                     any_risky_action_denied = True
-                    continue
+                    # If user denies, the entire plan is aborted. Break the loop.
+                    break
             try:
                 success, result = tool(**args)
                 step_results[step_num] = result
                 if success:
                     observations.append(f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\n{result}\n</Observation>")
                     print(f"    ✅ Success.")
-                    any_tool_succeeded = True
                 else:
                     error_msg = f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\nError: {result}\n</Observation>"
                     observations.append(error_msg)
@@ -201,8 +223,9 @@ async def orchestrate_agent_run(
             print(f"    ❌ Failure: Tool '{tool_name}' not found.")
 
     # --- SYNTHESIS ---
-    if any_risky_action_denied and not any_tool_succeeded:
-        error_msg = "I was unable to complete the task because a necessary action was denied by the user for safety reasons."
+    # FIXED: If the user denied a risky action, halt immediately. The check is now simpler and correct.
+    if any_risky_action_denied:
+        error_msg = "Task aborted by user. No actions were performed."
         print(f"\n🛑 {error_msg}")
         return {
             "response": error_msg, 
@@ -213,7 +236,7 @@ async def orchestrate_agent_run(
 
     is_failure_state = False
     for obs in observations:
-        if obs.startswith("<Observation") and ("Error:" in obs or "Critical Error:" in obs or "Action denied by user" in obs):
+        if obs.startswith("<Observation") and ("Error:" in obs or "Critical Error:" in obs):
             is_failure_state = True
             break
 

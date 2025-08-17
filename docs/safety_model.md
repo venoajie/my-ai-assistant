@@ -55,4 +55,4 @@ If you choose to bypass the recommended workflow and run a modification task in 
     ----------------------------
           Proceed? [y/N]: 
     ```
-The system **will not proceed** with the file modification unless you manually type `y` and press Enter. This ensures that even in this less-safe mode, no change is ever made without your direct, real-time consent.
+The system **will not proceed** with the file modification unless you manually type `y` and press Enter. **If you type `N` or anything else, the entire task will be aborted immediately, and no further actions—including the final synthesis step—will be performed.**

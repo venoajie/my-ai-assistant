@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Jules Agent Manifest",
+  "description": "A schema for defining a series of file system operations for the Jules agent.",
+  "type": "object",
+  "properties": {
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": ["CREATE_FILE", "UPDATE_FILE", "DELETE_FILE"]
+          },
+          "path": {
+            "type": "string",
+            "description": "The relative path to the file from the repository root."
+          },
+          "content": {
+            "type": "string",
+            "description": "The full content of the file for CREATE_FILE and UPDATE_FILE operations."
+          }
+        },
+        "required": ["operation", "path"],
+        "if": {
+          "properties": { "operation": { "enum": ["CREATE_FILE", "UPDATE_FILE"] } }
+        },
+        "then": {
+          "required": ["content"]
+        }
+      }
+    }
+  },
+  "required": ["operations"]
+}

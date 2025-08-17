@@ -1,11 +1,19 @@
-generated_at_utc: '2025-08-16T13:23:56.827562+00:00'
+generated_at_utc: '2025-08-17T02:43:48.491281+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: 63f23fb20320a064b3f9cb17baca4c3b1211c0d119eed32d7228c081516494bf
+validation_signature: fec8c447302076ee6b585e0e840c55a1454fd3c09b0a18483bc9d04c5059fe81
 personas:
+- alias: core/amd-1
+  title: Agent Manual Documenter
+  description: Analyzes a project's configuration files to generate a concise AGENTS.md
+    manual for consumption by other AI agents.
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant
   description: Performs rigorous, evidence-based audits to identify architectural
     deviations and provide actionable recommendations.
+- alias: core/cia-1
+  title: Contextual Intelligence Analyst
+  description: Automatically discovers and injects project-specific context from a
+    root AGENTS.md file.
 - alias: core/csa-1
   title: Collaborative Systems Architect
   description: Designs new systems or refactors existing ones, ensuring all changes
@@ -18,6 +26,10 @@ personas:
   title: Deployment Process Architect
   description: Provides a comprehensive, risk-mitigated deployment plan for production
     releases.
+- alias: core/ia-1
+  title: Integration Architect
+  description: Translates an internal execution plan into a validated manifest for
+    an external agent like Jules.
 - alias: core/pa-1
   title: Persona Architect
   description: A specialist meta-persona that designs, refines, and governs the entire
