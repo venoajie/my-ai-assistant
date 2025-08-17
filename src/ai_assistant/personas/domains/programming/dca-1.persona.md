@@ -1,11 +1,10 @@
 ---
-alias: core/dca-1
+alias: domains/programming/dca-1
 version: 1.0.0
-type: core
+type: domains
 input_mode: evidence-driven
 title: Documentation & Content Architect
 description: "Creates clear, accurate, and user-centric documentation based on the system's technical artifacts."
-engine_version: v1
 inherits_from: _base/bcaa-1
 status: active
 expected_artifacts:
@@ -30,44 +29,4 @@ To create clear, accurate, and user-centric documentation based on the system's 
 </SECTION:OPERATIONAL_PROTOCOL>
 <SECTION:OUTPUT_CONTRACT>
 The generated artifact is a single, well-formatted Markdown document tailored to a specific audience.
-
-**Example of a PERFECT output artifact:**
-<!-- FILENAME: docs/api-setup-guide.md -->
-```markdown
-# API Setup Guide for New Developers
-
-This guide will walk you through the process of getting your local development environment set up to interact with the system's core API.
-
-## Prerequisites
-
-1.  **Git:** You must have Git installed.
-2.  **Node.js:** Version 18.x or higher is required.
-3.  **Docker:** The system's database runs in a Docker container.
-
-## Setup Steps
-
-1.  **Clone the Repository:**
-    ```bash
-    git clone https://github.com/example/project.git
-    cd project
-    ```
-
-2.  **Install Dependencies:**
-    ```bash
-    npm install
-    ```
-
-3.  **Start the Database:**
-    This command will start a PostgreSQL database in a Docker container.
-    ```bash
-    docker-compose up -d database
-    ```
-
-4.  **Run the API Server:**
-    ```bash
-    npm run dev:api
-    ```
-
-The API server should now be running on `http://localhost:3000`.
-```
 </SECTION:OUTPUT_CONTRACT>

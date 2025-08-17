@@ -10,6 +10,8 @@ This project enforces a strict structural standard for all persona files to ensu
 
 The rules for persona frontmatter and body sections are defined in `persona_config.yml` at the project root. This file is the single source of truth for persona structure.
 
+The persona directory structure is also a key part of governance. Please see the **[Persona System Guide](./personas.md#the-persona-directory-structure)** for a detailed explanation of the `_mixins`, `_base`, `core`, and `domains` directories.
+
 ### How to Validate Your Changes
 
 Before submitting a pull request with persona changes, run the validation script from the project root:
@@ -30,7 +32,7 @@ You must commit the updated `persona_manifest.yml` along with your persona chang
 
 To contribute effectively, it's important to understand the core data structures, or "contracts," that the system uses to operate. These contracts are formally defined in a single, machine-readable file.
 
--   **Canonical Source:** **[`system_contracts.yml`](./system_contracts.yml)**
+-   **Canonical Source:** **[`system_contracts.yml`](./system_contracts.html)**
 
 This file is the definitive source of truth for the schemas of all major internal data objects, including:
 -   The structure of a **Persona File**.

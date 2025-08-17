@@ -1,11 +1,7 @@
-generated_at_utc: '2025-08-17T07:47:15.391375+00:00'
+generated_at_utc: '2025-08-17T09:27:30.112908+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: 1d5cbfa8ced7495b311a8601abe891faac3d5f4b6290d7a78ab2995cd059b80f
+validation_signature: 51ba1da33b7f7a8b1675ef17f51e31f3847dd1813f1dbedd0c40e4f3b59b1390
 personas:
-- alias: core/amd-1
-  title: Agent Manual Documenter
-  description: Analyzes a project's configuration files to generate a concise AGENTS.md
-    manual for consumption by other AI agents.
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant
   description: Performs rigorous, evidence-based audits to identify architectural
@@ -14,26 +10,6 @@ personas:
   title: Contextual Intelligence Analyst
   description: Automatically discovers and injects project-specific context from a
     root AGENTS.md file.
-- alias: core/csa-1
-  title: Collaborative Systems Architect
-  description: Designs new systems or refactors existing ones, ensuring all changes
-    are harmonious with the established architecture.
-- alias: core/dca-1
-  title: Documentation & Content Architect
-  description: Creates clear, accurate, and user-centric documentation based on the
-    system's technical artifacts.
-- alias: core/dpa-1
-  title: Deployment Process Architect
-  description: Provides a comprehensive, risk-mitigated deployment plan for production
-    releases.
-- alias: core/ia-1
-  title: Integration Architect
-  description: Translates an internal execution plan into a validated manifest for
-    an external agent like Jules.
-- alias: core/jma-1
-  title: Jules Manifest Architect
-  description: Translates an internal execution plan into a JULES_MANIFEST.json file,
-    ready for handoff.
 - alias: core/pa-1
   title: Persona Architect
   description: A specialist meta-persona that designs, refines, and governs the entire
@@ -50,50 +26,83 @@ personas:
   title: API Contract Architect
   description: Designs API contracts for financial services, focusing on REST and
     OpenAPI standards.
+- alias: domains/google/gemini-analyst-1
+  title: Skeptical Gemini Analyst
+  description: Provides technically accurate, direct, and critical information about
+    Google's Gemini models.
+- alias: domains/language/eng-coach-1
+  title: Conversational English Coach
+  description: Helps improve natural, everyday English for online chats through interactive
+    practice and structured feedback.
+- alias: domains/programming/adr-1
+  title: Architectural Decision Analyst
+  description: Analyzes technical problems and generates structured Architectural
+    Decision Records (ADRs) to document key decisions.
+- alias: domains/programming/alignment-checker
+  title: Mandate Alignment Checker
+  description: Performs a semantic check to ensure a specialist's proposed plan aligns
+    with the user's original mandate.
+- alias: domains/programming/amd-1
+  title: Agent Manual Documenter
+  description: Analyzes a project's configuration files to generate a concise AGENTS.md
+    manual for consumption by other AI agents.
+- alias: domains/programming/bpr-1
+  title: Best Practices Reviewer
+  description: Acts as a senior peer reviewer for code quality, style, and adherence
+    to established best practices.
+- alias: domains/programming/csa-1
+  title: Collaborative Systems Architect
+  description: Designs new systems or refactors existing ones, ensuring all changes
+    are harmonious with the established architecture.
+- alias: domains/programming/da-1
+  title: Debugging Analyst
+  description: Diagnoses the root cause of bugs from error reports, stack traces,
+    and relevant source code.
+- alias: domains/programming/dca-1
+  title: Documentation & Content Architect
+  description: Creates clear, accurate, and user-centric documentation based on the
+    system's technical artifacts.
+- alias: domains/programming/dpa-1
+  title: Deployment Process Architect
+  description: Provides a comprehensive, risk-mitigated deployment plan for production
+    releases.
+- alias: domains/programming/ia-1
+  title: Integration Architect
+  description: Translates an internal execution plan into a validated manifest for
+    an external agent like Jules.
+- alias: domains/programming/jan-1
+  title: Project Janitor
+  description: Performs code cleanup tasks like removing comments, formatting, and
+    deleting specified code blocks.
+- alias: domains/programming/jma-1
+  title: Jules Manifest Architect
+  description: Translates an internal execution plan into a JULES_MANIFEST.json file,
+    ready for handoff.
+- alias: domains/programming/pba-1
+  title: Performance Bottleneck Analyst
+  description: Analyzes system behavior and metrics to identify and diagnose performance
+    bottlenecks.
+- alias: domains/programming/pva-1
+  title: Plan Validation Analyst
+  description: A skeptical analyst that reviews a proposed tool-use plan for flaws,
+    risks, and unstated assumptions.
+- alias: domains/programming/qsa-1
+  title: Quality Strategy Architect
+  description: Provides a comprehensive, risk-mitigated deployment plan for production
+    releases.
+- alias: domains/programming/sia-1
+  title: Systems Integrity Analyst
+  description: Audits system configurations and state to ensure they align with a
+    declared 'source of truth' document.
+- alias: domains/programming/sva-1
+  title: Security Vulnerability Auditor
+  description: Reviews code with an adversarial mindset to find potential security
+    vulnerabilities.
+- alias: domains/programming/tae-1
+  title: Test Automation Engineer
+  description: Generates automated tests (unit, integration, or end-to-end) for a
+    given source code file.
 - alias: domains/trading/qtsa-1
   title: Quantitative Strategy Analyst
   description: Guides the development of formal, testable trading strategy blueprints
     from high-level concepts.
-- alias: patterns/adr-1
-  title: Architectural Decision Analyst
-  description: Analyzes technical problems and generates structured Architectural
-    Decision Records (ADRs) to document key decisions.
-- alias: patterns/bpr-1
-  title: Best Practices Reviewer
-  description: Acts as a senior peer reviewer for code quality, style, and adherence
-    to established best practices.
-- alias: patterns/da-1
-  title: Debugging Analyst
-  description: Diagnoses the root cause of bugs from error reports, stack traces,
-    and relevant source code.
-- alias: patterns/pba-1
-  title: Performance Bottleneck Analyst
-  description: Analyzes system behavior and metrics to identify and diagnose performance
-    bottlenecks.
-- alias: patterns/pva-1
-  title: Plan Validation Analyst
-  description: A skeptical analyst that reviews a proposed tool-use plan for flaws,
-    risks, and unstated assumptions.
-- alias: patterns/qsa-1
-  title: Quality Strategy Architect
-  description: Analyzes a codebase to create a prioritized, risk-based testing plan.
-- alias: patterns/sia-1
-  title: Systems Integrity Analyst
-  description: Audits system configurations and state to ensure they align with a
-    declared 'source of truth' document.
-- alias: patterns/sva-1
-  title: Security Vulnerability Auditor
-  description: Reviews code with an adversarial mindset to find potential security
-    vulnerabilities.
-- alias: patterns/tae-1
-  title: Test Automation Engineer
-  description: Generates automated tests (unit, integration, or end-to-end) for a
-    given source code file.
-- alias: utility/alignment-checker
-  title: Mandate Alignment Checker
-  description: Performs a semantic check to ensure a specialist's proposed plan aligns
-    with the user's original mandate.
-- alias: utility/jan-1
-  title: Project Janitor
-  description: Performs code cleanup tasks like removing comments, formatting, and
-    deleting specified code blocks.

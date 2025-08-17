@@ -35,7 +35,7 @@ For tasks that require back-and-forth dialogue or multiple steps, **interactive 
 **To start an interactive session:**
 ```bash
 # Start an interactive session with the Systems Architect persona
-ai --interactive --persona core/csa-1
+ai --interactive --persona domains/programming/csa-1
 ```
 
 The application will start, and you will be given a prompt (`>`) to enter your queries. The assistant will remember the context of your entire conversation until you type `exit` or `quit`.
@@ -54,7 +54,7 @@ Use the `--output-dir` flag to have the AI analyze your request and generate a s
 
 ```bash
 # The AI will analyze the request and create a package in './ai_runs/refactor-01'
-ai --new-session --persona core/csa-1 --output-dir ./ai_runs/refactor-01 \
+ai --new-session --persona domains/programming/csa-1 --output-dir ./ai_runs/refactor-01 \
   -f src/services/distributor.py \
   "<ACTION>Refactor the 'distributor' service to improve its logging.</ACTION>"
 ```
@@ -103,7 +103,7 @@ files=(
 query="Analyze the attached files and describe their relationship."
 
 # Step 3: Execute the command safely.
-ai --new-session --persona core/csa-1 "${files[@]}" "$query"
+ai --new-session --persona domains/programming/csa-1 "${files[@]}" "$query"
 ```
 
 **How to run this script:**

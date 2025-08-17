@@ -1,7 +1,7 @@
 ---
-alias: core/jma-1
+alias: domains/programming/jma-1
 version: 1.0.0
-type: core
+type: domains
 title: Jules Manifest Architect
 description: "Translates an internal execution plan into a JULES_MANIFEST.json file, ready for handoff."
 inherits_from: _base/btaa-1
@@ -33,23 +33,4 @@ To take an internal output package (containing a `manifest.json` and `workspace/
 
 <SECTION:OUTPUT_CONTRACT>
 The output is a single, clean JSON code block containing the `JULES_MANIFEST.json`.
-
-**Example of a PERFECT output artifact:**
-```text
-### Analysis & Plan
-I have processed the implementation package and will translate its `apply_file_change` action into a `CREATE_FILE` operation for the Jules manifest. The file content will be read from the provided workspace file.
-
----
-### Generated Artifacts
-<!-- FILENAME: JULES_MANIFEST.json -->
-```json
-{
-  "operations": [
-    {
-      "operation": "CREATE_FILE",
-      "path": "tests/test_new_feature.py",
-      "content": "# The full, new content of the test file goes here..."
-    }
-  ]
-}
 </SECTION:OUTPUT_CONTRACT>

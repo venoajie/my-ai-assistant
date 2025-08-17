@@ -12,7 +12,7 @@ Your goal is to provide a clear, unambiguous "mission briefing" to a specialized
 
 The single most important factor for achieving high-quality results is to **use the right persona for the job**. The persona system is the foundation of this application's power.
 
--   **Why?** Personas are pre-programmed with a specific role, a core philosophy, and a structured operational protocol. Using `core/csa-1` doesn't just tell the AI to be a systems architect; it forces it to follow a proven, multi-step process for architectural tasks, leading to far more consistent and robust outputs than a generic prompt.
+-   **Why?** Personas are pre-programmed with a specific role, a core philosophy, and a structured operational protocol. Using `domains/programming/csa-1` doesn't just tell the AI to be a systems architect; it forces it to follow a proven, multi-step process for architectural tasks, leading to far more consistent and robust outputs than a generic prompt.
 
 -   **Action:** Before writing a prompt, check the `persona_manifest.yml` or run `ai --list-personas` to find the best specialist for your task.
 
@@ -22,14 +22,14 @@ The single most important factor for achieving high-quality results is to **use 
 
 *   **DO State the Goal First and Clearly.**
     Start your prompt with the most important outcome.
-    *   **Good:** `ai --persona core/csa-1 "<ACTION>Refactor the attached database.py to use a connection pool.</ACTION>"`
-    *   **Bad:** `ai --persona core/csa-1 "So, I was looking at our database code, and I think it's a bit slow. Maybe we could make it better? I was thinking about connection pooling..."`
+    *   **Good:** `ai --persona domains/programming/csa-1 "<ACTION>Refactor the attached database.py to use a connection pool.</ACTION>"`
+    *   **Bad:** `ai --persona domains/programming/csa-1 "So, I was looking at our database code, and I think it's a bit slow. Maybe we could make it better? I was thinking about connection pooling..."`
 
 *   **DO Use the `<ACTION>` Tag and Two-Stage Workflow for Any Changes.**
     For any task that modifies files or Git, you **MUST** use the `--output-dir` flag. To make your intent clear to both the system and the AI, you **SHOULD** wrap your core objective in `<ACTION>` tags. This is the standardized pattern for declaring a high-risk operation.
     *   **Best Practice:**
         ```bash
-        ai --persona core/csa-1 --output-dir ./my_run \
+        ai --persona domains/programming/csa-1 --output-dir ./my_run \
           "<ACTION>Generate a plan to refactor the database connection logic.</ACTION>"
         ```
     *   **Why?** This leverages the system's best features for safety and resilience. It also provides a stronger signal to the AI and allows the system's pre-flight checks to provide better safety reminders.
@@ -52,7 +52,7 @@ The single most important factor for achieving high-quality results is to **use 
     *   **Bad (Guaranteed to Fail):** A single `ai` command that attaches 18 files and asks the AI to modify all of them.
         ```bash
         # This will fail due to context truncation.
-        ai --persona core/dca-1 --output-dir ./my_run \
+        ai --persona domains/programming/dca-1 --output-dir ./my_run \
            -f file1.md -f file2.md ... (and 16 more files) \
            "Add a description to all 18 of these files."
         ```
@@ -68,7 +68,7 @@ The single most important factor for achieving high-quality results is to **use 
           output_dir="./run_$(basename "$file")"
           
           # Generate the plan for a SINGLE file
-          ai --persona core/dca-1 --output-dir "$output_dir" \
+          ai --persona domains/programming/dca-1 --output-dir "$output_dir" \
              -f "$file" "<ACTION>Add a description to this file and commit it.</ACTION>"
           
           # Execute the plan for that SINGLE file
@@ -80,7 +80,7 @@ The single most important factor for achieving high-quality results is to **use 
 *   **DON'T Mix "Thinking" and "Doing" in a Single Prompt.**
     The AI is best at one of two things: analyzing a situation OR generating a plan/artifact. Don't ask it to do both. The most effective automation scripts perform simple, deterministic actions (like `git add`, `git commit`, looping through files) themselves and only call the AI for the complex "thinking" parts.
     *   **Good (Analysis):** `ai --persona core/arc-1 "Analyze these two files and tell me the key differences."`
-    *   **Good (Generation):** `ai --persona core/csa-1 "Generate a plan to refactor file_A to be more like file_B."`
+    *   **Good (Generation):** `ai --persona domains/programming/csa-1 "Generate a plan to refactor file_A to be more like file_B."`
     *   **Bad:** `"Can you look at these files and figure out what's wrong, and then fix it and commit it?"`
 
 *   **DON'T Rely on the AI for "Creative" Git Operations.**
@@ -93,7 +93,7 @@ The single most important factor for achieving high-quality results is to **use 
 
 *   **Technique: The "Act As" Tactic for Missing Personas**
     If, and **only if**, a specialized persona for your specific, nuanced task does not exist, you can use the "Act As" tactic to provide a temporary, inline role. This is a fallback, not a replacement for using a proper persona.
-    *   **Use Case:** You need a quick security review, but a full `patterns/sva-1` (Security Vulnerability Auditor) persona doesn't exist yet.
+    *   **Use Case:** You need a quick security review, but a full `domains/programming/sva-1` (Security Vulnerability Auditor) persona doesn't exist yet.
     *   **Example:** `ai --persona core/arc-1 "Analyze the attached auth.py file. **For this task, act as a senior security reviewer** and generate a report highlighting potential vulnerabilities like injection risks or improper error handling."`
     *   This works by layering a specific instruction *on top of* a capable base persona (`core/arc-1` is a good choice for analysis).
 
@@ -114,7 +114,6 @@ You will see this critique in your terminal right before the confirmation prompt
 
 --- 🧐 ADVERSARIAL CRITIQUE ---
 - **Assumption Risk:** The plan assumes the parent directory for the new file already exists. The `write_file` step may fail if it does not.
-- **Recommendation:** Add a `run_shell` step with `mkdir -p` before the `write_file` step to ensure the target directory exists.
 ----------------------------
       Proceed? [y/N]:
 ```

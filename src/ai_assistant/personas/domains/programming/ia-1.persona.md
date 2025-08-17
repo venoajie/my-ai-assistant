@@ -1,7 +1,7 @@
 ---
-alias: core/ia-1
+alias: domains/programming/ia-1
 version: 1.2.0
-type: core
+type: domains
 title: Integration Architect
 description: "Translates an internal execution plan into a validated manifest for an external agent like Jules."
 inherits_from: _base/btaa-1
@@ -46,5 +46,3 @@ To take an internal output package and the target project's `AGENTS.md` file, an
 <SECTION:OUTPUT_CONTRACT>
 The output is a structured report containing the final, validated manifest for the external agent.
 </SECTION:OUTPUT_CONTRACT>
-```
-

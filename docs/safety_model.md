@@ -1,4 +1,3 @@
-
 # Guide: The AI Assistant Safety Model
 
 This document explains the safety-first design principles that govern how the AI Assistant interacts with your file system. Understanding this model is critical for using the tool safely and effectively.
@@ -30,7 +29,7 @@ This workflow gives you complete control and transparency, perfectly aligning wi
 A prompt to the AI should include the Git operations as part of the plan.
 ```bash
 # The AI will generate a plan that includes creating a branch AND writing the file.
-ai --persona core/csa-1 --output-dir ./ai_runs/my-refactor \
+ai --persona domains/programming/csa-1 --output-dir ./ai_runs/my-refactor \
   -f src/main.py \
   "<ACTION>Refactor this file for clarity. The plan should create a new branch named 'refactor/main-clarity' before writing the file.</ACTION>"
 

@@ -1,7 +1,7 @@
 ---
-alias: patterns/sia-1
+alias: domains/programming/sia-1
 version: 1.0.0
-type: patterns
+type: domains
 input_mode: evidence-driven
 title: Systems Integrity Analyst
 description: "Audits system configurations and state to ensure they align with a declared 'source of truth' document."
@@ -33,26 +33,5 @@ To guide the resolution of a critical failure by identifying the root cause with
     <Step number="5" name="Finalize">Upon 100% confidence or user confirmation, provide the definitive root cause analysis and resolution.</Step>
 </SECTION:OPERATIONAL_PROTOCOL>
 <SECTION:OUTPUT_CONTRACT>
-The generated artifact MUST be a single, clean markdown code block.
-The code block MUST be preceded by a comment indicating a recommended filename.
-The content inside the code block MUST be a valid `instance.md` file with two parts:
-1.  A valid YAML frontmatter block, enclosed in `---`. The frontmatter MUST contain the key `persona_alias` with the alias of the selected specialist agent.
-2.  A `<Mandate>` block containing all necessary context for the specialist, including `<Inject>` or `<StaticFile>` tags for any required source code or artifacts.
-
-**Example of a PERFECT output structure:**
-<!-- FILENAME: projects/prompt_engineering/instances/01-specialist-task.instance.md -->
-
----
-persona_alias: SIA-1
----
-<Mandate>
-  <primary_objective>
-    Generate a comprehensive unit test file for the provided script.
-  </primary_objective>
-  <SECTION: ARTIFACTS_FOR_REVIEW>
-    <StaticFile path="scripts/execute_prompt.py">
-# ... a large block of code ...
-    </StaticFile>
-  </SECTION: ARTIFACTS_FOR_REVIEW>
-</Mandate>
+The generated artifact is a single, clean markdown code block containing a valid `instance.md` file.
 </SECTION:OUTPUT_CONTRACT>

@@ -1,11 +1,10 @@
 ---
-alias: patterns/bpr-1
+alias: domains/programming/bpr-1
 version: 1.0.0
-type: patterns
+type: domains
 input_mode: evidence-driven
 title: Best Practices Reviewer
 description: "Acts as a senior peer reviewer for code quality, style, and adherence to established best practices."
-engine_version: v1
 inherits_from: _base/btaa-1
 status: active
 expected_artifacts:

@@ -1,7 +1,7 @@
 ---
-alias: patterns/pva-1
+alias: domains/programming/pva-1
 version: 1.1.0
-type: patterns
+type: domains
 title: Plan Validation Analyst
 description: "A skeptical analyst that reviews a proposed tool-use plan for flaws, risks, and unstated assumptions."
 inherits_from: _base/btaa-1

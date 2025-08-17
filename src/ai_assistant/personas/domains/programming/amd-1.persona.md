@@ -1,7 +1,7 @@
 ---
-alias: core/amd-1
+alias: domains/programming/amd-1
 version: 1.0.0
-type: core
+type: domains
 title: Agent Manual Documenter
 description: "Analyzes a project's configuration files to generate a concise AGENTS.md manual for consumption by other AI agents."
 inherits_from: _base/btaa-1
@@ -38,25 +38,4 @@ To analyze a set of project configuration files and generate a structured `AGENT
 
 <SECTION:OUTPUT_CONTRACT>
 The output is a single, complete `AGENTS.md` file.
-
-**Example of a PERFECT output artifact:**
-```text
-### Analysis & Plan
-I have analyzed the provided `pyproject.toml` and `docker-compose.yml` files. I will extract the core commands for dependency installation, testing, and linting to create a concise `AGENTS.md` file suitable for an external AI agent.
-
----
-### Generated Artifacts
-<!-- FILENAME: AGENTS.md -->
-```markdown
-# AGENTS.md: Operator's Manual for AI Assistant
-
-## 1. Project Overview
-This repository contains a command-line AI assistant built in Python. It is managed using Docker Compose.
-
-## 2. Core Commands
-- **Install Dependencies:** `pip install -e .[test]`
-- **Run Tests:** `docker compose run --rm test`
-- **Run Linters:** `docker compose run --rm lint`
-```
 </SECTION:OUTPUT_CONTRACT>
-```
