@@ -1,6 +1,3 @@
-
-<!-- FILENAME: docs/index.md -->
-```markdown
 # AI Assistant Documentation
 
 Welcome to the official documentation for the AI Assistant. This site provides in-depth guides to help you get the most out of the tool, whether you are a new user or an experienced developer looking to contribute.
@@ -21,5 +18,6 @@ Welcome to the official documentation for the AI Assistant. This site provides i
 
 ## For Developers & Contributors
 
+-   **[Contributing Guide](./contributing.md):** Information on how to contribute to the project, including our persona governance standards.
+-   **[System Contracts](./system_contracts.yml):** The canonical, machine-readable definition of the system's core data structures.
 -   **[Extending with Plugins](./plugins.md):** Learn how to create custom plugins to inject domain-specific knowledge into the assistant.
--   **[Contributing Guide](./contributing.md):** Information on how to contribute to the project, including our persona governance standards and an overview of the system's core data contracts.

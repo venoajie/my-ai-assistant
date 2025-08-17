@@ -32,7 +32,7 @@ You must commit the updated `persona_manifest.yml` along with your persona chang
 
 To contribute effectively, it's important to understand the core data structures, or "contracts," that the system uses to operate. These contracts are formally defined in a single, machine-readable file.
 
--   **Canonical Source:** **[`system_contracts.yml`](./system_contracts.html)**
+-   **Canonical Source:** **[`system_contracts.yml`](./system_contracts.yml)**
 
 This file is the definitive source of truth for the schemas of all major internal data objects, including:
 -   The structure of a **Persona File**.

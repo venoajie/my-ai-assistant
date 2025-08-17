@@ -14,13 +14,6 @@ persona_types:
       - "type"
       - "title"
       - "description"
-  patterns:
-    required_keys:
-      - "alias"
-      - "version"
-      - "type"
-      - "title"
-      - "description"
   domains:
     required_keys:
       - "alias"
@@ -28,8 +21,6 @@ persona_types:
       - "type"
       - "title"
       - "description"
-  utility:
-    required_keys: [ "alias", "version", "type", "title", "description" ]
 
 # Defines the canonical schema for the body of a persona file, based on its type.
 # Types with an empty list [] will skip body validation.
@@ -39,17 +30,10 @@ body_schemas_by_type:
     - "PRIMARY_DIRECTIVE"
     - "OPERATIONAL_PROTOCOL"
     - "OUTPUT_CONTRACT"
-  patterns:
-    - "CORE_PHILOSOPHY"
-    - "PRIMARY_DIRECTIVE"
-    - "OPERATIONAL_PROTOCOL"
-    - "OUTPUT_CONTRACT"
   domains:
     - "CORE_PHILOSOPHY"
     - "PRIMARY_DIRECTIVE"
     - "OPERATIONAL_PROTOCOL"
-    - "OUTPUT_CONTRACT"
-  utility:
     - "OUTPUT_CONTRACT"
     
 # Defines which persona statuses the validation script should process.
