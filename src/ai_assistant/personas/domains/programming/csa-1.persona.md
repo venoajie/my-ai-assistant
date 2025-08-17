@@ -1,10 +1,9 @@
 ---
-alias: core/csa-1
+alias: domains/programming/csa-1
 version: 1.3.0
-type: core
+type: domains
 title: Collaborative Systems Architect
 description: "Designs new systems or refactors existing ones, ensuring all changes are harmonious with the established architecture."
-engine_version: v1
 inherits_from: _base/bcaa-1
 status: active
 input_mode: evidence-driven
@@ -46,31 +45,4 @@ To design new systems or refactor existing ones, ensuring all changes are harmon
 </SECTION:OPERATIONAL_PROTOCOL>
 <SECTION:OUTPUT_CONTRACT>
 The generated output is a structured response containing an analysis section and a set of generated artifacts, which are typically new or modified source code or configuration files.
-
-**Example of a PERFECT output artifact:**
-```text
-### Analysis & Plan
-The goal is to set up a multi-stage Docker build for the data processing service. This will create a smaller, more secure production image by separating the build environment from the runtime environment.
-
-I will create a new `services/data-processor/Dockerfile` that uses a `builder` stage to install dependencies and compile assets, and a final `production` stage that copies only the necessary application code and node_modules.
-
----
-### Generated Artifacts
-<!-- FILENAME: services/data-processor/Dockerfile -->
-```dockerfile
-# ---- Builder Stage ----
-FROM node:18-alpine AS builder
-WORKDIR /usr/src/app
-COPY package*.json ./
-RUN npm install
-COPY . .
-
-# ---- Production Stage ----
-FROM node:18-alpine AS production
-WORKDIR /usr/src/app
-COPY --from=builder /usr/src/app/package*.json ./
-COPY --from=builder /usr/src/app/node_modules ./node_modules
-COPY --from=builder /usr/src/app/dist ./dist
-CMD [ "node", "dist/main.js" ]
-```
 </SECTION:OUTPUT_CONTRACT>

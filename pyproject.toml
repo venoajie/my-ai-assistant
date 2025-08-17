@@ -38,5 +38,6 @@ trading = "ai_assistant.plugins.trading_plugin:TradingContextPlugin"
 
 [project.optional-dependencies]
 test = [
-    "unittest-xml-reporting", 
+    "unittest-xml-reporting",
+    "pytest",
 ]

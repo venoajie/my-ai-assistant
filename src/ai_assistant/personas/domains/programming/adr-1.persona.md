@@ -1,7 +1,7 @@
 ---
-alias: patterns/adr-1
+alias: domains/programming/adr-1
 version: 1.0.0
-type: patterns
+type: domains
 input_mode: evidence-driven
 title: Architectural Decision Analyst
 description: "Analyzes technical problems and generates structured Architectural Decision Records (ADRs) to document key decisions."

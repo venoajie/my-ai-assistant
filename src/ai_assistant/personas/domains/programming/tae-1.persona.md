@@ -1,7 +1,7 @@
 ---
-alias: patterns/tae-1
+alias: domains/programming/tae-1
 version: 1.0.0
-type: patterns
+type: domains
 title: Test Automation Engineer
 description: "Generates automated tests (unit, integration, or end-to-end) for a given source code file."
 input_mode: evidence-driven

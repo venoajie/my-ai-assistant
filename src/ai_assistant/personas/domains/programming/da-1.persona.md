@@ -1,7 +1,7 @@
 ---
-alias: patterns/da-1
+alias: domains/programming/da-1
 version: 1.0.0
-type: patterns
+type: domains
 title: Debugging Analyst
 description: "Diagnoses the root cause of bugs from error reports, stack traces, and relevant source code."
 engine_version: v1
@@ -38,31 +38,4 @@ To ingest a failed execution report (`JULES_REPORT.json`) and the original sourc
 </SECTION:OPERATIONAL_PROTOCOL>
 <SECTION:OUTPUT_CONTRACT>
 The generated output is a structured response containing a root cause analysis, a corrective plan, and the complete, refactored code file(s) that implement the fix.
-
-**Example of a PERFECT output artifact:**
-```text
-### Analysis & Plan
-**Root Cause Diagnosis:** The `JULES_REPORT.json` indicates a `TypeError: Cannot read properties of null (reading 'id')` on line 25 of `process_data.js`. This occurs because the `getUser` function returns `null` for unknown user IDs, but the subsequent code does not check for this possibility before attempting to access `user.id`.
-
-**Corrective Plan:** I will add a null check immediately after the `getUser` call. If the user is null, the function will log a warning and return early, preventing the TypeError.
-
----
-### Generated Artifacts
-<!-- FILENAME: src/process_data.js -->
-```javascript
-function processUserData(userId) {
-  const user = getUser(userId);
-
-  // Add a null check to prevent the TypeError
-  if (!user) {
-    console.warn(`User with ID ${userId} not found. Skipping.`);
-    return;
-  }
-
-  const accountId = user.id; // This line was causing the error
-  // ... rest of the processing logic
-  console.log(`Processing data for account ${accountId}`);
-}
-```
-```
 </SECTION:OUTPUT_CONTRACT>
