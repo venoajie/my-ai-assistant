@@ -9,18 +9,20 @@ import yaml
 from importlib import metadata, resources
 from datetime import datetime
 import time
+import hashlib
+import json
 
 from . import kernel 
 from .config import ai_settings
 from .context_plugin import ContextPluginBase
+from .utils.context_optimizer import ContextOptimizer
 from .persona_loader import PersonaLoader
+from .utils.persona_validator import PersonaValidator
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from .session_manager import SessionManager
-from .utils.colors import Colors
-from .utils.context_optimizer import ContextOptimizer
-from .utils.persona_validator import PersonaValidator
-from .utils.result_presenter import present_result
+from .colors import Colors
 from .utils.signature import calculate_persona_signature
+from .result_presenter import present_result
 
     
 def is_manifest_invalid(manifest_path: Path):
@@ -337,7 +339,7 @@ def print_summary_metrics(
     metrics: Dict[str, Any],
     ):
     
-    """Prints the processing time and estimated token usage."""
+    """Prints the processing time and estimated token usage for one-shot mode."""
     total_duration = end_time - start_time
     timings = metrics.get("timings", {})
     planning_tokens = metrics.get("tokens", {}).get("planning", {}).get("total", 0)
@@ -363,7 +365,35 @@ def print_summary_metrics(
            f"{Colors.BLUE}Time ({time_str}){Colors.RESET} | "            
           f"{Colors.MAGENTA}Est. Tokens: {token_str}{Colors.RESET}")
     print(f"{Colors.DIM}{'-' * 60}{Colors.RESET}")
+
+def print_interactive_summary_metrics(
+    turn_metrics: Dict[str, Any],
+    session_tokens: Dict[str, int]
+    ):
+    """Prints metrics for a turn in interactive mode, including session totals."""
+    # Turn-specific metrics
+    turn_duration = turn_metrics.get("timings", {}).get("total", 0)
+    turn_tokens_data = turn_metrics.get("tokens", {})
+    turn_planning = turn_tokens_data.get("planning", {}).get("total", 0)
+    turn_critique = turn_tokens_data.get("critique", {}).get("total", 0)
+    turn_synthesis = turn_tokens_data.get("synthesis", {}).get("total", 0)
+    turn_total_tokens = turn_planning + turn_critique + turn_synthesis
+
+    # Session totals
+    session_total_tokens = sum(session_tokens.values())
+
+    print(f"{Colors.DIM}{'-' * 60}{Colors.RESET}")
+    # Turn Metrics Line
+    turn_time_str = f"Time: {Colors.BOLD}{turn_duration:.2f}s{Colors.RESET}"
+    turn_token_str = f"Tokens: {Colors.BOLD}{turn_total_tokens}{Colors.RESET} (P:{turn_planning} C:{turn_critique} S:{turn_synthesis})"
+    print(f"📊 {Colors.CYAN}Turn Metrics:{Colors.RESET} {Colors.BLUE}{turn_time_str}{Colors.RESET} | {Colors.MAGENTA}{turn_token_str}{Colors.RESET}")
     
+    # Session Metrics Line
+    session_token_str = f"Total Tokens: {Colors.BOLD}{session_total_tokens}{Colors.RESET} (P:{session_tokens['planning']} C:{session_tokens['critique']} S:{session_tokens['synthesis']})"
+    print(f" cumulatively {Colors.CYAN}Session Totals:{Colors.RESET} {Colors.MAGENTA}{session_token_str}{Colors.RESET}")
+    print(f"{Colors.DIM}{'-' * 60}{Colors.RESET}")
+
+
 async def run_one_shot(
     query: str,
     display_query: str,
@@ -416,6 +446,8 @@ async def run_interactive_session(
     if is_autonomous: print(f"{Colors.RED}{Colors.BOLD}🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨{Colors.RESET}")
 
     session_manager = SessionManager()
+    session_total_tokens = {"planning": 0, "critique": 0, "synthesis": 0}
+
     while True:
         try:
             query = await asyncio.to_thread(input, f"\n{Colors.GREEN}> {Colors.RESET}")
@@ -424,29 +456,35 @@ async def run_interactive_session(
 
             start_time = time.monotonic()
             
-            # The history already contains the initial context from the CLI call.
-            # We only need to add the new user query.
             current_turn_history = session_manager.update_history(list(history), "user", query)
             
             result_data = await kernel.orchestrate_agent_run(
                 query=query,
-                history=current_turn_history, # Pass the history with the latest query
+                history=current_turn_history,
                 persona_alias=persona_alias,
                 is_autonomous=is_autonomous,
             )
             
             response = result_data["response"]
+            end_time = time.monotonic()
+
+            # --- Metrics Calculation ---
+            turn_metrics = result_data.get("metrics", {})
+            turn_metrics.setdefault("timings", {})["total"] = end_time - start_time
+            
+            turn_tokens = turn_metrics.get("tokens", {})
+            session_total_tokens["planning"] += turn_tokens.get("planning", {}).get("total", 0)
+            session_total_tokens["critique"] += turn_tokens.get("critique", {}).get("total", 0)
+            session_total_tokens["synthesis"] += turn_tokens.get("synthesis", {}).get("total", 0)
 
             print("\n" + f"{Colors.DIM}{'='*60}{Colors.RESET}")
             print(present_result(response))
             print(f"{Colors.DIM}{'='*60}{Colors.RESET}")
 
-            end_time = time.monotonic()
-            print_summary_metrics(
-                start_time, 
-                end_time, 
-                result_data.get("metrics", {}),
-                )
+            print_interactive_summary_metrics(
+                turn_metrics=turn_metrics,
+                session_tokens=session_total_tokens
+            )
 
             # Update the main history object for the next loop iteration
             history = session_manager.update_history(current_turn_history, "model", response)
