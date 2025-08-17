@@ -17,21 +17,25 @@ from .tools import TOOL_REGISTRY
 
 async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Uses the cia-1 persona to find and inject the AGENTS.md file content.
+    Finds and injects content from files specified in the configuration.
     This runs as a preliminary, low-cost step before the main orchestration.
     """
-    agents_md_path = Path.cwd() / "AGENTS.md"
-    if agents_md_path.exists():
-        print(f"ℹ️  Found AGENTS.md. Injecting project context...")
-        try:
-            content = agents_md_path.read_text(encoding='utf-8')
-            context_str = f"<InjectedProjectContext file_path='AGENTS.md'>\n{content}\n</InjectedProjectContext>"
-            
-            # Prepend the context to the history for the planner
-            history.insert(0, {"role": "system", "content": context_str})
-            return history
-        except Exception as e:
-            print(f"⚠️  Warning: Could not read or inject AGENTS.md. Reason: {e}")
+    injected_any = False
+    for filename in ai_settings.general.auto_inject_files:
+        file_path = Path.cwd() / filename
+        if file_path.exists():
+            print(f"ℹ️  Found '{filename}'. Injecting project context...")
+            injected_any = True
+            try:
+                content = file_path.read_text(encoding='utf-8')
+                context_str = f"<InjectedProjectContext file_path='{filename}'>\n{content}\n</InjectedProjectContext>"
+                # Prepend the context to the history for the planner
+                history.insert(0, {"role": "system", "content": context_str})
+            except Exception as e:
+                print(f"⚠️  Warning: Could not read or inject {filename}. Reason: {e}")
+    
+    if injected_any:
+        return history
     return history
 
 
@@ -128,8 +132,9 @@ async def orchestrate_agent_run(
         print("🕵️  Submitting plan for adversarial validation...")
         try:
             critic_loader = PersonaLoader()
-            # The critic persona is hardcoded for reliability
-            _, critic_context = critic_loader.load_persona_content('patterns/pva-1')
+            # The critic persona is now loaded from config for better maintainability
+            critic_alias = ai_settings.general.critique_persona_alias
+            _, critic_context = critic_loader.load_persona_content(critic_alias)
             
             critique_prompt = prompt_builder.build_critique_prompt(
                 query=query,
@@ -257,10 +262,11 @@ async def orchestrate_agent_run(
         print("   ...A failure was detected. Switching to Debugging Analyst persona...")
         loader = PersonaLoader()
         try:
-            final_directives, final_context = loader.load_persona_content('patterns/da-1')
+            failure_alias = ai_settings.general.failure_persona_alias
+            final_directives, final_context = loader.load_persona_content(failure_alias)
         except (FileNotFoundError, RecursionError) as e:
-            print(f"   - ⚠️ CRITICAL: Could not load failure persona 'da-1'. Reason: {e}")
-            final_context = "CRITICAL: The primary task failed, and the 'da-1' recovery persona could not be loaded. Your only job is to report the raw tool observations to the user clearly."
+            print(f"   - ⚠️ CRITICAL: Could not load failure persona '{ai_settings.general.failure_persona_alias}'. Reason: {e}")
+            final_context = "CRITICAL: The primary task failed, and the recovery persona could not be loaded. Your only job is to report the raw tool observations to the user clearly."
             final_directives = None
 
     if not final_context:

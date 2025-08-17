@@ -112,8 +112,8 @@ contracts:
             description: "The AI's 'thought' or rationale for the action."
           - field: ...other_params
             type: any
-            description: "Action-specific fields (e.g., 'branch_name', 'path', 'message')."
-        </StaticFile>
+            description: "Action-specific fields (e.g., 'branch_name', 'path', 'message')."        
+            </StaticFile>
         <StaticFile path="persona_config.yml">
         # persona_config.yml
 # This file is the single source of truth for persona architectural rules.
@@ -231,25 +231,65 @@ providers:
         <Inject src="src/ai_assistant/config.py"/>
         <Inject src="src/ai_assistant/planner.py"/>
         <Inject src="src/ai_assistant/prompt_builder.py"/>
-        <Inject src="src/ai_assistant/persona_loader.py"/>
-        <Inject src="src/ai_assistant/persona_validator.py"/>
         <Inject src="src/ai_assistant/executor.py"/>
         <Inject src="src/ai_assistant/tools.py"/>
+
+        <Inject src="src/ai_assistant/persona_loader.py"/>
+        <Inject src="src/ai_assistant/persona_validator.py"/>
         <Inject src="src/ai_assistant/_security_guards.py"/>
         <Inject src="src/ai_assistant/response_handler.py"/>
         <Inject src="src/ai_assistant/session_manager.py"/>
         <Inject src="src/ai_assistant/plugins/trading_plugin.py"/>
         <Inject src="scripts/generate_manifest.py"/>
 
+    # --- Key Process Artifacts (The Governance) ---
+
         <!-- Supporting Documents -->
-        <Inject src="README.md"/>
-        <!-- Relevant personas to be embodied later -->
-        <Inject src="src/ai_assistant/personas/core/arc-1.persona.md"/>
-        <Inject src="src/ai_assistant/personas/core/dca-1.persona.md"/>
-        <Inject src="src/ai_assistant/personas/core/csa-1.persona.md"/>
-        <Inject src="src/ai_assistant/personas/_base_/bcaa-1.persona.md"/>
-        <Inject src="src/ai_assistant/personas/_base/btaa-1.persona.md"/>
-        
+        <Inject src="scripts/generate_manifest.py"/>
+        <StaticFile path="pyproject.toml">
+        [build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my-ai-assistant"
+version = "1.2.0"
+description = "AI Assistant for Software Development"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+      "aiohttp",
+      "requests",
+      "pyyaml",
+      "pydantic>=2.0",
+      ]
+
+[project.scripts]
+ai = "ai_assistant.cli:main"
+ai-execute = "ai_assistant.executor:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ai_assistant*"]
+
+[tool.setuptools.package-data]
+ai_assistant = [
+    "default_config.yml",
+    "personas/**/*.md",
+    "personas/**/*.py"
+]
+
+[project.entry-points."ai_assistant.context_plugins"]
+trading = "ai_assistant.plugins.trading_plugin:TradingContextPlugin"
+
+[project.optional-dependencies]
+test = [
+    "unittest-xml-reporting", 
+]
+
 
     </SECTION:ARTIFACTS_FOR_REVIEW>
 </Mandate>

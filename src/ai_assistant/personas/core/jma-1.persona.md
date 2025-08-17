@@ -52,3 +52,4 @@ I have processed the implementation package and will translate its `apply_file_c
     }
   ]
 }
+</SECTION:OUTPUT_CONTRACT>

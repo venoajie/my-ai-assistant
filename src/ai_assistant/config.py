@@ -17,6 +17,9 @@ class GeneralConfig(BaseModel):
     sessions_directory: str
     max_file_size_mb: int
     universal_base_persona: Optional[str] = None
+    auto_inject_files: List[str] = Field(default_factory=list)
+    critique_persona_alias: str
+    failure_persona_alias: str
 
 class ContextOptimizerConfig(BaseModel):
     max_tokens: int

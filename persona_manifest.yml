@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-17T02:43:48.491281+00:00'
+generated_at_utc: '2025-08-17T07:47:15.391375+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: fec8c447302076ee6b585e0e840c55a1454fd3c09b0a18483bc9d04c5059fe81
+validation_signature: 1d5cbfa8ced7495b311a8601abe891faac3d5f4b6290d7a78ab2995cd059b80f
 personas:
 - alias: core/amd-1
   title: Agent Manual Documenter
@@ -30,6 +30,10 @@ personas:
   title: Integration Architect
   description: Translates an internal execution plan into a validated manifest for
     an external agent like Jules.
+- alias: core/jma-1
+  title: Jules Manifest Architect
+  description: Translates an internal execution plan into a JULES_MANIFEST.json file,
+    ready for handoff.
 - alias: core/pa-1
   title: Persona Architect
   description: A specialist meta-persona that designs, refines, and governs the entire

@@ -1,5 +1,5 @@
 # ai_assistant/default_config.yml
-config_version: "1.3.0"
+config_version: "1.4.0" # Version incremented for new config schema
 model_selection:
   planning: "deepseek-coder"
   critique: "deepseek-coder"
@@ -10,6 +10,11 @@ general:
   sessions_directory: ".ai_sessions"
   max_file_size_mb: 5
   universal_base_persona: "_mixins/codegen-standards-1"
+  # NEW: Centralized configuration for auto-injected files and special personas
+  auto_inject_files:
+    - "AGENTS.md"
+  critique_persona_alias: "patterns/pva-1"
+  failure_persona_alias: "patterns/da-1"
 context_optimizer:
   max_tokens: 8000
   # If estimated input tokens exceed this, use compact prompts. Set to 0 to always use verbose prompts.
