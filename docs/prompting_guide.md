@@ -91,30 +91,41 @@ The single most important factor for achieving high-quality results is to **use 
 
 ## Advanced Techniques & Caveats
 
-*   **Technique: The "Act As" Tactic for Missing Personas**
-    If, and **only if**, a specialized persona for your specific, nuanced task does not exist, you can use the "Act As" tactic to provide a temporary, inline role. This is a fallback, not a replacement for using a proper persona.
+### Technique: Using a "Red Team" Persona for Premise Validation
+
+Before starting a significant task based on an external article or a complex proposal, it's a best practice to validate its core assumptions. A "red team" persona acts as a skeptical analyst to help you do this.
+
+-   **Why?** This saves time by preventing you from investing effort in a task based on a flawed or misunderstood premise.
+-   **Persona:** `domains/google/gemini-analyst-1`
+-   **Workflow:**
+    1.  Save the article or proposal you want to analyze into a text file (e.g., `article_to_analyze.txt`).
+    2.  Use a script to have the analyst review it. This persona will produce a structured report that checks the claims against facts.
+
+-   **Example Script (`prompt_library/audits/validate_article_premise.sh`):**
+    ```bash
+    #!/bin/bash
+    set -e
+    
+    # --- Configuration ---
+    persona_alias="domains/google/gemini-analyst-1"
+    article_file="article_to_analyze.txt" # <-- Target file
+    
+    if [ ! -f "$article_file" ]; then
+        echo "ERROR: Article file not found at '$article_file'"
+        exit 1
+    fi
+    
+    query="Analyze the attached article. Your entire response must adhere strictly to your operational protocol."
+    
+    # --- Execution ---
+    ai --new-session --persona "$persona_alias" -f "$article_file" "$query"
+    ```
+
+### Technique: The "Act As" Tactic for Missing Personas
+If, and **only if**, a specialized persona for your specific, nuanced task does not exist, you can use the "Act As" tactic to provide a temporary, inline role. This is a fallback, not a replacement for using a proper persona.
     *   **Use Case:** You need a quick security review, but a full `domains/programming/sva-1` (Security Vulnerability Auditor) persona doesn't exist yet.
     *   **Example:** `ai --persona core/arc-1 "Analyze the attached auth.py file. **For this task, act as a senior security reviewer** and generate a report highlighting potential vulnerabilities like injection risks or improper error handling."`
     *   This works by layering a specific instruction *on top of* a capable base persona (`core/arc-1` is a good choice for analysis).
 
-*   **Caveat: Negative Constraints are Unreliable.**
-    Telling the AI "Do not include a push step" is less reliable than giving it a positive list of actions that simply omits the push step. It's better to specify exactly what you *do* want.
-
-
-### The Safety Net: Adversarial Validation
-
-To increase safety, the AI Assistant uses an "Adversarial Validation Chain." After the Planner generates an execution plan but before you are asked to confirm it, the plan is passed to a skeptical critic persona. This critic's job is to find potential flaws, risks, or unstated assumptions.
-
-You will see this critique in your terminal right before the confirmation prompt for any risky action.
-
-**Example of the User Experience:**
-```
-🚀 Executing adaptive plan...
-  - Executing Step 1: write_file(...)
-
---- 🧐 ADVERSARIAL CRITIQUE ---
-- **Assumption Risk:** The plan assumes the parent directory for the new file already exists. The `write_file` step may fail if it does not.
-----------------------------
-      Proceed? [y/N]:
-```
-This gives you a "second opinion" from the AI itself, helping you make a more informed decision about whether to proceed.
+### Caveat: Negative Constraints are Unreliable.
+Telling the AI "Do not include a push step" is less reliable than giving it a positive list of actions that simply omits the push step. It's better to specify exactly what you *do* want.

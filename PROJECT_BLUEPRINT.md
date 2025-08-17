@@ -1,12 +1,12 @@
 # PROJECT BLUEPRINT: AI Assistant
 
-<!-- Version: 1.1 -->
+<!-- Version: 2.0 -->
 
 ## 1. System Overview and Core Purpose
 
 This document is the canonical source of truth for the architectural principles and governance of the AI Assistant project. It serves as a "constitution" for human developers and a "README for the AI," ensuring that all development and AI-driven actions are aligned with the core design philosophy.
 
-The system is a command-line-native, persona-driven agent designed to assist with software development tasks. Its primary purpose is to provide a safe, reliable, and extensible framework for leveraging Large Language Models to perform complex, multi-step operations on a local file system and to prepare validated instructions for external execution agents.
+The system is a command-line-native, persona-driven agent designed to assist with software development and other knowledge-work tasks. Its primary purpose is to provide a safe, reliable, and extensible framework for leveraging Large Language Models to perform complex, multi-step operations.
 
 ---
 
@@ -15,88 +15,52 @@ The system is a command-line-native, persona-driven agent designed to assist wit
 The architecture is built on three foundational principles:
 
 ### 2.1. Persona-First Operation
-The primary interface for quality and control is the **Persona System**. All complex tasks should be initiated through a specialized persona. This ensures that AI behavior is constrained, predictable, and follows a proven operational protocol, rather than relying on generic, ad-hoc prompting.
+The primary interface for quality and control is the **Persona System**. All complex tasks should be initiated through a specialized persona. This ensures that AI behavior is constrained, predictable, and follows a proven operational protocol.
 
 ### 2.2. Decoupled Execution
-A strict separation is maintained between **AI-driven analysis (thinking)** and **deterministic execution (doing)**. The AI's primary output for any task that modifies the system is a reviewable "Output Package." A separate, non-AI `executor` script then applies these changes. This provides a critical safety layer, enhances resilience, and improves auditability.
+A strict separation is maintained between **AI-driven analysis (thinking)** and **deterministic execution (doing)**. The AI's primary output for any task that modifies the system is a reviewable "Output Package." A separate, non-AI `executor` script then applies these changes. This provides a critical safety layer and enhances auditability.
 
 #### 2.2.1. Adversarial Validation
-To enhance the safety of the "thinking" phase, the system employs an Adversarial Validation Chain. After an initial execution plan is generated, it is passed to a specialized, skeptical "critic" persona. This critic's sole purpose is to identify potential flaws, unstated assumptions, and risks in the plan. The resulting critique is then presented to the human operator alongside the plan, providing a deeper layer of analysis before any action is confirmed. This principle acts as an automated "red team" review for the AI's own logic.
+To enhance the safety of the "thinking" phase, the system employs an Adversarial Validation Chain. After an initial execution plan is generated, it is passed to a specialized, skeptical "critic" persona. This critic's sole purpose is to identify potential flaws, unstated assumptions, and risks in the plan. This principle acts as an automated "red team" review for the AI's own logic.
 
 ### 2.3. Explicit Governance
-The behavior and structure of the persona ecosystem are not arbitrary. They are governed by a set of explicit, machine-readable rules in `persona_config.yml`. All personas are validated against these rules, and a cryptographically signed `persona_manifest.yml` ensures the application's runtime understanding of its capabilities is never out of sync with the committed source code.
+The behavior and structure of the persona ecosystem are governed by a set of explicit, machine-readable rules in `persona_config.yml`. All personas are validated against these rules, and a cryptographically signed `persona_manifest.yml` ensures the application's runtime understanding of its capabilities is never out of sync with the committed source code.
 
 ---
 
 ## 3. Persona Directory & Chain of Command
 
-The persona ecosystem is a team of specialists with a clear hierarchy of responsibility.
+The persona ecosystem is a team of specialists with a clear, hierarchical structure.
 
--   **`_base/` & `_mixins/` (Foundations):** Abstract base classes and mixins.
+-   **`_mixins/` & `_base/` (Foundations):** These are the architectural foundations. `_mixins` provide shared directives (like coding standards), while `_base` personas define the core archetypes for agent behavior (e.g., collaborative vs. analytical). All specialist personas MUST inherit from a base persona.
 
--   **`core/` (The Architects & Managers):** The senior leadership team.
-    -   `pmo-1`: Manages long-running projects.
-    -   `csa-1`, `dca-1`, `pa-1`: Handle system architecture, documentation, and persona governance.
-    -   `amd-1`: Generates `AGENTS.md` manuals for target projects.
-    -   **`jma-1` (Jules Manifest Architect):** A new, focused persona that replaces `ia-1`. Its sole responsibility is to translate a local output package into a `JULES_MANIFEST.json`.
+-   **`core/` (The Orchestrators & Governors):** This directory is reserved exclusively for "meta-governance" and "orchestration" personas. These are agents that manage the AI Assistant *itself* or the workflow between other agents. They do not perform domain-specific tasks.
 
--   **`patterns/` (The Specialists):** Expert individual contributors who solve common software development problems.
-
--   **`domains/` (The Domain Experts):** Specialists with knowledge external to software engineering.
+-   **`domains/` (The Specialists):** This is the primary location for all specialist agents that perform concrete, domain-specific tasks. The ecosystem is designed to be scaled by adding new experts to this directory (e.g., `programming/`, `writing/`, `google/`).
 
 ---
 
+## 4. Workflows
 
-## 4. Workflows & Data Contracts
-
-The system supports three primary workflows.
+The system supports three primary workflows:
 
 ### 4.1. Live System Check Workflow
-For read-only diagnostics on a live system.
+For read-only diagnostics on a live system, where the AI's plan is reviewed and executed in real-time with user confirmation.
 
-For making changes to the local file system.
--   **Data Contract:** The **Output Package** (`manifest.json`, `workspace/`, `summary.md`).
--   **Process:** A specialist generates the package. The user reviews it and uses `ai-execute` to apply it.
+### 4.2. Two-Stage Local Workflow
+For making changes to the local file system. A specialist generates a sandboxed "Output Package" which the user reviews and then applies with the `ai-execute` script.
 
 ### 4.3. Handoff Workflow (Brain-to-Hands)
-For preparing changes to be executed by a powerful, external agent like Jules.
--   **Data Contracts:** The **`AGENTS.md` file** and the **External Agent Manifest** (e.g., `JULES_MANIFEST.json`).
--   **Process:**
-    1.  **Context Generation (Optional but Recommended):** The user invokes `amd-1` to generate an `AGENTS.md` for the target project.
-    2.  **Local Plan Generation:** The user runs the standard Two-Stage Local Workflow to produce an approved output package containing the desired code changes.
-    3.  **Handoff Preparation:** The user invokes the `jma-1` persona, providing it with the local output package. `jma-1` translates this into a `JULES_MANIFEST.json`.
-    4.  **External Execution:** The user provides the `AGENTS.md` and the `JULES_MANIFEST.json` to the external agent.
+For preparing changes to be executed by a powerful, external agent. This involves using specialist personas to generate context (`AGENTS.md`) and a final, validated manifest for the external agent.
+
+---
 
 ## 5. Data & State Contracts
 
-The primary data contracts for the system are the **Output Package** and the **Project State File**.
+The system relies on several key data contracts. While the detailed schemas are defined in `docs/system_contracts.yml`, the blueprint recognizes these as core architectural components.
 
-### 5.1. The Output Package Structure
+### 5.1. The Output Package
+A standardized directory (`manifest.json`, `workspace/`, `summary.md`) generated in the Two-Stage Workflow. It is the primary data contract for the `ai-execute` script.
 
-A standardized directory structure generated by the `ai --output-dir` command for discrete, one-shot tasks.
-
-```
-./[output_dir]/
-├── manifest.json         # The machine-readable plan of action.
-├── workspace/            # Contains the FULL content of all new or modified files.
-└── summary.md            # A human-readable summary of the changes.
-```
-
-### 5.2. The `manifest.json` Schema
-
-The `manifest.json` is the "blueprint for action" and the single source of truth for the `ai-execute` script.
-
--   **`version` (string):** The schema version of the manifest.
--   **`sessionId` (string):** A unique, timestamp-based ID for the generation run.
--   **`generated_by` (string):** The alias of the persona that created the plan.
--   **`actions` (array):** A sequential list of action objects to be executed.
-    -   **`type` (string):** The action to perform (e.g., `create_branch`, `apply_file_change`).
-    -   **`comment` (string):** The AI's "thought" or rationale for the action.
-    -   **...other parameters:** Action-specific fields (e.g., `branch_name`, `path`, `message`).
-
-### 5.3. The Project State File
-
-The `PROJECT_STATE.md` file is the single source of truth for a long-running, multi-agent project. It is created and managed by the `pmo-1` persona.
-
--   **Purpose:** To maintain state across multiple, separate invocations of the `ai` command, enabling complex, multi-stage workflows.
--   **Structure:** A Markdown file containing key-value metadata (status, goal) and sections for project artifacts like `Requirements`, `Architecture`, and a `Project Plan` that defines the dependency chain for specialist personas.
+### 5.2. The Project State File
+The `PROJECT_STATE.md` file is the single source of truth for a long-running, multi-agent project. It is created and managed by the `pmo-1` persona to maintain state across multiple CLI invocations.
