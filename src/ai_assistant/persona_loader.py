@@ -15,8 +15,11 @@ class PersonaLoader:
     def __init__(self):
         self.user_personas_dir = Path(ai_settings.general.personas_directory).resolve()
         self.user_personas_dir.mkdir(parents=True, exist_ok=True)
+        # --- Define the project-local persona directory ---
+        self.project_local_personas_dir = Path.cwd() / ".ai" / "personas"
+        # --- CORRECTED: Initialize the loading stack only once ---
         self._loading_stack = set()
-
+        
     def _parse_content(self, content: str) -> ParsedPersona:
         """Extracts directives and returns the remaining context."""
         directives_section = None
@@ -43,6 +46,7 @@ class PersonaLoader:
                 raise FileNotFoundError(f"Persona '{alias}' could not be found or read.")
 
             parts = content.split("---")
+            # --- CORRECTED: Fixed syntax error in the condition ---
             body = "---".join(parts[2:]) if len(parts) >= 3 else content
             frontmatter_str = parts[1] if len(parts) >= 3 else "{}"
             
@@ -89,15 +93,30 @@ class PersonaLoader:
         
         return (specific_directives, specific_context)
     
+        
     def _find_and_read_persona(self, alias: str):
-
+        """
+        Finds and reads a persona file, searching in a specific order:
+        1. Project-local directory (.ai/personas/)
+        2. User's global config directory (~/.config/ai_assistant/personas/)
+        3. Built-in package personas
+        """
         alias_norm = alias.lower().replace('/', os.sep)
-        user_path = self.user_personas_dir / f"{alias_norm}.persona.md"
+        
+        # 1. Check project-local directory first
+        if self.project_local_personas_dir.exists():
+            project_local_path = self.project_local_personas_dir / f"{alias_norm}.persona.md"
+            if project_local_path.exists():
+                print(f"ℹ️  Loading project-local persona: {alias}")
+                return project_local_path, project_local_path.read_text(encoding="utf-8")
 
+        # 2. Check user's global config directory
+        user_path = self.user_personas_dir / f"{alias_norm}.persona.md"
         if user_path.exists():
             print(f"ℹ️  Loading user-defined persona: {alias}")
             return user_path, user_path.read_text(encoding="utf-8")
 
+        # 3. Fallback to built-in package personas
         resource_path = f"personas/{alias.lower()}.persona.md"
         try:
             traversable = resources.files("ai_assistant").joinpath(resource_path)
