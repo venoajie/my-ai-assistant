@@ -48,6 +48,8 @@ async def orchestrate_agent_run(
     output_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
 
+    history = await _inject_project_context(history)
+
     metrics = {
         "timings": {},
         "tokens": {
@@ -220,7 +222,7 @@ async def orchestrate_agent_run(
             print(f"    ❌ Failure: Tool '{tool_name}' not found.")
 
     # --- SYNTHESIS ---
-    # FIXED: If the user denied a risky action, halt immediately. The check is now simpler and correct.
+    # If the user denied a risky action, halt immediately. The check is now simpler and correct.
     if any_risky_action_denied:
         error_msg = "Task aborted by user. No actions were performed."
         print(f"\n🛑 {error_msg}")
@@ -307,7 +309,7 @@ async def _handle_output_first_mode(
             }
 
     manifest = {
-        "version": "1.0",
+        "version": "1.1", # Version bump for new actions
         "sessionId": f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
         "generated_by": persona_alias,
         "actions": [],
@@ -317,6 +319,8 @@ async def _handle_output_first_mode(
     
     tool_map = {
         "write_file": "apply_file_change",
+        "create_directory": "create_directory",
+        "move_file": "move_file",
         "git_create_branch": "create_branch",
         "git_add": "git_add",
         "git_commit": "git_commit",
@@ -350,6 +354,15 @@ async def _handle_output_first_mode(
             action["source"] = f"workspace/{path_str}"
             action["target"] = path_str
             summary_parts.append(f"## Modify `{path_str}`\n\n**Reason:** {thought}\n\n```diff\n# Diff view not yet implemented. Full content written.\n```\n")
+
+        elif tool_name == "create_directory":
+            action["path"] = args.get("path")
+            summary_parts.append(f"### Create Directory\n- **Path:** `{action['path']}`\n- **Reason:** {thought}\n")
+
+        elif tool_name == "move_file":
+            action["source"] = args.get("source")
+            action["destination"] = args.get("destination")
+            summary_parts.append(f"### Move Item\n- **From:** `{action['source']}`\n- **To:** `{action['destination']}`\n- **Reason:** {thought}\n")
 
         elif tool_name == "git_create_branch":
             action["branch_name"] = args.get("branch_name")

@@ -1,6 +1,7 @@
 # ai_assistant/tools.py
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
@@ -43,6 +44,31 @@ class ListFilesTool(Tool):
             if not files: return (True, f"Directory '{path}' is empty.")
             return (True, "\n".join(files))
         except Exception as e: return (False, f"Error listing files in {path}: {e}")
+
+class CreateDirectoryTool(Tool):
+    name = "create_directory"; description = "Creates a new directory at the specified path. Usage: create_directory(path: str)"; is_risky = True
+    def __call__(self, path: str) -> Tuple[bool, str]:
+        p = Path(path)
+        try:
+            p.mkdir(parents=True, exist_ok=True)
+            return (True, f"Successfully created directory at {path}")
+        except Exception as e:
+            return (False, f"Error: Could not create directory at {path}: {e}")
+
+class MoveFileTool(Tool):
+    name = "move_file"; description = "Moves a file or directory from a source to a destination. Usage: move_file(source: str, destination: str)"; is_risky = True
+    def __call__(self, source: str, destination: str) -> Tuple[bool, str]:
+        source_path = Path(source)
+        dest_path = Path(destination)
+        if not source_path.exists():
+            return (False, f"Error: Source path does not exist: {source}")
+        try:
+            # Ensure destination parent directory exists
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source_path), str(dest_path))
+            return (True, f"Successfully moved {source} to {destination}")
+        except Exception as e:
+            return (False, f"Error: Could not move {source} to {destination}: {e}")
         
 class RunShellCommandTool(Tool):
     name = "run_shell"
@@ -63,6 +89,7 @@ class RunShellCommandTool(Tool):
         
         # --- 2. Core Dangerous Pattern Blocklist ---
         for pattern in SHELL_COMMAND_BLOCKLIST:
+
             if re.search(pattern, command, re.IGNORECASE):
                 return (False, f"🚫 SECURITY BLOCK: Command '{command}' matches a dangerous pattern and has been rejected for security reasons.")
         
@@ -183,6 +210,8 @@ class ToolRegistry:
         self.register(WriteFileTool()) 
         self.register(RunShellCommandTool())
         self.register(ListFilesTool())
+        self.register(CreateDirectoryTool())
+        self.register(MoveFileTool())
         self.register(GitCreateBranchTool())
         self.register(GitAddTool())
         self.register(GitCommitTool()) 

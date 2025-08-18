@@ -1,3 +1,4 @@
+
 # src/ai_assistant/cli.py 
 
 from datetime import datetime
@@ -25,22 +26,27 @@ from .utils.signature import calculate_persona_signature
 from .utils.result_presenter import present_result
 
 
+# --- MODIFIED: Unified plugin discovery (Recommendation 3) ---
 def list_available_plugins() -> List[str]:
     """Dynamically discovers available plugins from both entry points and the local project directory."""
     discovered_plugins = []
     
-    # 1. Load built-in plugins via entry points (existing logic)
-    entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
-    for entry in entry_points:
-        discovered_plugins.append(entry.name)
+    # 1. Load built-in plugins via entry points
+    try:
+        entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
+        for entry in entry_points:
+            discovered_plugins.append(entry.name)
+    except Exception as e:
+        print(f"{Colors.YELLOW}⚠️  Warning: Could not load plugins from entry points: {e}{Colors.RESET}", file=sys.stderr)
         
     # 2. Discover and load local, project-specific plugins
     local_plugins_path = Path.cwd() / ai_settings.general.local_plugins_directory
     if local_plugins_path.is_dir():
         for file_path in local_plugins_path.glob("*.py"):
-            plugin_name = file_path.stem.replace("_plugin", "")
+            # Use a special suffix to distinguish local plugins
+            plugin_name = f"{file_path.stem.replace('_plugin', '')} (local)"
             if plugin_name not in discovered_plugins:
-                 discovered_plugins.append(f"{plugin_name} (local)")
+                 discovered_plugins.append(plugin_name)
 
     return sorted(discovered_plugins)
 
@@ -166,34 +172,53 @@ def build_file_context(
             
     return context_str
 
-def list_available_plugins() -> List[str]:
-    """Dynamically discovers available plugins via entry points."""
-    discovered_plugins = []
-    # Use importlib.metadata to find registered entry points
-    entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
-    for entry in entry_points:
-        discovered_plugins.append(entry.name)
-    return sorted(discovered_plugins)
-
-    
+# --- MODIFIED: Refactored plugin loader to handle local plugins (Recommendation 3) ---
 def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBase]:
-    """Dynamically loads a context plugin using its registered entry point."""
+    """Dynamically loads a context plugin from entry points or the local project directory."""
     if not plugin_name:
         return None
 
     print(f"{Colors.MAGENTA}🔌 Loading context plugin: {plugin_name}...{Colors.RESET}")
+    
     try:
-        # Find the specific entry point by name
-        entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
-        plugin_entry = next((ep for ep in entry_points if ep.name == plugin_name.lower()), None)
+        # --- Handle local plugins ---
+        if plugin_name.endswith(" (local)"):
+            base_name = plugin_name.removesuffix(" (local)")
+            local_plugins_path = Path.cwd() / ai_settings.general.local_plugins_directory
+            plugin_file = local_plugins_path / f"{base_name}_plugin.py"
+            
+            if not plugin_file.exists():
+                print(f"   - {Colors.RED}❌ Error: Local plugin file not found: {plugin_file}{Colors.RESET}", file=sys.stderr)
+                return None
 
-        if not plugin_entry:
-            print(f"   - {Colors.RED}❌ Error: Plugin '{plugin_name}' is not a registered entry point.{Colors.RESET}", file=sys.stderr)
+            # Dynamically load the module from the file path
+            spec = importlib.util.spec_from_file_location(base_name, plugin_file)
+            if not spec or not spec.loader:
+                raise ImportError(f"Could not create module spec for {plugin_file}")
+            
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            
+            # Find the class that inherits from ContextPluginBase
+            for _, obj in inspect.getmembers(module, inspect.isclass):
+                if issubclass(obj, ContextPluginBase) and obj is not ContextPluginBase:
+                    return obj(project_root=Path.cwd())
+            
+            print(f"   - {Colors.RED}❌ Error: No class inheriting from ContextPluginBase found in {plugin_file}{Colors.RESET}", file=sys.stderr)
             return None
 
-        # Load the class from the entry point and instantiate it
-        plugin_class = plugin_entry.load()
-        return plugin_class(project_root=Path.cwd())
+        # --- Handle entry-point plugins (existing logic) ---
+        else:
+            entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
+            plugin_entry = next((ep for ep in entry_points if ep.name == plugin_name.lower()), None)
+
+            if not plugin_entry:
+                print(f"   - {Colors.RED}❌ Error: Plugin '{plugin_name}' is not a registered entry point.{Colors.RESET}", file=sys.stderr)
+                return None
+
+            plugin_class = plugin_entry.load()
+            return plugin_class(project_root=Path.cwd())
+
     except Exception as e:
         print(f"   - {Colors.RED}❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}{Colors.RESET}", file=sys.stderr)
         return None

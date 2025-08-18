@@ -1,5 +1,4 @@
 # ai_assistant/config.py
-
 import yaml
 from pathlib import Path
 from typing import Dict, Optional, List
@@ -21,7 +20,6 @@ class GeneralConfig(BaseModel):
     auto_inject_files: List[str] = Field(default_factory=list)
     critique_persona_alias: str
     failure_persona_alias: str
-    # Define the path for project-specific plugins
     local_plugins_directory: str = ".ai/plugins"
     enable_llm_json_corrector: bool = Field(default=True) # Let's default to True
 

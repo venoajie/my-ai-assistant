@@ -1,8 +1,4 @@
 # pyproject.toml
-[build-system]
-requires = ["setuptools>=65.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "my-ai-assistant"
 version = "1.2.0"
@@ -16,6 +12,10 @@ dependencies = [
       "pydantic>=2.0",
       ]
 
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project.scripts]
 ai = "ai_assistant.cli:main"
 ai-execute = "ai_assistant.executor:main"
@@ -24,6 +24,7 @@ ai-execute = "ai_assistant.executor:main"
 "domains-programming" = "ai_assistant.plugins.domains.programming.context:ProgrammingContextPlugin"
 "domains-finance" = "ai_assistant.plugins.domains.finance.context:FinanceContextPlugin"
 "domains-trading" = "ai_assistant.plugins.domains.trading.context:TradingContextPlugin"
+"domains-writing" = "ai_assistant.plugins.domains.writing.context:WritingContextPlugin"
 
 [project.optional-dependencies]
 test = [

@@ -8,20 +8,9 @@ persona_types:
   _mixins:
     required_keys: ["alias", "type", "status"]
   core:
-    required_keys:
-      - "alias"
-      - "version"
-      - "type"
-      - "title"
-      - "description"
+    required_keys: ["alias", "type", "version", "title", "description"]
   domains:
-    required_keys:
-      - "alias"
-      - "version"
-      - "type"
-      - "title"
-      - "description"
-
+    required_keys: ["alias", "type", "version", "title", "description"]
 # Defines the canonical schema for the body of a persona file, based on its type.
 # Types with an empty list [] will skip body validation.
 body_schemas_by_type:

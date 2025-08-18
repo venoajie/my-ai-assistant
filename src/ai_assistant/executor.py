@@ -1,5 +1,4 @@
 # src/ai_assistant/executor.py
-import os
 import sys
 import json
 import shutil
@@ -109,6 +108,45 @@ class ManifestExecutor:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_path, target_path)
         print(f"   - ✅ Copied file to target destination.")
+
+    # --- NEW: Handlers for filesystem operations (Recommendation 1 / TD-004) ---
+    def _handle_create_directory(self, action: dict):
+        path_rel = action.get("path")
+        if not path_rel:
+            raise ValueError("Action 'create_directory' is missing 'path'.")
+        
+        target_path = (self.project_root / path_rel).resolve()
+        print(f"   - Directory to create: {target_path}")
+
+        if self.dry_run:
+            print("     (Skipped directory creation due to dry-run mode)")
+            return
+        
+        target_path.mkdir(parents=True, exist_ok=True)
+        print(f"   - ✅ Created directory.")
+
+    def _handle_move_file(self, action: dict):
+        source_rel = action.get("source")
+        dest_rel = action.get("destination")
+        if not source_rel or not dest_rel:
+            raise ValueError("Action 'move_file' is missing 'source' or 'destination'.")
+
+        source_path = (self.project_root / source_rel).resolve()
+        dest_path = (self.project_root / dest_rel).resolve()
+
+        print(f"   - Source: {source_path}")
+        print(f"   - Destination: {dest_path}")
+
+        if not source_path.exists():
+            raise FileNotFoundError(f"Source path for move operation not found: {source_path}")
+
+        if self.dry_run:
+            print("     (Skipped move operation due to dry-run mode)")
+            return
+        
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source_path), str(dest_path))
+        print(f"   - ✅ Moved item successfully.")
 
     def _handle_git_add(self, action: dict):
         path = action.get("path")

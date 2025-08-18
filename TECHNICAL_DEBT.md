@@ -14,9 +14,10 @@ This document is the canonical tracker for known architectural and implementatio
 -   **Impact:** This represents a significant risk to long-term stability and maintainability. There is no automated safety net to prevent regressions when refactoring critical components like the `Planner`, `Kernel`, or `PersonaLoader`.
 -   **Required Action:** Implement a testing framework (e.g., `pytest`). Prioritize adding unit tests for critical, non-LLM components, especially the `PersonaValidator`, the `Planner`'s JSON recovery logic, and the security guards in the `RunShellCommandTool`.
 
-*   **ID:** `TD-004`
-*   **Problem:** The `executor` system does not support file system operations like `mkdir` or `mv`. This limits the complexity of automated refactorings that can be performed in the "Output-First" mode.
-*   **Required Action:** Enhance `kernel.py` and `executor.py` to support `mkdir` and `mv` actions in the `manifest.json`.
+
+### TD-004: Executor Lacks Filesystem Operation Support
+-   **Problem:** The `executor` system does not support file system operations like `mkdir` or `mv`. This limits the complexity of automated refactorings that can be performed in the "Output-First" mode.
+-   **Required Action:** Enhance `kernel.py` and `executor.py` to support `create_directory` and `move_file` actions in the `manifest.json`.
 
 **Prompt to create this fix:**
 ```bash
@@ -25,17 +26,17 @@ ai --persona core/arc-1 --output-dir ai_runs/enhance_executor \
   -f src/ai_assistant/executor.py \
   "&lt;ACTION&gt;Enhance the executor system. The manifest.json and associated logic should be updated to support 'create_directory' and 'move_file' actions. This will allow the AI to package more complex file system refactorings.&lt;/ACTION&gt;"
 
-### TD-005: PersonaLoader Failing to List Domain Personas
--   **Problem:** The PersonaLoader does not list domain personas correctly.
--   **Impact:** This makes it difficult for users to know which personas are available for use.
--   **Required Action:** Update the PersonaLoader to correctly list all available domain personas.
+### TD-005: PersonaLoader Fails to List All Personas
+-   **Problem:** The `PersonaLoader.list_builtin_personas` method fails to recursively scan the packaged data directory, resulting in the omission of personas in subdirectories like `domains/`.
+-   **Impact:** Users are unaware of all available specialist personas, limiting the tool's usability.
+-   **Required Action:** Refactor `list_builtin_personas` to correctly use `importlib.resources` to perform a full recursive scan.
 
-### TD-006: CLI Sanity Check Being Too Aggressive on Informational Commands
--   **Problem:** The CLI sanity check is too aggressive on informational commands, causing unnecessary errors.
--   **Impact:** This frustrates users who are trying to get information about the system.
--   **Required Action:** Adjust the CLI sanity check to be less aggressive on informational commands.
-
-### TD-007: Executor Lacking mkdir/mv Support
--   **Problem:** The executor system does not support file system operations like `mkdir` or `mv`.
--   **Impact:** This limits the complexity of automated refactorings that can be performed in the "Output-First" mode.
--   **Required Action:** Enhance the executor system to support `mkdir` and `mv` actions.
+### TD-006: Overly Aggressive CLI Sanity Checks
+-   **Problem:** The `_run_prompt_sanity_checks` function in `cli.py` triggers warnings for informational commands (e.g., `--list-personas`) that do not require a persona.
+-   **Impact:** Minor user experience issue, presents confusing warnings.
+-   **Required Action:** Refactor the check to only trigger when a user provides a query, not for informational flags.
+        </StaticFile>
+        <Inject src="docs/system_contracts.yml"/>
+        
+        <!-- Core Governance Files (Corrected Paths & Content) -->
+        <StaticFile path="src/ai_assistant/internal_data/persona_config.yml">
