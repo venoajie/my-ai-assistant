@@ -11,7 +11,7 @@ To make your common, high-value prompts reusable and reliable, you should store 
     mkdir -p prompt_library
     ```
 
-2.  **Create a Reusable Prompt Script:** Create a new file, for example, `prompt_library/audits/01_audit_architecture.sh`, using the robust scripting pattern from the Getting Started guide.
+2.  **Create a Reusable Prompt Script:** Create a new file, for example, `prompt_library/audits/01_audit_architecture.sh`.
 
     ```bash
     #!/bin/bash
@@ -48,11 +48,11 @@ To make your common, high-value prompts reusable and reliable, you should store 
 
 This mode allows the assistant to complete an entire task—including making file changes and committing to Git—without asking for your approval at each step.
 
-> **WARNING: Use with extreme caution.** In this mode, the agent can create, modify, and delete files and push to your Git repository without confirmation. Only use it for well-defined tasks where you fully trust the plan.
+> **WARNING: Use with extreme caution.** In this mode, the agent can create, modify, and delete files and push to your Git repository without confirmation. Only use it for well-defined, low-risk tasks where you fully trust the plan.
 
 **Example: Autonomous Refactoring**
 ```bash
-ai --new-session --persona core/csa-1 --autonomous \
+ai --new-session --persona domains/programming/rce-1 --autonomous \
   -f src/services/distributor.py \
   "Refactor the 'distributor' service in the attached file to improve its logging and add error handling. When done, commit the changes to a new git branch named 'refactor/distributor-logging'."
 ```
