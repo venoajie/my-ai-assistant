@@ -46,7 +46,7 @@ class Planner:
 
         response_text = api_result["content"]
 
-        plan = self._extract_and_validate_plan(response_text)
+        plan = await self._extract_and_validate_plan(response_text)
 
         if not plan:
             if isinstance(plan, list):
@@ -59,7 +59,7 @@ class Planner:
             print(f"  - Step {i+1}: {step.get('thought', '')} -> {step.get('tool_name')}({step.get('args', {})})")
         return  plan, api_result
         
-    def _extract_and_validate_plan(
+    async def _extract_and_validate_plan(
         self, 
         response_text: str,
         ) -> List[Dict[str, Any]]:
@@ -92,9 +92,52 @@ class Planner:
             except (json.JSONDecodeError, TypeError):
                 continue
 
+        # If all programmatic methods fail, try the LLM corrector as a last resort.
+        if ai_settings.general.enable_llm_json_corrector:
+            print("⚠️  Programmatic JSON extraction failed. Attempting LLM-based correction...")
+            return await self._correct_json_with_llm(response_text)
+
         print(f"ℹ️  Planner could not extract a valid JSON tool plan from the LLM response. Proceeding with direct synthesis.")
         print(f"   LLM Response Preview (first 200 chars): {response_text[:200]}...")
         return [] # Return an empty list to signify no-op
+
+    async def _correct_json_with_llm(
+        self, 
+        broken_json: str,
+        ) -> List[Dict[str, Any]]:
+        """Uses a fast LLM to correct malformed JSON."""
+        try:
+            corrector_prompt = f"""The following text is supposed to be a single, valid JSON array of objects, but it contains syntax errors. Your sole task is to fix the syntax and return only the raw, corrected JSON array. Do not add any explanation or surrounding text.
+
+[BROKEN JSON]
+{broken_json}
+[/BROKEN JSON]
+
+Corrected JSON:"""
+
+            corrector_model = ai_settings.model_selection.json_corrector
+            api_result = await self.response_handler.call_api(
+                corrector_prompt,
+                model=corrector_model,
+                # Use low temp for deterministic correction
+                generation_config={"temperature": 0.0} 
+            )
+            
+            corrected_text = api_result["content"]
+            # Final attempt to parse the corrected text
+            plan = json.loads(corrected_text)
+            
+            if self._validate_plan_is_structurally_sound(plan):
+                print("✅ Plan successfully recovered using LLM Corrector Agent.")
+                return plan
+            else:
+                print("❌ LLM Corrector returned a structurally invalid plan.")
+                return []
+
+        except Exception as e:
+            print(f"❌ CRITICAL: The LLM Corrector Agent failed. Reason: {e}")
+            return []
+
 
     def _extract_from_markdown(
         self, 

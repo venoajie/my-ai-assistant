@@ -39,26 +39,28 @@ class ResponseHandler:
         ) -> Dict[str, Any]:
         
         """Calls the specified AI model asynchronously with enhanced error handling."""
-        if model not in self.model_to_provider_map:
+        start_time = time.monotonic()
+        
+        # Centralized function to create a consistent error response
+        def _create_error_response(content: str, provider: str) -> Dict[str, Any]:
             return {
-                "tokens": {"prompt": 0, "response": 0, "total": 0},
-                "content": f"❌ ERROR: Model '{model}' is not configured.", 
-                "duration": 0, 
-                "provider_name": "internal",
-                }
-        if not prompt or not prompt.strip():
-            return "❌ ERROR: Empty prompt provided to call_api."
-        if len(prompt) > 250000:
-            return f"❌ ERROR: Prompt length exceeds the absolute maximum."
+                "content": content,
+                "duration": time.monotonic() - start_time,
+                "provider_name": provider,
+                "tokens": {"prompt": 0, "response": 0, "total": 0}
+            }
 
+        if model not in self.model_to_provider_map:
+            return _create_error_response(f"❌ ERROR: Model '{model}' is not configured.", "internal")
+        
+        if not prompt or not prompt.strip():
+            return _create_error_response("❌ ERROR: Empty prompt provided to call_api.", "internal")
 
         provider_info = self.model_to_provider_map[model]
         provider_name = provider_info["provider_name"]
         provider_config = provider_info["config"]
-        final_gen_config = generation_config or \
-            ai_settings.generation_params.synthesis.model_dump()
+        final_gen_config = generation_config or ai_settings.generation_params.synthesis.model_dump()
 
-        start_time = time.monotonic() # --- Start timer before the session ---
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=180.0)) as session:
             for attempt in range(max_retries):
                 try:
@@ -66,25 +68,11 @@ class ResponseHandler:
 
                     content = ""
                     if provider_name == "gemini":
-                        content = await self._call_gemini(
-                            session, 
-                            prompt, 
-                            model, 
-                            provider_config, 
-                            final_gen_config,
-                            )
+                        content = await self._call_gemini(session, prompt, model, provider_config, final_gen_config)
                     elif provider_name == "deepseek":
-                        content = await self._call_deepseek(
-                            session,
-                            prompt, 
-                            model, 
-                            provider_config, 
-                            final_gen_config,
-                            )
+                        content = await self._call_deepseek(session, prompt, model, provider_config, final_gen_config)
                     else:
                         content = f"❌ ERROR: No call implementation for provider '{provider_name}'."
-
-                    duration = time.monotonic() - start_time # --- Calculate duration ---
 
                     optimizer = ContextOptimizer()
                     prompt_tokens = optimizer.estimate_tokens(prompt)
@@ -92,71 +80,33 @@ class ResponseHandler:
                     
                     return {
                         "content": content, 
-                        "duration": duration, 
+                        "duration": time.monotonic() - start_time, 
                         "provider_name": provider_name,
                         "tokens": {
                             "prompt": prompt_tokens, 
                             "response": response_tokens, 
                             "total": prompt_tokens + response_tokens,
-                            },
-                        }
-
-                except (
-                    aiohttp.ClientResponseError, 
-                    asyncio.TimeoutError, 
-                    ValueError,
-                    ) as e:
-                    
-                    if isinstance(e, aiohttp.ClientResponseError) \
-                        and 500 <= e.status <= 599:
-                        print(f"\n   ...Server error ({e.status}). Retrying...")
-                    elif isinstance(e, ValueError) and "empty or whitespace-only" in str(e):
-                        print(f"\n   ...API returned empty response. Retrying...")
-                    else:
-                        # This is now for non-5xx HTTP errors or other unexpected ValueErrors
-                        error_msg = f"❌ ERROR: Non-retriable API error for model {model}: {e}"
-                        print()
-                        # Return empty metrics on failure
-                        return {
-                            "content": error_msg, 
-                            "duration": time.monotonic() - start_time, 
-                            "provider_name": provider_name,
-                            }
+                        },
+                    }
                 except Exception as e:
-                    # Catch-all for any other unexpected errors
-                    error_msg = f"❌ ERROR: An unexpected error occurred during API call for model {model}: {e}"
-                    print()
-                    # Return empty metrics on failure
-                    return {
-                        "content": error_msg,
-                        "duration": time.monotonic() - start_time, 
-                        "provider_name": provider_name,
-                        }
-
-                if attempt < max_retries - 1:
+                    error_msg = f"API call for model {model} failed on attempt {attempt + 1}/{max_retries}. Reason: {e}"
+                    print(f"\n   ...❌ ERROR: {error_msg}")
+                    
+                    # Check if the error is non-retriable or if we've exhausted retries
+                    is_retriable = isinstance(e, (aiohttp.ClientResponseError, asyncio.TimeoutError)) and (not hasattr(e, 'status') or 500 <= e.status <= 599)
+                    
+                    if not is_retriable or attempt >= max_retries - 1:
+                        print("\n   ...API call failed. No more retries.")
+                        return _create_error_response(f"❌ ERROR: {error_msg}", provider_name) # <-- COMPREHENSIVE FIX
+                    
                     wait_time = 2 ** (attempt + 1)
                     print(f"   ...Waiting {wait_time}s before retrying.")
                     await asyncio.sleep(wait_time)
 
-                else:
-                    # On final failure, return the full data structure with zeroed tokens.
-                    print("\n   ...API call failed after all retries.")
-                    return {
-                        "content": error_msg,
-                        "duration": time.monotonic() - start_time,
-                        "provider_name": provider_name,
-                        "tokens": {"prompt": 0, "response": 0, "total": 0},
-                    }
-                    
-        final_error_msg = f"❌ ERROR: API call for model {model} failed after {max_retries} attempts."
-        print()
-        # Return empty metrics on failure
-        return {
-            "content": final_error_msg, 
-            "duration": time.monotonic() - start_time, 
-            "provider_name": provider_name,
-            }
+        # Fallback in case the loop exits unexpectedly
+        return _create_error_response(f"❌ ERROR: API call for model {model} failed unexpectedly after {max_retries} attempts.", provider_name)
 
+    # ... (The _call_gemini and _call_deepseek methods remain unchanged) ...
     async def _call_gemini(
         self, 
         session: aiohttp.ClientSession, 

@@ -11,6 +11,7 @@ class ModelSelectionConfig(BaseModel):
     planning: str
     synthesis: str
     critique: str
+    json_corrector: str
     
 class GeneralConfig(BaseModel):
     personas_directory: str
@@ -22,7 +23,8 @@ class GeneralConfig(BaseModel):
     failure_persona_alias: str
     # Define the path for project-specific plugins
     local_plugins_directory: str = ".ai/plugins"
-    
+    enable_llm_json_corrector: bool = Field(default=True) # Let's default to True
+
 class ContextOptimizerConfig(BaseModel):
     max_tokens: int
     prompt_compression_threshold: int = Field(
