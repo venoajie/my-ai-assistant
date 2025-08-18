@@ -170,7 +170,6 @@ def build_file_context(
             
     return context_str
 
-# --- CRITICAL FIX: Applied version compatibility to the loader function ---
 def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBase]:
     """Dynamically loads a context plugin from entry points or the local project directory."""
     if not plugin_name:
@@ -378,19 +377,26 @@ async def async_main():
         print(f"{Colors.CYAN}✨ Starting new session (implicit): {session_id}{Colors.RESET}")
 
     full_context_str = ""
-    context_plugin = load_context_plugin(args.context)
+    context_plugin = None
+    
+    # --- MODIFIED: Made auto-loader more graceful ---
+    # Get a list of available plugins once to avoid multiple discoveries
+    available_plugins = list_available_plugins()
+
     # --- Automatic Domain-Based Plugin Loading ---                
     if args.persona and args.persona.startswith('domains/'):
         parts = args.persona.split('/')
         if len(parts) > 1:
             domain_name = parts[1]
-
-            plugin_name_to_load = f"domains-{domain_name}" 
-            print(f"{Colors.MAGENTA}🔌 Persona domain '{domain_name}' detected. Attempting to auto-load context plugin...{Colors.RESET}")
-            context_plugin = load_context_plugin(plugin_name_to_load)
+            plugin_name_to_load = f"domains-{domain_name}"
+            
+            # Only attempt to load if the plugin actually exists
+            if plugin_name_to_load in available_plugins:
+                print(f"{Colors.MAGENTA}🔌 Persona domain '{domain_name}' detected. Attempting to auto-load context plugin...{Colors.RESET}")
+                context_plugin = load_context_plugin(plugin_name_to_load)
             
     # --- Manual Override ---
-    # If the user specifies --context, it overrides the automatic one.
+    # If the user specifies --context, it overrides any auto-loaded plugin.
     if args.context:
         print(f"{Colors.YELLOW}--context flag provided, overriding any auto-loaded plugin.{Colors.RESET}")
         context_plugin = load_context_plugin(args.context)
