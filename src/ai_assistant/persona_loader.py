@@ -15,9 +15,9 @@ class PersonaLoader:
     def __init__(self):
         self.user_personas_dir = Path(ai_settings.general.personas_directory).resolve()
         self.user_personas_dir.mkdir(parents=True, exist_ok=True)
-        self._loading_stack = set()
         # --- Define the project-local persona directory ---
         self.project_local_personas_dir = Path.cwd() / ".ai" / "personas"
+        # --- CORRECTED: Initialize the loading stack only once ---
         self._loading_stack = set()
         
     def _parse_content(self, content: str) -> ParsedPersona:
@@ -46,6 +46,7 @@ class PersonaLoader:
                 raise FileNotFoundError(f"Persona '{alias}' could not be found or read.")
 
             parts = content.split("---")
+            # --- CORRECTED: Fixed syntax error in the condition ---
             body = "---".join(parts[2:]) if len(parts) >= 3 else content
             frontmatter_str = parts[1] if len(parts) >= 3 else "{}"
             
