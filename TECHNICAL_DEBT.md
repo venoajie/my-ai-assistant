@@ -9,11 +9,6 @@ This document is the canonical tracker for known architectural and implementatio
 -   **Impact:** This represents a significant risk to long-term stability and maintainability. There is no automated safety net to prevent regressions when refactoring critical components like the `Planner`, `Kernel`, or `PersonaLoader`.
 -   **Required Action:** Implement a testing framework (e.g., `pytest`). Prioritize adding unit tests for critical, non-LLM components, especially the `PersonaValidator`, the `Planner`'s JSON recovery logic, and the security guards in the `RunShellCommandTool`.
 
-### TD-006: Overly Aggressive CLI Sanity Checks
--   **Problem:** The `_run_prompt_sanity_checks` function in `cli.py` triggers warnings for informational commands (e.g., `--list-personas`) that do not require a persona.
--   **Impact:** Minor user experience issue, presents confusing warnings.
--   **Required Action:** Refactor the check to only trigger when a user provides a query, not for informational flags.
-
 ---
 
 ## Resolved Issues
