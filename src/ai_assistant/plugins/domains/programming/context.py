@@ -1,9 +1,13 @@
 from ai_assistant.context_plugin import ContextPluginBase
 from typing import Dict, Any, List, Optional
-# ... imports
+from pathlib import Path
 
 class ProgrammingContextPlugin(ContextPluginBase):
     name = "Programming"
+
+    # Add the __init__ method to accept the project_root
+    def __init__(self, project_root: Path):
+        super().__init__(project_root)
 
     def get_context(self, query: str, files: List[str]) -> str:
         context = ""
@@ -21,6 +25,7 @@ class ProgrammingContextPlugin(ContextPluginBase):
         if 'security' in query_lower or 'vulnerability' in query_lower:
             context += "<Knowledge source='ProgrammingPlugin:Security'>\n"
             context += "  - Always validate and sanitize user input to prevent injection attacks (OWASP A03).\n"
+
             context += "  - Never store secrets directly in source code or configuration files.\n"
             context += "  - Check for insecure direct object references (IDOR).\n"
             context += "</Knowledge>\n"

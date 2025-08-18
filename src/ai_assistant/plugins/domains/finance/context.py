@@ -1,10 +1,13 @@
 from typing import Dict, Any, List, Optional
-
+from pathlib import Path
 from ai_assistant.context_plugin import ContextPluginBase
-# ... imports
 
 class FinanceContextPlugin(ContextPluginBase):
     name = "Finance"
+
+    # Add the __init__ method to accept the project_root
+    def __init__(self, project_root: Path):
+        super().__init__(project_root)
 
     def get_context(self, query: str, files: List[str]) -> str:
         context = ""

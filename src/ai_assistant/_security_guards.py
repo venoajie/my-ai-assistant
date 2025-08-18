@@ -1,4 +1,3 @@
-
 # ai_assistant/_security_guards.py
 
 """
@@ -30,6 +29,7 @@ SHELL_COMMAND_BLOCKLIST = (
     r'\brm\s+.*\*',         # Remove with wildcards
     r'\bmv\s+.*\s+/dev/null',# Move to null
     r'\btruncate\s+-s\s*0', # Truncate files
-    # Expanded rule to protect common config and source files
-    r'>>?\s*\w+\.(py|js|cpp|java|rs|env|cfg|yml|yaml|toml)',
+    # --- Regex to handle full paths ---
+    # Expanded rule to protect common config and source files by matching any character path
+    r'>>?\s*.*\.(py|js|cpp|java|rs|env|cfg|yml|yaml|toml)',
 )
