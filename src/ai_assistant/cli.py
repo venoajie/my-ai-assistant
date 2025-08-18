@@ -170,6 +170,7 @@ def build_file_context(
             
     return context_str
 
+# --- CRITICAL FIX: Applied version compatibility to the loader function ---
 def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBase]:
     """Dynamically loads a context plugin from entry points or the local project directory."""
     if not plugin_name:
@@ -206,7 +207,13 @@ def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBas
 
         # --- Handle entry-point plugins (existing logic) ---
         else:
-            entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
+            # For Python 3.10+
+            if sys.version_info >= (3, 10):
+                entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
+            # For Python < 3.10
+            else:
+                entry_points = metadata.entry_points().get('ai_assistant.context_plugins', [])
+
             plugin_entry = next((ep for ep in entry_points if ep.name == plugin_name.lower()), None)
 
             if not plugin_entry:
