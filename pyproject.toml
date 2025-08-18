@@ -1,7 +1,7 @@
 # pyproject.toml
 [project]
 name = "my-ai-assistant"
-version = "1.2.0"
+version = "1.2.1"
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.9"
