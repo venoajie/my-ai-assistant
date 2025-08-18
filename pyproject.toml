@@ -23,7 +23,6 @@ ai-execute = "ai_assistant.executor:main"
 [project.entry-points."ai_assistant.context_plugins"]
 "domains-programming" = "ai_assistant.plugins.domains.programming.context:ProgrammingContextPlugin"
 "domains-finance" = "ai_assistant.plugins.domains.finance.context:FinanceContextPlugin"
-"domains-trading" = "ai_assistant.plugins.domains.trading.context:TradingContextPlugin"
 "domains-writing" = "ai_assistant.plugins.domains.writing.context:WritingContextPlugin"
 
 [project.optional-dependencies]
