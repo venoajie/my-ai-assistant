@@ -1,4 +1,3 @@
-# .github/workflows/ci-cd-pipeline.yml
 name: Python Package CI/CD
 
 # --- Trigger Conditions ---
@@ -33,7 +32,6 @@ jobs:
           pip install -e .[test]
       
       - name: Validate Persona Standards
-        # FIXED: Removed PYTHONPATH. The script now handles its own path.
         run: python scripts/generate_manifest.py
           
       - name: Run Unit Tests
@@ -56,16 +54,18 @@ jobs:
         run: pip install -e .
 
       - name: Regenerate manifest to check for diff
-        # FIXED: Removed PYTHONPATH. The script now handles its own path.
         run: python scripts/generate_manifest.py
 
       - name: Check for stale manifest
         run: |
-          # This command checks if 'git status' is clean.
+          # CORRECTED PATH: Point to the actual location of the manifest file.
+          manifest_file="src/ai_assistant/internal_data/persona_manifest.yml"
+          
+          # This command checks if 'git status' is clean for the specific file.
           # If generate_manifest.py modified the manifest, this will detect it.
           # `git diff --exit-code` will exit with 1 if there is a diff, failing the job.
-          if ! git diff --exit-code --quiet persona_manifest.yml; then
-            echo "❌ ERROR: persona_manifest.yml is out of date."
+          if ! git diff --exit-code --quiet "$manifest_file"; then
+            echo "❌ ERROR: $manifest_file is out of date."
             echo "Please run 'python scripts/generate_manifest.py' locally and commit the changes."
             exit 1
           fi
