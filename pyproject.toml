@@ -21,7 +21,6 @@ ai = "ai_assistant.cli:main"
 ai-execute = "ai_assistant.executor:main"
 
 [project.entry-points."ai_assistant.context_plugins"]
-# CORRECTED: Use hyphens for entry point names. These are just strings.
 "domains-programming" = "ai_assistant.plugins.domains.programming.context:ProgrammingContextPlugin"
 "domains-finance" = "ai_assistant.plugins.domains.finance.context:FinanceContextPlugin"
 "domains-trading" = "ai_assistant.plugins.domains.trading.context:TradingContextPlugin"
@@ -43,5 +42,6 @@ include = ["ai_assistant*"]
 ai_assistant = [
     "default_config.yml",
     "personas/**/*.md",
-    "personas/**/*.py"
+    "personas/**/*.py",
+    "internal_data/*"
 ]

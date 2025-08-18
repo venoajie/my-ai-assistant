@@ -46,36 +46,37 @@ class Planner:
 
         response_text = api_result["content"]
 
-        plan = await self._extract_and_validate_plan(response_text)
+        plan, corrector_metrics = await self._extract_and_validate_plan(response_text)
+
+        if corrector_metrics:
+            api_result["tokens"]["json_corrector"] = corrector_metrics["tokens"]
+            api_result["duration"] += corrector_metrics["duration"]
+            # Add corrector duration to a separate timing key for clarity
+            api_result.setdefault("timings", {})["json_corrector"] = corrector_metrics["duration"]
 
         if not plan:
             if isinstance(plan, list):
                 print("✅ Plan generated successfully (No tool execution required).")
-            # --- Return full result  even for no-op plans ---
             return plan, api_result
                     
         print("✅ Plan generated successfully.")
         for i, step in enumerate(plan):
             print(f"  - Step {i+1}: {step.get('thought', '')} -> {step.get('tool_name')}({step.get('args', {})})")
-        return  plan, api_result
+        return plan, api_result
         
     async def _extract_and_validate_plan(
         self, 
         response_text: str,
-        ) -> List[Dict[str, Any]]:
-        
-        """Extracts, sanitizes, repairs, and validates a JSON plan from raw LLM text."""
-        
-        # This function remains synchronous as it performs CPU-bound string operations.
+        ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        """
+        Extracts, sanitizes, repairs, and validates a JSON plan from raw LLM text.
+        Returns the plan and an optional dictionary of metrics from the corrector agent.
+        """
         response_text = response_text.strip()
-        if len(response_text) > 50000:
-            print("⚠️  Warning: LLM response exceeds maximum length and will be truncated.")
-            response_text = response_text[:50000]
         
         extraction_methods = [
             self._extract_from_markdown,   
             self._extract_from_json_key, 
-            self._extract_from_json_key,
             self._extract_from_boundaries,
             self._extract_direct_list,
             self._intelligent_repair,
@@ -86,27 +87,28 @@ class Planner:
             try:
                 plan = method(response_text)
                 if plan is not None and self._validate_plan_is_structurally_sound(plan):
-                    if method.__name__ not in ["_extract_from_markdown", "_extract_direct_list", "_extract_from_boundaries"]:
-                         print(f"✅ Plan successfully recovered using '{method.__name__}' method.")
-                    return plan
+                    # ...
+                    return plan, None # <-- Return None for metrics
             except (json.JSONDecodeError, TypeError):
                 continue
 
-        # If all programmatic methods fail, try the LLM corrector as a last resort.
         if ai_settings.general.enable_llm_json_corrector:
             print("⚠️  Programmatic JSON extraction failed. Attempting LLM-based correction...")
-            return await self._correct_json_with_llm(response_text)
+            return await self._correct_json_with_llm(response_text) # <-- eturn result directly
 
-        print(f"ℹ️  Planner could not extract a valid JSON tool plan from the LLM response. Proceeding with direct synthesis.")
-        print(f"   LLM Response Preview (first 200 chars): {response_text[:200]}...")
-        return [] # Return an empty list to signify no-op
+        print(f"ℹ️  Planner could not extract a valid JSON tool plan...")
+        return [], None # <-- Return None for metrics
 
     async def _correct_json_with_llm(
         self, 
         broken_json: str,
-        ) -> List[Dict[str, Any]]:
-        """Uses a fast LLM to correct malformed JSON."""
+        ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        """
+        Uses a fast LLM to correct malformed JSON.
+        Returns the plan and the metrics from the API call.
+        """
         try:
+
             corrector_prompt = f"""The following text is supposed to be a single, valid JSON array of objects, but it contains syntax errors. Your sole task is to fix the syntax and return only the raw, corrected JSON array. Do not add any explanation or surrounding text.
 
 [BROKEN JSON]
@@ -119,83 +121,55 @@ Corrected JSON:"""
             api_result = await self.response_handler.call_api(
                 corrector_prompt,
                 model=corrector_model,
-                # Use low temp for deterministic correction
                 generation_config={"temperature": 0.0} 
             )
             
             corrected_text = api_result["content"]
-            # Final attempt to parse the corrected text
             plan = json.loads(corrected_text)
             
             if self._validate_plan_is_structurally_sound(plan):
                 print("✅ Plan successfully recovered using LLM Corrector Agent.")
-                return plan
+                return plan, api_result # <-- Return the full api_result
             else:
                 print("❌ LLM Corrector returned a structurally invalid plan.")
-                return []
+                return [], api_result # <-- Still return metrics on failure
 
         except Exception as e:
             print(f"❌ CRITICAL: The LLM Corrector Agent failed. Reason: {e}")
-            return []
+            return [], None # <-- Return None for metrics on critical failure
 
-
-    def _extract_from_markdown(
-        self, 
-        text: str,
-        ) -> Optional[List[Dict[str, Any]]]:
-        
+    def _extract_from_markdown(self, text: str) -> Optional[List[Dict[str, Any]]]:
         pattern = r'```(?:json)?\s*(.*?)\s*```'
-        matches = re.findall(
-            pattern, 
-            text, 
-            re.DOTALL,)
+        matches = re.findall(pattern, text, re.DOTALL)
         if matches:
             return json.loads(matches[0])
         return None
 
-    def _extract_from_json_key(
-        self, 
-        text: str,
-        ) -> Optional[List[Dict[str, Any]]]:
-        
+    def _extract_from_json_key(self, text: str) -> Optional[List[Dict[str, Any]]]:
         try:
             data = json.loads(text)
             if isinstance(data, dict):
-                # Check for 'plan' as the primary key, then fall back
                 for key in ["plan", "JSON_PLAN", "json_plan"]:
-                    if key in data \
-                        and isinstance(data[key], list):
+                    if key in data and isinstance(data[key], list):
                         return data[key]
         except (json.JSONDecodeError, TypeError):
             return None
         return None
 
-    def _extract_from_boundaries(
-        self, 
-        text: str,
-        ) -> Optional[List[Dict[str, Any]]]:
-        
+    def _extract_from_boundaries(self, text: str) -> Optional[List[Dict[str, Any]]]:
         start = text.find('[')
         end = text.rfind(']')
         if start != -1 and end != -1 and end > start:
             return json.loads(text[start:end + 1])
         return None
 
-    def _extract_direct_list(
-        self, 
-        text: str,
-        ) -> Optional[List[Dict[str, Any]]]:
-        
+    def _extract_direct_list(self, text: str) -> Optional[List[Dict[str, Any]]]:
         data = json.loads(text)
         if isinstance(data, list):
             return data
         return None
 
-    def _intelligent_repair(
-        self, 
-        text: str,
-        ) -> Optional[List[Dict[str, Any]]]:
-        
+    def _intelligent_repair(self, text: str) -> Optional[List[Dict[str, Any]]]:
         if text.startswith('{'):
             try:
                 data = json.loads(text)
@@ -204,23 +178,13 @@ Corrected JSON:"""
             except json.JSONDecodeError:
                 pass
         
-        pattern = r'^\s*\{.*\}\s*(,\s*\{.*\}\s*)*$'
-        if re.match(
-            pattern, 
-            text, 
-            re.DOTALL,
-            ):
-            
+        if re.match(r'^\s*\{.*\}\s*(,\s*\{.*\}\s*)*$', text, re.DOTALL):
             repaired_text = f'[{text}]'
             return json.loads(repaired_text)
             
         return None
 
-    def _manual_json_repair(
-        self, 
-        text: str,
-        ) -> Optional[List[Dict[str, Any]]]:
-        
+    def _manual_json_repair(self, text: str) -> Optional[List[Dict[str, Any]]]:
         objects = []
         buffer = ""
         brace_count = 0
@@ -255,21 +219,15 @@ Corrected JSON:"""
 
         return objects if objects else None
 
-    def _validate_plan_is_structurally_sound(
-        self, 
-        plan: List[Dict[str, Any]],
-        ) -> bool:
-        
+    def _validate_plan_is_structurally_sound(self, plan: List[Dict[str, Any]]) -> bool:
         if isinstance(plan, list) and not plan:
             return True
         if not isinstance(plan, list): return False
         if len(plan) > 25: return False
         
-        # Allow 'tool' as an alias for 'tool_name'
         for i, step in enumerate(plan):
             if not isinstance(step, dict): return False
             
-            # Normalize 'tool' to 'tool_name'
             if 'tool' in step and 'tool_name' not in step:
                 step['tool_name'] = step.pop('tool')
 
@@ -280,7 +238,6 @@ Corrected JSON:"""
                 print(f"⚠️  Warning: Step {i+1} references unknown tool: '{tool_name}'. Rejecting plan.")
                 return False
             
-            # Validate optional condition structure
             if 'condition' in step:
                 if not isinstance(step['condition'], dict): return False
                 if not ('from_step' in step['condition'] and ('in' or 'not_in' in step['condition'])):

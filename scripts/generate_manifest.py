@@ -30,7 +30,7 @@ class ManifestGenerator:
         self.project_root = project_root
         # Correctly locate the personas directory relative to the project root
         self.personas_dir = self.project_root / "src" / "ai_assistant" / "personas"
-        self.validator = PersonaValidator(self.project_root / "persona_config.yml")
+        self.validator = PersonaValidator(self.project_root / "src" / "ai_assistant" / "internal_data" / "persona_config.yml")
 
     def run(self):
         print(f"--- Generating Persona Manifest (v{self.MANIFEST_VERSION}) ---")
@@ -64,7 +64,7 @@ class ManifestGenerator:
 
         # --- IDEMPOTENCY CHECK ---
         new_signature = calculate_persona_signature(validated_persona_details, self.project_root)
-        manifest_path = self.project_root / "persona_manifest.yml"
+        manifest_path = self.project_root / "src" / "ai_assistant" / "internal_data" / "persona_manifest.yml"
         
         if self._is_manifest_up_to_date(manifest_path, new_signature):
             print("\n✓ Manifest is already up-to-date. No changes needed.")
