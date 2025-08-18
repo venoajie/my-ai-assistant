@@ -280,8 +280,24 @@ async def async_main():
     args = parser.parse_args()
     
     user_query = ' '.join(args.query)
-    _run_prompt_sanity_checks(args, user_query)
     
+    # Initialize args.files as a list if it's None
+    if args.files is None:
+        args.files = []
+
+    # Prepend auto-injected files from config, ensuring no duplicates
+    auto_injected_files = ai_settings.general.auto_inject_files or []
+    # Use a set for efficient duplicate checking of already present files
+    seen_files = set(args.files)
+    
+    # We prepend in reverse order so the final list has the config order correct
+    for f_path in reversed(auto_injected_files):
+        if f_path not in seen_files:
+            args.files.insert(0, f_path)
+            seen_files.add(f_path)
+
+    _run_prompt_sanity_checks(args, user_query)
+            
     if args.persona:
         try:
             # Find the manifest inside the installed package
