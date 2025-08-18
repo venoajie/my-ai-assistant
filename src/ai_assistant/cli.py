@@ -1,4 +1,3 @@
-
 # src/ai_assistant/cli.py 
 
 from datetime import datetime
@@ -26,7 +25,7 @@ from .utils.signature import calculate_persona_signature
 from .utils.result_presenter import present_result
 
 
-# --- MODIFIED: Unified plugin discovery (Recommendation 3) ---
+# --- Unified plugin discovery (Recommendation 3) ---
 def list_available_plugins() -> List[str]:
     """Dynamically discovers available plugins from both entry points and the local project directory."""
     discovered_plugins = []
@@ -50,22 +49,17 @@ def list_available_plugins() -> List[str]:
 
     return sorted(discovered_plugins)
 
-    
 def is_manifest_invalid(manifest_path: Path):
     """
     Checks if the manifest is invalid due to timestamps or content mismatch.
     Returns a tuple (is_invalid: bool, reason: str).
     """
-    project_root = Path.cwd()
     # Use resources to find the canonical personas directory within the package
     try:
-        package_root_traversable = resources.files('ai_assistant')
         #  Locate internal data files relative to the package
         config_traversable = resources.files('ai_assistant').joinpath('internal_data/persona_config.yml')
         personas_dir_traversable = resources.files('ai_assistant').joinpath('personas')
         personas_dir = Path(str(personas_dir_traversable))
-        internal_data_dir_traversable = resources.files('ai_assistant').joinpath('internal_data')
-        internal_data_dir = Path(str(internal_data_dir_traversable))
     except (ModuleNotFoundError, FileNotFoundError):
         return True, "Could not locate the built-in personas directory."
 
@@ -172,7 +166,6 @@ def build_file_context(
             
     return context_str
 
-# --- MODIFIED: Refactored plugin loader to handle local plugins (Recommendation 3) ---
 def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBase]:
     """Dynamically loads a context plugin from entry points or the local project directory."""
     if not plugin_name:
@@ -223,7 +216,11 @@ def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBas
         print(f"   - {Colors.RED}❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}{Colors.RESET}", file=sys.stderr)
         return None
 
-def _run_prompt_sanity_checks(args: argparse.Namespace, query: str):
+def _run_prompt_sanity_checks(
+    args: argparse.Namespace, 
+    query: str,
+    ):
+    
     """
     Analyzes the user's prompt and flags for common anti-patterns and
     prints non-halting warnings to guide the user.
@@ -238,7 +235,7 @@ def _run_prompt_sanity_checks(args: argparse.Namespace, query: str):
             "Results may be generic. For best results, select a specialist."
         )
 
-    # Check 2 (NEW): Explicit high-risk action tag without the safe workflow
+    # Check 2 Explicit high-risk action tag without the safe workflow
     if "<action>" in query_lower \
         and not args.output_dir:
         warnings.append(
@@ -320,8 +317,6 @@ async def async_main():
         if f_path not in seen_files:
             args.files.insert(0, f_path)
             seen_files.add(f_path)
-
-    _run_prompt_sanity_checks(args, user_query)
             
     if args.persona:
         try:
@@ -354,6 +349,9 @@ async def async_main():
             print(f" - {p}")
         sys.exit(0) 
         
+    # --- Sanity checks now run only when proceeding with a query ---
+    _run_prompt_sanity_checks(args, user_query)
+
     session_manager = SessionManager()
     history = []
     session_id = None
@@ -375,7 +373,7 @@ async def async_main():
         parts = args.persona.split('/')
         if len(parts) > 1:
             domain_name = parts[1]
-            # CORRECTED: Use a hyphen to match the new entry point name in pyproject.toml
+
             plugin_name_to_load = f"domains-{domain_name}" 
             print(f"{Colors.MAGENTA}🔌 Persona domain '{domain_name}' detected. Attempting to auto-load context plugin...{Colors.RESET}")
             context_plugin = load_context_plugin(plugin_name_to_load)
