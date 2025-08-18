@@ -39,6 +39,7 @@ async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[st
     return history
 
 
+
 async def orchestrate_agent_run(
     query: str,
     history: List[Dict[str, Any]],
@@ -57,24 +58,17 @@ async def orchestrate_agent_run(
         }
     timings = metrics["timings"]
 
-    # --- NATIVE CONTEXT INJECTION ---
-    history = await _inject_project_context(history)
-
     # --- PERSONA LOADING ---
     persona_directives: Optional[str] = None
     persona_context: Optional[str] = None
     if persona_alias:
         loader = PersonaLoader()
         try:
-            # The loader now returns a tuple of (directives, context)
             persona_directives, persona_context = loader.load_persona_content(persona_alias)
         except (RecursionError, FileNotFoundError) as e:
             error_msg = f"🛑 HALTING: Could not load persona '{persona_alias}'. Reason: {e}"
             print(error_msg, file=sys.stderr)
-            return {
-                "response": error_msg, 
-                "metrics": metrics,
-                }
+            return {"response": error_msg, "metrics": metrics}
 
     # --- PRE-PROCESSING & COMPRESSION LOGIC ---
     optimizer = ContextOptimizer()
@@ -122,9 +116,7 @@ async def orchestrate_agent_run(
         synthesis_result = await response_handler.call_api(direct_prompt, model=synthesis_model)
         metrics["timings"]["synthesis"] = synthesis_result["duration"]
         metrics["tokens"]["synthesis"] = synthesis_result["tokens"]        
-        return {
-            "response": synthesis_result["content"], 
-            "metrics": metrics,        }
+        return {"response": synthesis_result["content"], "metrics": metrics}
 
     # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
     critique = None
