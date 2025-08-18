@@ -1,5 +1,4 @@
 # src/ai_assistant/cli.py 
-
 from datetime import datetime
 from importlib import metadata, resources
 from pathlib import Path
@@ -25,14 +24,19 @@ from .utils.signature import calculate_persona_signature
 from .utils.result_presenter import present_result
 
 
-# --- Unified plugin discovery (Recommendation 3) ---
 def list_available_plugins() -> List[str]:
     """Dynamically discovers available plugins from both entry points and the local project directory."""
     discovered_plugins = []
     
-    # 1. Load built-in plugins via entry points
+    # 1. Load built-in plugins via entry points (with version compatibility)
     try:
-        entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
+        # For Python 3.10+
+        if sys.version_info >= (3, 10):
+            entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
+        # For Python < 3.10
+        else:
+            entry_points = metadata.entry_points().get('ai_assistant.context_plugins', [])
+            
         for entry in entry_points:
             discovered_plugins.append(entry.name)
     except Exception as e:
