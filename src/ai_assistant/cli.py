@@ -53,6 +53,7 @@ def is_manifest_invalid(manifest_path: Path):
     project_root = Path.cwd()
     # Use resources to find the canonical personas directory within the package
     try:
+        package_root_traversable = resources.files('ai_assistant')
         #  Locate internal data files relative to the package
         config_traversable = resources.files('ai_assistant').joinpath('internal_data/persona_config.yml')
         personas_dir_traversable = resources.files('ai_assistant').joinpath('personas')
@@ -108,8 +109,10 @@ def is_manifest_invalid(manifest_path: Path):
                     "content": content,
                 })
 
+        package_root_path = personas_dir.parent 
+        
         # Use the centralized signature calculation function
-        recalculated_signature = calculate_persona_signature(validated_persona_details, project_root)
+        recalculated_signature = calculate_persona_signature(validated_persona_details, package_root_path)
 
         if recalculated_signature != stored_signature:
             return True, "Persona file structure or content has changed since last validation. The signature does not match."
