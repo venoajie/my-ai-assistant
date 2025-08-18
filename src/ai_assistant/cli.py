@@ -1,14 +1,17 @@
+
 # src/ai_assistant/cli.py 
 
-import argparse
-import asyncio
+from datetime import datetime
+from importlib import metadata, resources
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+import argparse
+import asyncio
+import importlib.util
+import inspect
 import sys
-import yaml
-from importlib import metadata, resources
-from datetime import datetime
 import time
+import yaml
 
 from . import kernel 
 from .config import ai_settings
@@ -22,6 +25,31 @@ from .utils.colors import Colors
 from .utils.signature import calculate_persona_signature
 from .utils.result_presenter import present_result
 
+
+# --- MODIFIED: Unified plugin discovery (Recommendation 3) ---
+def list_available_plugins() -> List[str]:
+    """Dynamically discovers available plugins from both entry points and the local project directory."""
+    discovered_plugins = []
+    
+    # 1. Load built-in plugins via entry points
+    try:
+        entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
+        for entry in entry_points:
+            discovered_plugins.append(entry.name)
+    except Exception as e:
+        print(f"{Colors.YELLOW}⚠️  Warning: Could not load plugins from entry points: {e}{Colors.RESET}", file=sys.stderr)
+        
+    # 2. Discover and load local, project-specific plugins
+    local_plugins_path = Path.cwd() / ai_settings.general.local_plugins_directory
+    if local_plugins_path.is_dir():
+        for file_path in local_plugins_path.glob("*.py"):
+            # Use a special suffix to distinguish local plugins
+            plugin_name = f"{file_path.stem.replace('_plugin', '')} (local)"
+            if plugin_name not in discovered_plugins:
+                 discovered_plugins.append(plugin_name)
+
+    return sorted(discovered_plugins)
+
     
 def is_manifest_invalid(manifest_path: Path):
     """
@@ -31,8 +59,13 @@ def is_manifest_invalid(manifest_path: Path):
     project_root = Path.cwd()
     # Use resources to find the canonical personas directory within the package
     try:
+        package_root_traversable = resources.files('ai_assistant')
+        #  Locate internal data files relative to the package
+        config_traversable = resources.files('ai_assistant').joinpath('internal_data/persona_config.yml')
         personas_dir_traversable = resources.files('ai_assistant').joinpath('personas')
         personas_dir = Path(str(personas_dir_traversable))
+        internal_data_dir_traversable = resources.files('ai_assistant').joinpath('internal_data')
+        internal_data_dir = Path(str(internal_data_dir_traversable))
     except (ModuleNotFoundError, FileNotFoundError):
         return True, "Could not locate the built-in personas directory."
 
@@ -64,14 +97,15 @@ def is_manifest_invalid(manifest_path: Path):
 
     # --- Check 3: Recalculate and compare the validation signature (robust check) ---
     try:
-        validator = PersonaValidator(project_root / "persona_config.yml")
+        # Initialize validator with the correct, packaged config path
+        validator = PersonaValidator(Path(str(config_traversable)))
         all_persona_paths = list(personas_dir.rglob("*.persona.md"))
         validated_persona_details = []
-
+        
         for persona_path in all_persona_paths:
             is_valid, reason = validator.validate_persona(persona_path, personas_dir)
             if not is_valid:
-                return True, f"A persona file on disk is invalid. Reason: {reason} for file {persona_path.relative_to(personas_dir)}. The manifest is out of sync with an invalid state."
+                return True, f"A persona file on disk is invalid. Reason: {reason}"
             else:
                 content = persona_path.read_text(encoding="utf-8")
                 data = yaml.safe_load(content.split("---")[1])
@@ -81,8 +115,10 @@ def is_manifest_invalid(manifest_path: Path):
                     "content": content,
                 })
 
+        package_root_path = personas_dir.parent 
+        
         # Use the centralized signature calculation function
-        recalculated_signature = calculate_persona_signature(validated_persona_details, project_root)
+        recalculated_signature = calculate_persona_signature(validated_persona_details, package_root_path)
 
         if recalculated_signature != stored_signature:
             return True, "Persona file structure or content has changed since last validation. The signature does not match."
@@ -136,34 +172,53 @@ def build_file_context(
             
     return context_str
 
-def list_available_plugins() -> List[str]:
-    """Dynamically discovers available plugins via entry points."""
-    discovered_plugins = []
-    # Use importlib.metadata to find registered entry points
-    entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
-    for entry in entry_points:
-        discovered_plugins.append(entry.name)
-    return sorted(discovered_plugins)
-
-    
+# --- MODIFIED: Refactored plugin loader to handle local plugins (Recommendation 3) ---
 def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBase]:
-    """Dynamically loads a context plugin using its registered entry point."""
+    """Dynamically loads a context plugin from entry points or the local project directory."""
     if not plugin_name:
         return None
 
     print(f"{Colors.MAGENTA}🔌 Loading context plugin: {plugin_name}...{Colors.RESET}")
+    
     try:
-        # Find the specific entry point by name
-        entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
-        plugin_entry = next((ep for ep in entry_points if ep.name == plugin_name.lower()), None)
+        # --- Handle local plugins ---
+        if plugin_name.endswith(" (local)"):
+            base_name = plugin_name.removesuffix(" (local)")
+            local_plugins_path = Path.cwd() / ai_settings.general.local_plugins_directory
+            plugin_file = local_plugins_path / f"{base_name}_plugin.py"
+            
+            if not plugin_file.exists():
+                print(f"   - {Colors.RED}❌ Error: Local plugin file not found: {plugin_file}{Colors.RESET}", file=sys.stderr)
+                return None
 
-        if not plugin_entry:
-            print(f"   - {Colors.RED}❌ Error: Plugin '{plugin_name}' is not a registered entry point.{Colors.RESET}", file=sys.stderr)
+            # Dynamically load the module from the file path
+            spec = importlib.util.spec_from_file_location(base_name, plugin_file)
+            if not spec or not spec.loader:
+                raise ImportError(f"Could not create module spec for {plugin_file}")
+            
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            
+            # Find the class that inherits from ContextPluginBase
+            for _, obj in inspect.getmembers(module, inspect.isclass):
+                if issubclass(obj, ContextPluginBase) and obj is not ContextPluginBase:
+                    return obj(project_root=Path.cwd())
+            
+            print(f"   - {Colors.RED}❌ Error: No class inheriting from ContextPluginBase found in {plugin_file}{Colors.RESET}", file=sys.stderr)
             return None
 
-        # Load the class from the entry point and instantiate it
-        plugin_class = plugin_entry.load()
-        return plugin_class(project_root=Path.cwd())
+        # --- Handle entry-point plugins (existing logic) ---
+        else:
+            entry_points = metadata.entry_points(group='ai_assistant.context_plugins')
+            plugin_entry = next((ep for ep in entry_points if ep.name == plugin_name.lower()), None)
+
+            if not plugin_entry:
+                print(f"   - {Colors.RED}❌ Error: Plugin '{plugin_name}' is not a registered entry point.{Colors.RESET}", file=sys.stderr)
+                return None
+
+            plugin_class = plugin_entry.load()
+            return plugin_class(project_root=Path.cwd())
+
     except Exception as e:
         print(f"   - {Colors.RED}❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}{Colors.RESET}", file=sys.stderr)
         return None
@@ -250,10 +305,33 @@ async def async_main():
     args = parser.parse_args()
     
     user_query = ' '.join(args.query)
-    _run_prompt_sanity_checks(args, user_query)
     
+    # Initialize args.files as a list if it's None
+    if args.files is None:
+        args.files = []
+
+    # Prepend auto-injected files from config, ensuring no duplicates
+    auto_injected_files = ai_settings.general.auto_inject_files or []
+    # Use a set for efficient duplicate checking of already present files
+    seen_files = set(args.files)
+    
+    # We prepend in reverse order so the final list has the config order correct
+    for f_path in reversed(auto_injected_files):
+        if f_path not in seen_files:
+            args.files.insert(0, f_path)
+            seen_files.add(f_path)
+
+    _run_prompt_sanity_checks(args, user_query)
+            
     if args.persona:
-        manifest_path = Path.cwd() / "persona_manifest.yml"
+        try:
+            # Find the manifest inside the installed package
+            manifest_traversable = resources.files('ai_assistant').joinpath('internal_data/persona_manifest.yml')
+            manifest_path = Path(str(manifest_traversable))
+        except (ModuleNotFoundError, FileNotFoundError):
+            print(f"{Colors.RED}🛑 HALTING: Could not locate the built-in persona manifest.{Colors.RESET}", file=sys.stderr)
+            sys.exit(1)
+
         invalid, reason = is_manifest_invalid(manifest_path)
         if invalid:
             print(f"{Colors.RED}🛑 HALTING: The persona manifest is invalid. Reason: {reason}{Colors.RESET}", file=sys.stderr)
@@ -292,6 +370,22 @@ async def async_main():
 
     full_context_str = ""
     context_plugin = load_context_plugin(args.context)
+    # --- Automatic Domain-Based Plugin Loading ---                
+    if args.persona and args.persona.startswith('domains/'):
+        parts = args.persona.split('/')
+        if len(parts) > 1:
+            domain_name = parts[1]
+            # CORRECTED: Use a hyphen to match the new entry point name in pyproject.toml
+            plugin_name_to_load = f"domains-{domain_name}" 
+            print(f"{Colors.MAGENTA}🔌 Persona domain '{domain_name}' detected. Attempting to auto-load context plugin...{Colors.RESET}")
+            context_plugin = load_context_plugin(plugin_name_to_load)
+            
+    # --- Manual Override ---
+    # If the user specifies --context, it overrides the automatic one.
+    if args.context:
+        print(f"{Colors.YELLOW}--context flag provided, overriding any auto-loaded plugin.{Colors.RESET}")
+        context_plugin = load_context_plugin(args.context)
+
     if context_plugin:
         print(f"   - {Colors.GREEN}✅ Plugin loaded successfully.{Colors.RESET}")
         plugin_context = context_plugin.get_context(user_query, args.files or [])

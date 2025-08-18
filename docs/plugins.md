@@ -1,25 +1,31 @@
 # Guide: Extending the Assistant with Plugins
 
-Plugins allow you to inject domain-specific knowledge into the AI Assistant, making it "smarter" about your project's unique context. This guide provides a step-by-step tutorial for creating your own custom context plugin.
+Plugins allow you to inject domain-specific knowledge into the AI Assistant, making it "smarter" about your project's unique context. This guide provides a step-by-step tutorial for creating your own custom context plugin, covering both built-in and local plugins, and the concept of automatic domain-based loading.
 
-## What is a Context Plugin?
+## Hybrid Model of Built-in and Local Plugins
 
-A context plugin is a simple Python class that analyzes the user's query and attached files to provide extra, relevant information. This information is then added to the context that the AI receives, helping it make better decisions.
+The AI Assistant supports a hybrid model of plugins:
+- **Built-in Plugins:** These are plugins that are included with the AI Assistant and are available to all projects. They are registered via entry points in the `pyproject.toml` file.
+- **Local Plugins:** These are project-specific plugins that are stored in the `.ai/plugins/` directory within your project. They are automatically discovered and loaded by the AI Assistant.
 
-For example, a plugin for a trading application could inject definitions of key terms like "order book" or "slippage" whenever it sees those words in a query.
+## Automatic Domain-Based Loading
 
-## Step 1: Create the Plugin File
+When a persona from a specific domain is selected (e.g., `domains/DataScience`), the AI Assistant attempts to auto-load a context plugin associated with that domain. The plugin name is derived from the domain name (e.g., `domains-DataScience`).
 
-Create a new Python file for your plugin. For this example, we will create a plugin named "DataScience".
+## Tutorial: Creating a Local Plugin
 
-**File:** `src/ai_assistant/plugins/datascience_plugin.py`
+### Step 1: Create the Plugin File
 
-## Step 2: Define the Plugin Class
+Create a new Python file for your plugin in the `.ai/plugins/` directory. For this example, we will create a plugin named "DataScience".
+
+**File:** `.ai/plugins/datascience_plugin.py`
+
+### Step 2: Define the Plugin Class
 
 In your new file, define a class that inherits from `ContextPluginBase`. It must have a `name` attribute and a `get_context` method.
 
 ```python
-# src/ai_assistant/plugins/datascience_plugin.py
+# .ai/plugins/datascience_plugin.py
 from typing import List
 from pathlib import Path
 from ai_assistant.context_plugin import ContextPluginBase
@@ -51,25 +57,9 @@ class DataScienceContextPlugin(ContextPluginBase):
         return context_str
 ```
 
-## Step 3: Register the Plugin
+### Step 3: Use the Plugin
 
-The assistant discovers plugins using Python's "entry points" mechanism. You must register your new plugin in the `pyproject.toml` file.
-
-**File:** `pyproject.toml`
-
-Add the following lines under the `[project.entry-points."ai_assistant.context_plugins"]` section:
-
-```toml
-[project.entry-points."ai_assistant.context_plugins"]
-trading = "ai_assistant.plugins.trading_plugin:TradingContextPlugin"
-# Add your new plugin below
-datascience = "ai_assistant.plugins.datascience_plugin:DataScienceContextPlugin"
-```
-The format is `plugin_name = "path.to.module:ClassName"`.
-
-## Step 4: Use the Plugin
-
-After reinstalling the package in editable mode (`pip install -e .`) to register the new entry point, you can use your plugin via the `--context` flag.
+After creating your plugin, you can use it in your project. The AI Assistant will automatically discover and load plugins from the `.ai/plugins/` directory.
 
 ```bash
 # List available plugins to confirm yours is registered

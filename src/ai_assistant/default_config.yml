@@ -4,6 +4,7 @@ model_selection:
   planning: "deepseek-coder"
   critique: "deepseek-coder"
   synthesis: "gemini-2.5-pro"
+  json_corrector: "gemini-2.5-flash-lite"
 default_provider: "gemini"
 general:
   personas_directory: "personas"
@@ -15,6 +16,7 @@ general:
     - "AGENTS.md"
   critique_persona_alias: "domains/programming/pva-1"
   failure_persona_alias: "domains/programming/da-1"
+  enable_llm_json_corrector: true
 context_optimizer:
   max_tokens: 8000
   # If estimated input tokens exceed this, use compact prompts. Set to 0 to always use verbose prompts.
@@ -43,9 +45,10 @@ generation_params:
 providers:
   gemini:
     api_key_env: "GEMINI_API_KEY"
-    api_endpoint_template: "https://generativelaunguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    api_endpoint_template: "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     models:
       - "gemini-2.5-pro"
+      - "gemini-2.5-flash-lite" 
   deepseek:
     api_key_env: "DEEPSEEK_API_KEY"
     api_endpoint: "https://api.deepseek.com/chat/completions"

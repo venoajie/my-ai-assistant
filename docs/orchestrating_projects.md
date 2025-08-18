@@ -9,7 +9,7 @@ Use this workflow for complex goals that cannot be completed in a single step, s
 -   Performing a multi-stage refactoring that involves design, implementation, and testing.
 -   Executing a complex audit that requires multiple specialists.
 
-For simpler, single-focus tasks like "refactor this one file" or "review this code," the standard [Two-Stage Workflow](./getting_started.md) is more appropriate.
+For simpler, single-focus tasks like "refactor this one file," the standard [Two-Stage Workflow](./getting_started.md) is more appropriate.
 
 ## The Core Concepts
 
@@ -36,59 +36,31 @@ ai --persona core/pmo-1 "I want to build a command-line tool that fetches and di
 ```
 
 **The `pmo-1`'s Response:**
-The orchestrator will create the initial `PROJECT_STATE.md` file and give you the command to run for the next step: defining the requirements.
+The orchestrator will create the initial `PROJECT_STATE.md` file and give you the command for the next step: defining the requirements with a specialist.
 
 ```text
-### Analysis & Plan
-The project is in the `INITIALIZATION` phase. I will create the initial `PROJECT_STATE.md` file and define the first task, which is to clarify the project requirements. The next step requires the `csa-1` persona.
-
----
-### Generated Artifacts
-<!-- FILENAME: PROJECT_STATE.md -->
-```markdown
-# Project State: Weather CLI Tool
-
-- **version**: 1.0
-- **status**: PENDING_REQUIREMENTS
-- **goal**: "Create a command-line tool that fetches and displays the weather for a given city."
-
-## Project Plan & Dependency Chain
-1.  **Phase: Requirements Definition**
-    -   **Specialist:** `core/csa-1`
-    -   **Status:** PENDING
-2.  **Phase: Architectural Design**
-    -   **Specialist:** `core/csa-1`
-    -   **Status:** BLOCKED
-3.  **Phase: Implementation**
-    -   **Specialist:** `core/csa-1`
-    -   **Status:** BLOCKED
-```
-
----
 ### Next Command
-Execute the following command to have `csa-1` define the project requirements:
+Execute the following command to have the `csa-1` persona define the project requirements:
 ```bash
-ai --persona core/csa-1 -f PROJECT_STATE.md "Based on the project state, generate a detailed list of functional and non-functional requirements. Update the 'Requirements' section of the attached file with your findings."
+ai --persona domains/programming/csa-1 -f PROJECT_STATE.md "Based on the project state, generate a detailed list of functional and non-functional requirements. Update the 'Requirements' section of the attached file with your findings."
 ```
 
-### Step 2: Defining Requirements
+### Step 2: Defining Requirements & Architecture
 
-Now, you run the command provided by `pmo-1`. The `csa-1` persona will generate the requirements and output an updated `PROJECT_STATE.md` file.
-
-After `csa-1` finishes, you check back in with the project manager.
+You run the command provided by `pmo-1`. The `csa-1` (Collaborative Systems Architect) will generate the requirements and architecture, updating the `PROJECT_STATE.md` file. After it finishes, you check back in with the project manager.
 
 **Your Command:**
 ```bash
 # You provide the updated state file from the previous step
-ai --persona core/pmo-1 -f PROJECT_STATE.md "The requirements definition is complete. What is the next step?"
+ai --persona core/pmo-1 -f PROJECT_STATE.md "The requirements and architecture are complete. What is the next step?"
 ```
 
 **The `pmo-1`'s Response:**
-The orchestrator sees that the requirements are done, updates the status, and gives you the next command for the architectural design phase.
+The orchestrator sees that the design phase is done, updates the status, and gives you the next command for the implementation phase. **Note that it now hands off the task to a different specialist, the `rce-1` (Refactoring & Code Enhancement) persona, who is an expert in writing code.**
 
 ```text
 ### Analysis & Plan
-The project's `PENDING_REQUIREMENTS` phase is complete. The next step in the dependency chain is `Architectural Design`. I will update the state file and assign this task to the `csa-1` persona.
+The project's `PENDING_DESIGN` phase is complete. The next step is `Implementation`. I will update the state file and assign this task to the `rce-1` persona.
 
 ---
 ### Generated Artifacts
@@ -97,41 +69,35 @@ The project's `PENDING_REQUIREMENTS` phase is complete. The next step in the dep
 # Project State: Weather CLI Tool
 
 - **version**: 1.0
-- **status**: PENDING_DESIGN
+- **status**: PENDING_IMPLEMENTATION
 - **goal**: "Create a command-line tool that fetches and displays the weather for a given city."
 
 ## Project Plan & Dependency Chain
 1.  **Phase: Requirements Definition**
-    -   **Specialist:** `core/csa-1`
+    -   **Specialist:** `domains/programming/csa-1`
     -   **Status:** COMPLETE
 2.  **Phase: Architectural Design**
-    -   **Specialist:** `core/csa-1`
-    -   **Status:** PENDING
+    -   **Specialist:** `domains/programming/csa-1`
+    -   **Status:** COMPLETE
 3.  **Phase: Implementation**
-    -   **Specialist:** `core/csa-1`
-    -   **Status:** BLOCKED
-
-## Requirements
-- The tool must accept a city name as a command-line argument.
-- It must fetch weather data from a public API.
-- It must display the current temperature, humidity, and wind speed.
-- Non-functional: The tool should handle API errors gracefully.
+    -   **Specialist:** `domains/programming/rce-1`
+    -   **Status:** PENDING
 ```
 
 ---
 ### Next Command
-Execute the following command to have `csa-1` design the application architecture:
+Execute the following command to have `rce-1` implement the CLI tool. Use the `--output-dir` flag for safety:
 ```bash
-ai --persona core/csa-1 -f PROJECT_STATE.md "Based on the requirements, design a simple architecture for the CLI tool. Specify the main modules, their responsibilities, and any external dependencies. Update the 'Architecture' section of the attached file."
+ai --persona domains/programming/rce-1 --output-dir ./ai_runs/weather-cli \
+  -f PROJECT_STATE.md \
+  "<ACTION>Based on the architecture in the state file, implement the weather CLI tool. Create all necessary files.</ACTION>"
 ```
 
 ### Step 3 and Beyond
 
 You continue this cycle:
-1.  Run the command provided by `pmo-1` to have a specialist (`csa-1`, `da-1`, etc.) complete a task.
+1.  Run the command provided by `pmo-1` to have a specialist complete a task.
 2.  Take the updated `PROJECT_STATE.md` from the specialist.
 3.  Give the updated state file back to `pmo-1` and ask "What's next?".
 
-The `pmo-1` will guide you through the entire project lifecycle—design, implementation, debugging, and finalization—until the `status` in the state file is `COMPLETE`.
-
-This workflow provides a powerful, structured, and repeatable process for tackling large and complex software development tasks with the AI Assistant.
+The `pmo-1` will guide you through the entire project lifecycle until the `status` in the state file is `COMPLETE`.

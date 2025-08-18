@@ -34,7 +34,7 @@ The tool will only ever capture a maximum of **10,000 characters of standard out
 
 ## The Safety Mechanism: Always in Control
 
-Even with these safeguards, the system's [Safety Model](./safety_model.md) protects you. Any plan that uses `run_shell` will **always** halt and ask for your explicit manual approval before any command is executed. If you approve the plan by typing `y`, the command runs. **If you deny the plan by typing `N`, the entire task is aborted instantly, and the AI will not proceed to synthesize a final answer.**
+Even with these safeguards, the system's [Safety Model](./safety_model.md) protects you. Any plan that uses `run_shell` will **always** halt and ask for your explicit manual approval before any command is executed. If you approve the plan by typing `y`, the command runs. **If you deny the plan by typing `N` or anything else, the entire task is aborted instantly.**
 
 ---
 
@@ -48,7 +48,7 @@ You start a session and ask your question in plain English.
 
 **Your Command:**
 ```bash
-ai --persona patterns/sia-1 "Can you check if my Docker containers are running correctly? List any containers that are stopped or have exited."
+ai --persona domains/programming/sia-1 "Can you check if my Docker containers are running correctly? List any containers that are stopped or have exited."
 ```
 
 ### Step 2: Review and Approve the Plan

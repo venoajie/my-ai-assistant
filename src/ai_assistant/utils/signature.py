@@ -6,17 +6,18 @@ from typing import List, Dict, Any
 
 def calculate_persona_signature(
     persona_details: List[Dict[str, Any]], 
-    project_root: Path,
+    project_root: Path, # This argument is now ignored but kept for compatibility
     ) -> str:
     
     """
-    Calculates a deterministic signature based on persona content and structure.
+    Calculates a deterministic signature based on persona content and alias.
     This is the canonical implementation used by both the manifest generator
-    and the runtime CLI validator.
+    and the runtime CLI validator. It is robust to differences between
+    development and deployed environments.
 
     Args:
         persona_details: A list of dictionaries, each containing details about a validated persona.
-        project_root: The absolute path to the project's root directory.
+        project_root: The absolute path to the project's root directory. (Ignored)
 
     Returns:
         A SHA256 hexdigest representing the signature of all persona content.
@@ -24,9 +25,9 @@ def calculate_persona_signature(
     canonical_data = []
     # Sort by alias to ensure a deterministic order
     for details in sorted(persona_details, key=lambda p: p['alias']):
+        
         canonical_data.append({
             "alias": details['alias'],
-            "path": str(details['path'].relative_to(project_root)),
             "content_sha256": hashlib.sha256(details['content'].encode('utf-8')).hexdigest(),
         })
     

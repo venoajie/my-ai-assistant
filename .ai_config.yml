@@ -1,0 +1,17 @@
+# .ai_config.yml
+# Add this to your existing config or create a new one.
+
+# This section will be read by our local plugin
+trading:
+  services:
+    - name: "MonolithicTradingService"
+      path: "src/trading_service.py"
+      description: "The legacy, all-in-one trading service."
+    - name: "RefactoredTradingService"
+      path: "src/services/trading/"
+      description: "The new, structured trading service."
+
+# This section will test the auto-inject fix
+general:
+  auto_inject_files:
+    - "REFACTOR_PLAN.md"

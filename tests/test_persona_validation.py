@@ -12,7 +12,8 @@ class TestPersonaValidation(unittest.TestCase):
         # Assumes tests are run from the project root directory
         self.project_root = Path.cwd()
         self.personas_dir = self.project_root / "src" / "ai_assistant" / "personas"
-        self.config_path = self.project_root / "persona_config.yml"
+        # CORRECTED PATH: Point to the actual location of the config file.
+        self.config_path = self.project_root / "src" / "ai_assistant" / "internal_data" / "persona_config.yml"
         
         if not self.personas_dir.exists():
             self.fail(f"Personas directory not found at {self.personas_dir}")
