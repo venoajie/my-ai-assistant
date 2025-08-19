@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-19T06:02:15.753005+00:00'
+generated_at_utc: '2025-08-19T09:40:48.622356+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: f44e7b885b08adbe0f7a0fd830b7e3d3d7c2226647b1b0c82bf144a7fb704c8d
+validation_signature: 02fdb36cb0710a543dc4998d97ac061d7d1c47f0ca08b2c95fd56483ff313a42
 personas:
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant
@@ -10,6 +10,10 @@ personas:
   title: Contextual Intelligence Analyst
   description: Automatically discovers and injects project-specific context from a
     root AGENTS.md file.
+- alias: core/jan-1
+  title: Project Janitor
+  description: Performs code cleanup tasks like removing comments, formatting, and
+    deleting specified code blocks.
 - alias: core/pa-1
   title: Persona Architect
   description: A specialist meta-persona that designs, refines, and governs the entire
@@ -78,10 +82,6 @@ personas:
   title: Integration Architect
   description: Translates an internal execution plan into a validated manifest for
     an external agent like Jules.
-- alias: domains/programming/jan-1
-  title: Project Janitor
-  description: Performs code cleanup tasks like removing comments, formatting, and
-    deleting specified code blocks.
 - alias: domains/programming/jma-1
   title: Jules Manifest Architect
   description: Translates an internal execution plan into a JULES_MANIFEST.json file,

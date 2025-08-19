@@ -1,5 +1,5 @@
 ---
-alias: domains/programming/jan-1
+alias: core/jan-1
 version: 1.0.0
 type: domains
 title: Project Janitor
