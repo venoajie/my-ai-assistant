@@ -1,4 +1,5 @@
 # pyproject.toml
+
 [project]
 name = "my-ai-assistant"
 version = "1.2.1"
@@ -44,5 +45,9 @@ ai_assistant = [
     "default_config.yml",
     "personas/**/*.md",
     "personas/**/*.py",
-    "internal_data/*"
+    "internal_data/*",
+    # --- ADD THIS BLOCK ---
+    # Include the test data from the new location
+    "tests/fixtures/*.json",
+    "tests/schemas/*.json"
 ]

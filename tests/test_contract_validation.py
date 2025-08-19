@@ -1,3 +1,4 @@
+# tests/test_contract_validation.py
 import unittest
 import json
 from pathlib import Path
@@ -5,6 +6,7 @@ import jsonschema
 import asyncio
 import shutil
 import tempfile
+from importlib import resources  # <-- Import the correct library
 
 # This sys.path manipulation is necessary for the test runner to find the package source
 import sys
@@ -20,15 +22,15 @@ class TestContractValidation(unittest.TestCase):
 
     def setUp(self):
         """Set up paths for schemas and fixtures, and create a temporary directory for test outputs."""
-        self.schemas_dir = project_root / "tests" / "schemas"
-        self.fixtures_dir = project_root / "tests" / "fixtures"
-        self.manifest_schema_path = self.schemas_dir / "output_package_manifest_schema.json"
-        
         self.temp_dir = Path(tempfile.mkdtemp())
 
-        self.assertTrue(self.manifest_schema_path.exists(), "Manifest JSON schema is missing.")
-        with open(self.manifest_schema_path, 'r', encoding='utf-8') as f:
-            self.manifest_schema = json.load(f)
+        # --- REFACTORED: Load schema using importlib.resources ---
+        try:
+            schema_path = resources.files('ai_assistant.tests.schemas').joinpath('output_package_manifest_schema.json')
+            with schema_path.open('r', encoding='utf-8') as f:
+                self.manifest_schema = json.load(f)
+        except (FileNotFoundError, ModuleNotFoundError):
+            self.fail("Could not load manifest JSON schema from package resources. Check file location and pyproject.toml.")
 
     def tearDown(self):
         """Clean up the temporary directory."""
@@ -39,11 +41,13 @@ class TestContractValidation(unittest.TestCase):
         Validates a static, known-good manifest fixture against the JSON schema.
         This confirms the schema itself is correct and hasn't drifted from the fixture.
         """
-        fixture_path = self.fixtures_dir / "sample_manifest.json"
-        self.assertTrue(fixture_path.exists(), "Sample manifest fixture is missing.")
-        
-        with open(fixture_path, 'r', encoding='utf-8') as f:
-            fixture_data = json.load(f)
+        # --- REFACTORED: Load fixture using importlib.resources ---
+        try:
+            fixture_path = resources.files('ai_assistant.tests.fixtures').joinpath('sample_manifest.json')
+            with fixture_path.open('r', encoding='utf-8') as f:
+                fixture_data = json.load(f)
+        except (FileNotFoundError, ModuleNotFoundError):
+            self.fail("Could not load sample manifest fixture from package resources. Check file location and pyproject.toml.")
             
         try:
             jsonschema.validate(instance=fixture_data, schema=self.manifest_schema)
