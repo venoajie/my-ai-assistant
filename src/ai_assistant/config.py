@@ -89,46 +89,47 @@ def load_ai_settings() -> AIConfig:
         config_data = yaml.safe_load(default_config_text)
     except (FileNotFoundError, yaml.YAMLError) as e:
         print(f"FATAL: Could not load or parse the default package configuration. Error: {e}")
-        # This is a fatal error, as the application cannot run without its base config.
         exit(1)
     
-    # --- Centralized Path Resolution ---
-    
-    # Define base paths first
-    project_root = Path.cwd()
     # 2. Load user config overrides
     user_config_path = Path.home() / ".config" / "ai_assistant" / "config.yml"
     if user_config_path.exists():
         with open(user_config_path, 'r') as f:
             user_config = yaml.safe_load(f)
-        # --- Only merge if the loaded config is not empty ---
         if user_config:
             config_data = deep_merge(
                 config_data, 
                 user_config,
                 )
      
-    
     # 3. Load project config overrides
     project_config_path = Path.cwd() / ".ai_config.yml"
     if project_config_path.exists():
         with open(project_config_path, 'r') as f:
             project_config = yaml.safe_load(f)
-        # --- Only merge if the loaded config is not empty ---            
         if project_config:
             config_data = deep_merge(
                 config_data, 
                 project_config,
                 )
     
+    # --- THIS IS THE FIX ---
+    # 4. Create and inject the resolved paths into the config data before validation.
+    # This new logic is more explicit and correctly constructs paths.
+    
+    # Define base directories for clarity and correctness
+    project_root = Path.cwd()
+    user_config_dir = Path.home() / ".config" / "ai_assistant"
 
-    # 4. Create and inject the resolved paths into the config data before validation
+    # Get the final, merged general config section
     general_conf = config_data.get("general", {})
+
+    # Build the paths dictionary with correct base paths
     config_data["paths"] = {
         "project_root": project_root,
         "sessions_dir": project_root / general_conf.get("sessions_directory", ".ai_sessions"),
-        "user_personas_dir": Path.home() / general_conf.get("personas_directory", "personas"),
-        "project_local_personas_dir": project_root / ".ai" / "personas",
+        "user_personas_dir": user_config_dir / general_conf.get("personas_directory", "personas"),
+        "project_local_personas_dir": project_root / ".ai" / "personas", # This is a fixed convention
         "local_plugins_dir": project_root / general_conf.get("local_plugins_directory", ".ai/plugins"),
     }
 
@@ -137,7 +138,6 @@ def load_ai_settings() -> AIConfig:
  
 def deep_merge(base: Dict, update: Dict) -> Dict:
     """Deep merge two dictionaries"""
-    # --- FIX: Add a guard clause for safety ---
     if not isinstance(update, dict):
         return base
         
