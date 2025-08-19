@@ -1,6 +1,6 @@
 # PROJECT BLUEPRINT: AI Assistant
 
-<!-- Version: 2.0 -->
+<!-- Version: 2.1 -->
 
 ## 1. System Overview and Core Purpose
 
@@ -29,17 +29,50 @@ The behavior and structure of the persona ecosystem are governed by a set of exp
 #### 2.3.1. Persona Integrity
 All personas are validated against the rules in `persona_config.yml`, and a cryptographically signed `persona_manifest.yml` ensures the application's runtime understanding of its capabilities is never out of sync with the committed source code.
 
-+#### 2.3.2. Data Contract Integrity
-+The system's internal data contracts (e.g., the Output Package Manifest) are not just documented; they are programmatically enforced. Canonical documentation (`docs/system_contracts.yml`) serves as the single source of truth from which machine-readable schemas (JSON Schema) are generated. The automated testing suite validates all relevant code outputs against these schemas during CI/CD. This creates a closed-loop system that prevents drift between documentation, tests, and implementation, ensuring long-term stability.
+## 1. System Overview and Core Purpose
+
+This document is the canonical source of truth for the architectural principles and governance of the AI Assistant project. It serves as a "constitution" for human developers and a "README for the AI," ensuring that all development and AI-driven actions are aligned with the core design philosophy.
+
+The system is a command-line-native, persona-driven agent designed to assist with software development and other knowledge-work tasks. Its primary purpose is to provide a safe, reliable, and extensible framework for leveraging Large Language Models to perform complex, multi-step operations.
+
+---
+
+## 2. Core Architectural Principles
+
+The architecture is built on three foundational principles:
+
+### 2.1. Persona-First Operation
+The primary interface for quality and control is the **Persona System**. All complex tasks should be initiated through a specialized persona. This ensures that AI behavior is constrained, predictable, and follows a proven operational protocol.
+
+### 2.2. Decoupled Execution
+A strict separation is maintained between **AI-driven analysis (thinking)** and **deterministic execution (doing)**. The AI's primary output for any task that modifies the system is a reviewable "Output Package." A separate, non-AI `executor` script then applies these changes. This provides a critical safety layer and enhances auditability.
+
+#### 2.2.1. Adversarial Validation
+To enhance the safety of the "thinking" phase, the system employs an Adversarial Validation Chain. After an initial execution plan is generated, it is passed to a specialized, skeptical "critic" persona. This critic's sole purpose is to identify potential flaws, unstated assumptions, and risks in the plan. This principle acts as an automated "red team" review for the AI's own logic.
+
+### 2.3. Explicit Governance
+The behavior and structure of the persona ecosystem are governed by a set of explicit, machine-readable rules.
+
+#### 2.3.1. Persona Integrity
+All personas are validated against the rules in `persona_config.yml`, and a cryptographically signed `persona_manifest.yml` ensures the application's runtime understanding of its capabilities is never out of sync with the committed source code.
+
+#### 2.3.2. Data Contract Integrity
+The system's internal data contracts (e.g., the Output Package Manifest) are not just documented; they are programmatically enforced.
+-   **Schema Generation:** Canonical documentation (`docs/system_contracts.yml`) serves as the single source of truth from which machine-readable schemas (JSON Schema) are generated. The automated testing suite validates all relevant code outputs against these schemas during CI/CD.
+-   **Documentation-as-Code:**
+    A central governance file (`src/ai_assistant/internal_data/governance.yml`) serves as a single source of truth for rules shared between runtime code and user documentation. A dedicated script (`scripts/generate_docs.py`) uses this file to generate documentation, creating a closed-loop system that prevents drift between the application's behavior (e.g., safety warnings) and its documentation.
 
 ---
 
 ## 3. Persona Directory & Chain of Command
 
+
 The persona ecosystem is a team of specialists with a clear, hierarchical structure.
 
--   **`_mixins/` & `_base/` (Foundations):** These are the architectural foundations. `_mixins` provide shared directives (like coding standards), while `_base` personas define the core archetypes for agent behavior (e.g., collaborative vs. analytical). All specialist personas MUST inherit from a base persona.
-
+-   **`_mixins/` & `_base/` (Foundations):** These are the architectural foundations. `_mixins` provide shared directives (like coding standards), while `_base` personas define the core archetypes for agent behavior.
+    -   `~` **`_base/bcaa-1` (Base Collaborative Agent):** The archetype for interactive, conversational agents that propose plans and seek confirmation.
+    -   `~` **`_base/btaa-1` (Base Technical Analysis Agent):** The archetype for non-interactive, "one-shot" analytical agents.
+    -   **`_base/developer-agent-1` (Base Professional Developer Agent):** A crucial archetype that inherits from `bcaa-1` and adds a non-negotiable protocol for safe software development, including a mandatory Git workflow and the use of specialized tools for file modification. All specialist personas that modify code MUST inherit from this base.
 -   **`core/` (The Orchestrators & Governors):** This directory is reserved exclusively for "meta-governance" and "orchestration" personas. These are agents that manage the AI Assistant *itself* or the workflow between other agents. They do not perform domain-specific tasks.
 
 -   **`domains/` (The Specialists):** This is the primary location for all specialist agents that perform concrete, domain-specific tasks. The ecosystem is designed to be scaled by adding new experts to this directory (e.g., `programming/`, `writing/`, `google/`).
