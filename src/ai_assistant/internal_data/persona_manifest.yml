@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-18T02:21:27.632911+00:00'
+generated_at_utc: '2025-08-19T06:02:15.753005+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: 49bf8084a6ae96f376be0dad0a64d1a5a998831b27663b0d4b468cfad5a60227
+validation_signature: f44e7b885b08adbe0f7a0fd830b7e3d3d7c2226647b1b0c82bf144a7fb704c8d
 personas:
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant
@@ -50,6 +50,10 @@ personas:
   title: Best Practices Reviewer
   description: Acts as a senior peer reviewer for code quality, style, and adherence
     to established best practices.
+- alias: domains/programming/coder-1
+  title: Software Engineer
+  description: A general-purpose software engineer that can write, refactor, explain,
+    and debug code across multiple languages.
 - alias: domains/programming/csa-1
   title: Collaborative Systems Architect
   description: Designs new systems or refactors existing ones, ensuring all changes
