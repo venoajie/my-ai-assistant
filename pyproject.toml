@@ -48,9 +48,7 @@ ai_assistant = [
     "personas/**/*.py",
     "internal_data/*",
 ]
-# --- THIS IS THE FIX ---
-# Add a new, specific entry for the test data sub-package.
-# The key is the package name, and the paths are relative to that package.
+
 "ai_assistant.tests" = [
     "fixtures/*.json",
     "schemas/*.json",
