@@ -35,10 +35,22 @@ test = [
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-# --- THIS IS THE FIX (PART 1) ---
-# This tells setuptools to look for and obey a MANIFEST.in file.
-include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["ai_assistant*"]
+
+# --- THIS IS THE FIX ---
+# We now explicitly define the package data for the main package and the new,
+# unambiguously named test data sub-package.
+[tool.setuptools.package-data]
+ai_assistant = [
+    "default_config.yml",
+    "personas/**/*.md",
+    "personas/**/*.py",
+    "internal_data/*",
+]
+"ai_assistant._test_data" = [
+    "fixtures/*.json",
+    "schemas/*.json",
+]
