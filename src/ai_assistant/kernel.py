@@ -204,7 +204,8 @@ async def orchestrate_agent_run(
                     # If user denies, the entire plan is aborted. Break the loop.
                     break
             try:
-                success, result = tool(**args)
+
+                success, result = await tool(**args)
                 step_results[step_num] = result
                 if success:
                     observations.append(f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\n{result}\n</Observation>")
