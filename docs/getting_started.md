@@ -1,48 +1,52 @@
 # Getting Started: Your First Workflow
 
-This guide will walk you through the core concepts and commands you need to start using the AI Assistant effectively and safely.
+This guide will walk you through installing the AI Assistant and performing your first tasks. We'll cover the basics of read-only analysis and the critical **Two-Stage Workflow** for safely making file changes.
 
-## The Core Concept: Your First Command
+## Installation
 
-Almost every interaction with the assistant follows a simple structure:
+First, install the tool using pip.
 
 ```bash
-ai [FLAGS] "Your goal in plain English"
+# For stable use
+pip install my-ai-assistant
+
+# For development (from a cloned repository)
+pip install -e .
 ```
--   **`[FLAGS]`**: Optional switches that change the assistant's behavior.
--   **`"Your Goal..."`**: Your instruction to the assistant, enclosed in quotes.
 
-### Your Main Controls: The Core Flags
+## Your First Command: Read-Only Analysis
 
-This table lists the most common flags you will use.
+Let's start with a simple, safe task that doesn't modify any files. We'll ask a specialist persona to review a file for us.
 
-| Flag | What It Does | Why You Use It |
-| :--- | :--- | :--- |
-| `--new-session` | Starts a brand new, clean conversation. | **Use this for every new task.** It ensures the AI's memory is fresh. |
-| `--interactive` | Starts a continuous, stateful chat session. | Use for multi-step **dialogue and analysis**. Avoid for file modifications. |
-| `--session <ID>` | Resumes a previous one-shot conversation. | Use this to continue a specific task you started earlier. |
-| `--persona <ALIAS>` | Makes the AI adopt a specific "expert" personality. | **This is the key to high-quality results.** Highly recommended. |
-| `-f, --file <PATH>` | Attaches the content of a file to your request. | Use when the AI needs to **read, review, or modify one or more files**. |
-| `--output-dir <PATH>` | Generates a reviewable "Output Package" instead of executing live. | **This is the required safe mode for any file modifications.** |
-| `--context <PLUGIN>` | Loads a domain-specific context plugin. | Use to give the AI **specialized knowledge** about your project's domain. |
+1.  **Find a Persona:** First, list the available experts.
+    ```bash
+    ai --list-personas
+    ```
+    You'll see a list of personas, including `core/arc-1`, the Architecture Reviewer.
+
+2.  **Run the Command:** Now, ask the architect to review a file. The `-f` flag attaches the file's content to your request.
+    ```bash
+    ai --persona core/arc-1 -f path/to/your/file.py "Please provide a brief architectural review of this file."
+    ```
+The assistant will provide a structured analysis without touching your file system.
 
 ---
 
 ## The Two-Stage Workflow: The Safest Way to Make Changes
 
-For any task that involves modifying files or interacting with Git, the **two-stage workflow is the required and recommended approach.** It is the foundation of the system's **[Safety Model](./safety_model.md)**.
+For any task that involves modifying files, the **two-stage workflow is the required and recommended approach.** It is the foundation of the system's **[Safety Model](./safety_model.md)**.
 
-This workflow decouples the AI-driven analysis from the deterministic, safe execution of the plan.
+This workflow creates an "air gap" between the AI's "thinking" and the actual execution, giving you full control.
 
 ### Stage 1: Generate an Output Package
 
-Use the `--output-dir` flag to have the AI analyze your request and generate a self-contained "Output Package". The AI will not perform any live actions on your files.
+Use the `--output-dir` flag to have the AI generate a plan and a sandboxed copy of its proposed changes. **No changes will be made to your actual files.**
 
 ```bash
 # The AI will analyze the request and create a package in './ai_runs/refactor-01'
-ai --new-session --persona domains/programming/csa-1 --output-dir ./ai_runs/refactor-01 \
-  -f src/services/distributor.py \
-  "<ACTION>Refactor the 'distributor' service to improve its logging.</ACTION>"
+ai --persona domains/programming/coder-1 --output-dir ./ai_runs/refactor-01 \
+  -f src/my_file.py \
+  "<ACTION>Refactor the main function in this file to improve readability.</ACTION>"
 ```
 
 This command creates a directory with the following structure:
@@ -55,62 +59,30 @@ This command creates a directory with the following structure:
 
 ### Stage 2: Review and Execute the Plan
 
-Once the package is generated, you can review the proposed changes and then use the `ai-execute` command to apply them.
+Now, you can inspect the proposed changes.
 
 ```bash
-# 1. Review the plan (optional but recommended)
+# 1. Review the summary
 cat ./ai_runs/refactor-01/summary.md
 
-# 2. Execute the plan with a dry-run to see what commands will run
-ai-execute ./ai_runs/refactor-01
+# 2. Compare the proposed changes with your original file
+diff src/my_file.py ./ai_runs/refactor-01/workspace/src/my_file.py
 
-# 3. Apply the changes for real using the --confirm flag
+# 3. If you approve, apply the changes using the separate ai-execute command
 ai-execute ./ai_runs/refactor-01 --confirm
 ```
+This process ensures you always have the final say before any file is modified.
 
 ---
 
-## Continuous Conversations with Interactive Mode
+## Next Steps: Unlocking Project-Specific Power
 
-For tasks that require back-and-forth **dialogue, analysis, or brainstorming**, interactive mode is the best choice. It creates a continuous session that remembers the conversation history.
+You've now mastered the basic workflows. The true power of the AI Assistant comes from teaching it about **your specific project**. You do this by creating project-local experts and knowledge bases.
 
-**To start an interactive session:**
-```bash
-# Start an interactive session with the Systems Architect persona
-ai --interactive --persona domains/programming/csa-1
-```
-The application will start, and you will be given a prompt (`>`) to enter your queries. The assistant will remember the context of your entire conversation until you type `exit` or `quit`.
+This is the best-practice workflow used by advanced teams to turn the generic assistant into a specialized co-pilot for their codebase.
 
-> **Warning:** Do not use interactive mode for multi-step file modifications. This can lead to errors where the AI's memory of a file becomes out of sync with the actual file on disk. For this, always use the **[Safe Multi-Stage Refactoring](./multi_stage_refactoring.md)** workflow.
+-   **First, learn how to create project-specific experts:**
+    **[➡️ Guide: The Persona System](./personas.md)**
 
----
-
-## Working with Multiple Files & Complex Queries
-
-When your commands become long or involve many files, it's best to save them in a script. This is the most robust and readable method.
-
-**Create a file `my_task.sh`:**
-```bash
-#!/bin/bash
-set -e # Exit immediately if any command fails
-
-# Step 1: Define all file arguments in a clean array.
-files=(
-    -f src/ai_assistant/cli.py
-    -f src/ai_assistant/config.py
-)
-
-# Step 2: Define your long, multi-line query safely.
-query="Analyze the attached files and describe their relationship."
-
-# Step 3: Execute the command safely.
-ai --new-session --persona domains/programming/csa-1 "${files[@]}" "$query"
-```
-
-**How to run this script:**
-```bash
-# 1. Make the script executable (you only need to do this once)
-chmod +x my_task.sh
-
-# 2. Run it
-./my_task.sh
+-   **Then, learn how to inject project-specific knowledge:**
+    **[➡️ Guide: Extending with Plugins](./plugins.md)**

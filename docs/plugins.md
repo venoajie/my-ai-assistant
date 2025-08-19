@@ -1,22 +1,22 @@
 # Guide: Extending the Assistant with Plugins
 
-Plugins allow you to inject domain-specific knowledge into the AI Assistant, making it "smarter" about your project's unique context. This guide provides a step-by-step tutorial for creating your own custom context plugin, covering both built-in and local plugins, and the concept of automatic domain-based loading.
+Plugins are the primary mechanism for injecting deep, domain-specific knowledge into the AI Assistant, making it "smarter" about your project's unique context, business logic, and technical conventions.
 
-## Hybrid Model of Built-in and Local Plugins
+While personas define an agent's *role and process*, plugins provide the underlying *knowledge base* they work from.
 
-The AI Assistant supports a hybrid model of plugins:
-- **Built-in Plugins:** These are plugins that are included with the AI Assistant and are available to all projects. They are registered via entry points in the `pyproject.toml` file.
-- **Local Plugins:** These are project-specific plugins that are stored in the `.ai/plugins/` directory within your project. They are automatically discovered and loaded by the AI Assistant.
+## Why Create a Plugin?
 
-## Automatic Domain-Based Loading
+Imagine your project has a complex internal library with specific rules. Instead of explaining these rules in every prompt, you can encode them into a plugin. The plugin will automatically inject this knowledge whenever a relevant keyword is mentioned.
 
-When a persona from a specific domain is selected (e.g., `domains/DataScience`), the AI Assistant attempts to auto-load a context plugin associated with that domain. The plugin name is derived from the domain name (e.g., `domains-DataScience`).
+This guide focuses on **Local Plugins**, which are the best practice for project-specific work.
 
 ## Tutorial: Creating a Local Plugin
 
+Let's create a plugin that teaches the assistant about your project's custom data science library.
+
 ### Step 1: Create the Plugin File
 
-Create a new Python file for your plugin in the `.ai/plugins/` directory. For this example, we will create a plugin named "DataScience".
+In your project root, create a new Python file in the `.ai/plugins/` directory. The filename must end with `_plugin.py`.
 
 **File:** `.ai/plugins/datascience_plugin.py`
 
@@ -32,7 +32,7 @@ from ai_assistant.context_plugin import ContextPluginBase
 
 class DataScienceContextPlugin(ContextPluginBase):
     """
-    Provides context for data science projects, especially those using pandas.
+    Provides context for our project's data science conventions.
     """
     name = "DataScience"
     
@@ -42,32 +42,35 @@ class DataScienceContextPlugin(ContextPluginBase):
     def get_context(self, query: str, files: List[str]) -> str:
         """
         If the query mentions 'dataframe' or 'etl', inject knowledge
-        about common pandas operations.
+        about our internal library and best practices.
         """
         context_str = ""
         query_lower = query.lower()
         
         if "dataframe" in query_lower or "etl" in query_lower:
-            context_str += "<DataScienceKnowledge>\n"
-            context_str += "  - A pandas DataFrame is an in-memory, two-dimensional, labeled data structure.\n"
-            context_str += "  - Common ETL (Extract, Transform, Load) operations include merging, grouping, and cleaning data.\n"
+            context_str += "<ProjectKnowledge source='DataSciencePlugin'>\n"
+            context_str += "  - CRITICAL: Always use the `project_lib.etl.load_dataframe()` function, as it handles authentication automatically.\n"
             context_str += "  - For performance, prefer vectorized operations over row-by-row iteration.\n"
-            context_str += "</DataScienceKnowledge>\n"
+            context_str += "  - All final dataframes must be validated with `project_lib.validation.validate_schema()` before being saved.\n"
+            context_str += "</ProjectKnowledge>\n"
         
         return context_str
 ```
 
 ### Step 3: Use the Plugin
 
-After creating your plugin, you can use it in your project. The AI Assistant will automatically discover and load plugins from the `.ai/plugins/` directory.
+The AI Assistant automatically discovers local plugins. You can confirm it's loaded by listing all available plugins.
 
 ```bash
-# List available plugins to confirm yours is registered
+# The output will include "datascience (local)"
 ai --list-plugins
 
-# Use your new plugin in a prompt
-ai --new-session --context DataScience \
-  "How can I optimize the ETL process for this large dataframe?"
+# Now, use your plugin in a prompt with the --context flag
+# Note: The name is derived from the filename (datascience_plugin.py -> datascience)
+ai --context 'datascience (local)' \
+  "How should I load this CSV into a dataframe for our ETL process?"
 ```
 
-The AI will now receive the extra context you defined, leading to a more informed and accurate response.
+The AI will now receive the critical, project-specific context you defined, guiding it to generate a correct and compliant answer that uses your internal library.
+
+> **Pro Tip:** While you can load your plugin manually with the `--context` flag, the best practice is to combine it with a project configuration file to automate context injection. Learn more in the **[Project-Specific Configuration Guide](./project_configuration.md)**.
