@@ -208,9 +208,6 @@ contracts:
             description: "Action-specific fields (e.g., 'branch_name', 'path', 'message')."
       
       
-        <StaticFile path="pyproject.toml">
- # pyproject.toml
-
 [project]
 name = "my-ai-assistant"
 version = "1.2.1"
@@ -277,4 +274,4 @@ include = ["ai_assistant*"]
 
     </SECTION:ARTIFACTS_FOR_REVIEW>
 </Mandate>
-```
+ 
