@@ -1,0 +1,22 @@
+[
+  {
+    "role": "system",
+    "content": "<InjectedProjectContext file_path='AGENTS.md'>\n# AGENTS.md: Operator's Manual for AI Assistant\n\n## 1. Project Overview\nThis repository contains an AI Assistant for Software Development built in Python.\n\n## 2. Core Commands\n- **Install Dependencies:** `pip install -e .[test]`\n- **Run Tests:** `pip install -e .[test] && python -m unittest`\n- **Run Application:** `ai` or `ai-execute`\n</InjectedProjectContext>"
+  },
+  {
+    "role": "user",
+    "content": "The following context from files and/or plugins has been attached to our session:\n\n<AttachedFile path=\"AGENTS.md\">\n# AGENTS.md: Operator's Manual for AI Assistant\n\n## 1. Project Overview\nThis repository contains an AI Assistant for Software Development built in Python.\n\n## 2. Core Commands\n- **Install Dependencies:** `pip install -e .[test]`\n- **Run Tests:** `pip install -e .[test] && python -m unittest`\n- **Run Application:** `ai` or `ai-execute`\n</AttachedFile>\n\n"
+  },
+  {
+    "role": "model",
+    "content": "Acknowledged. I will use the provided context in our conversation."
+  },
+  {
+    "role": "user",
+    "content": "hello"
+  },
+  {
+    "role": "model",
+    "content": "🛑 HALTING: Could not load persona 'domains/legal/paralegal-1'. Reason: Persona 'domains/legal/paralegal-1' could not be found or read."
+  }
+]
