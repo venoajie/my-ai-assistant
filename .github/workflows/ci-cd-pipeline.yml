@@ -1,3 +1,4 @@
+# .github/workflows/ci.yml
 name: Python Package CI/CD
 
 # --- Trigger Conditions ---
@@ -9,7 +10,7 @@ on:
 
 # --- Job Definitions ---
 jobs:
-  # This job runs all tests and validation checks. It runs for both branches.
+  # This job runs all tests and validation checks.
   test-and-validate:
     name: Test and Validate
     runs-on: ubuntu-latest
@@ -31,15 +32,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[test]
       
+      - name: Generate Schemas from Contracts
+        run: python scripts/generate_schemas.py
+
       - name: Validate Persona Standards
         run: python scripts/generate_manifest.py
           
       - name: Run Unit Tests
         run: python -m unittest discover tests
 
-  # This job runs in parallel with the tests.
-  validate-manifest-integrity:
-    name: Validate Manifest Integrity
+  # This job runs in parallel to ensure generated files are committed.
+  validate-integrity:
+    name: Validate Generated File Integrity
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -53,17 +57,23 @@ jobs:
       - name: Install package
         run: pip install -e .
 
+      - name: Regenerate schemas to check for diff
+        run: python scripts/generate_schemas.py
+
+      - name: Check for stale schemas
+        run: |
+          if ! git diff --exit-code --quiet tests/schemas/; then
+            echo "❌ ERROR: JSON schemas are out of date. Run 'python scripts/generate_schemas.py' and commit the changes."
+            exit 1
+          fi
+          echo "✅ JSON schemas are up-to-date."
+
       - name: Regenerate manifest to check for diff
         run: python scripts/generate_manifest.py
 
       - name: Check for stale manifest
         run: |
-          # CORRECTED PATH: Point to the actual location of the manifest file.
           manifest_file="src/ai_assistant/internal_data/persona_manifest.yml"
-          
-          # This command checks if 'git status' is clean for the specific file.
-          # If generate_manifest.py modified the manifest, this will detect it.
-          # `git diff --exit-code` will exit with 1 if there is a diff, failing the job.
           if ! git diff --exit-code --quiet "$manifest_file"; then
             echo "❌ ERROR: $manifest_file is out of date."
             echo "Please run 'python scripts/generate_manifest.py' locally and commit the changes."
@@ -74,7 +84,7 @@ jobs:
   # This job builds and publishes the package to PyPI.
   publish-to-pypi:
     name: Publish to PyPI
-    needs: [test-and-validate, validate-manifest-integrity]
+    needs: [test-and-validate, validate-integrity]
     
     # This job ONLY runs on a tagged push to main
     if: |

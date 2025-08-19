@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI Assistant Output Package Manifest",
+  "description": "Schema for the manifest.json file generated in Output-First mode, derived from docs/system_contracts.yml.",
+  "type": "object",
+  "required": ["version", "sessionId", "generated_by", "actions"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "The schema version of the manifest."
+    },
+    "sessionId": {
+      "type": "string",
+      "description": "A unique, timestamp-based ID for the generation run."
+    },
+    "generated_by": {
+      "type": "string",
+      "description": "The alias of the persona that created the plan."
+    },
+    "actions": {
+      "type": "array",
+      "description": "A sequential list of action objects to be executed.",
+      "items": {
+        "type": "object",
+        "required": ["type", "comment"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "The action to perform (e.g., 'create_branch', 'apply_file_change')."
+          },
+          "comment": {
+            "type": "string",
+            "description": "The AI's 'thought' or rationale for the action."
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

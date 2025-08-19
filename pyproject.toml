@@ -29,6 +29,7 @@ ai-execute = "ai_assistant.executor:main"
 test = [
     "unittest-xml-reporting",
     "pytest",
+    "jsonschema",
 ]
 
 [tool.setuptools]
