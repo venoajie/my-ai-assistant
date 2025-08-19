@@ -1,14 +1,11 @@
 # MANIFEST.in
 
-# Include the tests directory and all its contents
-graft tests
+# Include all data files from the main package
+recursive-include src/ai_assistant/personas *.md
+recursive-include src/ai_assistant/personas *.py
+recursive-include src/ai_assistant/internal_data *
+include src/ai_assistant/default_config.yml
 
-# Include the docs directory, which contains the system contracts source of truth
-graft docs
-
-# Include the scripts directory for completeness
-graft scripts
-
-# Explicitly include top-level config and documentation files
-include pyproject.toml
-include README.md
+# Explicitly and recursively include the test data files from their location within the src directory.
+recursive-include src/ai_assistant/tests/fixtures *.json
+recursive-include src/ai_assistant/tests/schemas *.json
