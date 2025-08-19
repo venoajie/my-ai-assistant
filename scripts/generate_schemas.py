@@ -11,8 +11,8 @@ def main():
     """
     project_root = Path(__file__).parent.parent.resolve()
     contracts_file = project_root / "docs" / "system_contracts.yml"
-    schemas_dir = project_root / "tests" / "schemas"
-    schemas_dir.mkdir(exist_ok=True)
+    schemas_dir = project_root / "src" / "ai_assistant" / "internal_data" / "schemas"
+    schemas_dir.mkdir(parents=True, exist_ok=True)
 
     print("--- Generating JSON Schemas from System Contracts ---")
     print(f"Source: {contracts_file.relative_to(project_root)}")
