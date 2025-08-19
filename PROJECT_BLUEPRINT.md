@@ -46,28 +46,50 @@ The persona ecosystem is a team of specialists with a clear, hierarchical struct
 
 ---
 
-## 4. Workflows
+## 4. Extensibility: The Context Plugin Architecture
+
+To enhance the AI's domain-specific knowledge without polluting core personas, the system uses a modular **Context Plugin Architecture**. These plugins are designed to be query-aware, file-aware, and project-aware, injecting relevant information into the prompt *before* the primary agentic workflow begins.
+
+### 4.1. Core Contract
+All plugins MUST inherit from the `ContextPluginBase` class and implement its `get_context` method. This provides a standardized interface for context injection.
+
+### 4.2. Discovery and Loading
+The system discovers plugins through two primary mechanisms, creating a clear hierarchy:
+
+-   **Built-in Plugins:** Registered via `entry_points` in `pyproject.toml`. These are general-purpose plugins distributed with the core application.
+-   **Local Project Plugins:** Discovered at runtime from the `.ai/plugins/` directory within the user's project. This allows for project-specific, private context injection that is not part of the core application.
+
++### 4.3. Activation Logic
++Plugins are activated based on a clear and predictable logic:
+
+ 1.  **Automatic Loading:** When a persona from a specific `domains/` subdirectory is used (e.g., `domains/programming/coder-1`), the system will automatically attempt to load a corresponding context plugin (e.g., `domains-programming`).
+    -   **Convention:** The system transforms the persona path `domains/<name>/...` into the plugin entry-point name `domains-<name>`. This convention is the formal contract for creating auto-discoverable domain plugins.
+
+2.  **Manual Override:** The user can explicitly load any available plugin using the `--context` CLI flag, which overrides any automatically selected plugin.
+
+
+## 5. Workflows
 
 The system supports three primary workflows:
 
-### 4.1. Live System Check Workflow
+### 5.1. Live System Check Workflow
 For read-only diagnostics on a live system, where the AI's plan is reviewed and executed in real-time with user confirmation.
 
-### 4.2. Two-Stage Local Workflow
+### 5.2. Two-Stage Local Workflow
 For making changes to the local file system. A specialist generates a sandboxed "Output Package" which the user reviews and then applies with the `ai-execute` script.
 
-### 4.3. Handoff Workflow (Brain-to-Hands)
+### 5.3. Handoff Workflow (Brain-to-Hands)
 For preparing changes to be executed by a powerful, external agent. This involves using specialist personas to generate context (`AGENTS.md`) and a final, validated manifest for the external agent.
 
 ---
 
-## 5. Data & State Contracts
+## 6. Data & State Contracts
 
 The system relies on several key data contracts. While the detailed schemas are defined in `docs/system_contracts.yml`, the blueprint recognizes these as core architectural components.
 
-### 5.1. The Output Package
+### 6.1. The Output Package
 A standardized directory (`manifest.json`, `workspace/`, `summary.md`) generated in the Two-Stage Workflow. It is the primary data contract for the `ai-execute` script.
 +Its structure is formally defined in `docs/system_contracts.yml` and programmatically enforced by the automated testing suite.
 
-### 5.2. The Project State File
+### 6.2. The Project State File
 The `PROJECT_STATE.md` file is the single source of truth for a long-running, multi-agent project. It is created and managed by the `pmo-1` persona to maintain state across multiple CLI invocations.
