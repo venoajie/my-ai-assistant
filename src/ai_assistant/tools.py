@@ -18,14 +18,28 @@ class Tool:
     async def __call__(self, *args, **kwargs) -> Tuple[bool, str]: raise NotImplementedError
     def to_dict(self) -> Dict[str, Any]: return {"name": self.name, "description": self.description, "is_risky": self.is_risky}
 
-# --- Asynchronous Tools ---
+# --- Synchronous Helper Functions (Used by multiple tools) ---
+
+def _run_git_command(command_parts: List[str]) -> Tuple[bool, str]:
+    try:
+        result = subprocess.run(command_parts, capture_output=True, text=True, check=True, timeout=60)
+        command_str = " ".join(command_parts)
+        output = f"Success: `{command_str}`"
+        if result.stdout: output += f"\nSTDOUT: {result.stdout.strip()}"
+        if result.stderr: output += f"\nSTDERR: {result.stderr.strip()}"
+        return (True, output)
+    except subprocess.CalledProcessError as e:
+        command_str = " ".join(command_parts)
+        error_message = f"Error running `{command_str}`:\nSTDOUT: {e.stdout.strip()}\nSTDERR: {e.stderr.strip()}"
+        return (False, error_message)
+
+# --- Core Asynchronous Tools ---
 
 class RefactorFileContentTool(Tool):
     name = "refactor_file_content"
     description = (
         "Reads a file, applies a set of refactoring instructions to its content, and writes the result back to the same file. "
-        "This is the preferred tool for modifying existing code. "
-        "Usage: refactor_file_content(path: str, instructions: str)"
+        "This is a specialized sub-tool, typically called by a larger workflow."
     )
     is_risky = True
 
@@ -74,13 +88,15 @@ class ExecuteRefactoringWorkflowTool(Tool):
     )
     is_risky = True
 
-    async def __call__(self, branch_name: str, commit_message: str, files_to_remove: List[str] = None, files_to_refactor: List[Dict[str, str]] = None) -> Tuple[bool, str]:
+    async def __call__(self, branch_name: str, commit_message: str, refactoring_instructions: str, files_to_remove: List[str] = None, files_to_refactor: List[str] = None) -> Tuple[bool, str]:
         try:
+            # Step 1: Create Branch
             success, result = _run_git_command(["git", "checkout", "-b", branch_name])
             if not success:
                 return (False, f"Failed to create branch: {result}")
             print(f"   - ✅ Branched: {branch_name}")
 
+            # Step 2: Remove Files
             if files_to_remove:
                 for file_path in files_to_remove:
                     p = Path(file_path)
@@ -92,24 +108,25 @@ class ExecuteRefactoringWorkflowTool(Tool):
                     else:
                         print(f"   - ℹ️ Skipped removal (file not found): {file_path}")
 
+            # Step 3: Refactor Files
             if files_to_refactor:
-                for item in files_to_refactor:
-                    path = item.get("path")
-                    instructions = item.get("instructions")
-                    if not path or not instructions:
-                        return (False, "Invalid 'files_to_refactor' item. 'path' and 'instructions' are required.")
+                for path in files_to_refactor:
+                    if not path or not refactoring_instructions:
+                        return (False, "Invalid arguments. 'path' in files_to_refactor and 'refactoring_instructions' are required.")
                     
                     refactor_tool = RefactorFileContentTool()
-                    success, result = await refactor_tool(path, instructions)
+                    success, result = await refactor_tool(path, refactoring_instructions)
                     if not success:
                         return (False, f"Failed to refactor file {path}: {result}")
                     print(f"   - ✅ Refactored: {path}")
 
+            # Step 4: Stage All Changes
             success, result = _run_git_command(["git", "add", "."])
             if not success:
                 return (False, f"Failed to stage changes: {result}")
             print("   - ✅ Staged all changes.")
 
+            # Step 5: Commit
             success, result = _run_git_command(["git", "commit", "-m", commit_message])
             if not success:
                 return (False, f"Failed to commit changes: {result}")
@@ -120,22 +137,7 @@ class ExecuteRefactoringWorkflowTool(Tool):
         except Exception as e:
             return (False, f"An unexpected error occurred during the workflow: {e}")
 
-# --- Synchronous Helper Functions ---
-
-def _run_git_command(command_parts: List[str]) -> Tuple[bool, str]:
-    try:
-        result = subprocess.run(command_parts, capture_output=True, text=True, check=True, timeout=60)
-        command_str = " ".join(command_parts)
-        output = f"Success: `{command_str}`"
-        if result.stdout: output += f"\nSTDOUT: {result.stdout.strip()}"
-        if result.stderr: output += f"\nSTDERR: {result.stderr.strip()}"
-        return (True, output)
-    except subprocess.CalledProcessError as e:
-        command_str = " ".join(command_parts)
-        error_message = f"Error running `{command_str}`:\nSTDOUT: {e.stdout.strip()}\nSTDERR: {e.stderr.strip()}"
-        return (False, error_message)
-
-# --- Synchronous Tools ---
+# --- Granular Synchronous Tools (Still useful for simple, one-off tasks) ---
 
 class ReadFileTool(Tool):
     name = "read_file"; description = "Reads the entire content of a specified file. Usage: read_file(path: str)"; is_risky = False
@@ -199,10 +201,16 @@ class RunShellCommandTool(Tool):
     is_risky = True
     
     async def __call__(self, command: str) -> Tuple[bool, str]:
-        # ... (The internal logic of this tool is purely synchronous and remains unchanged) ...
         if not isinstance(command, str):
             return (False, "🚫 SECURITY: Command must be a string.")
-        # ... (rest of the function)
+        command = command.strip()
+        if not command:
+            return (False, "🚫 ERROR: Empty command provided.")
+        
+        for pattern in SHELL_COMMAND_BLOCKLIST:
+            if re.search(pattern, command, re.IGNORECASE):
+                return (False, f"🚫 SECURITY BLOCK: Command '{command}' matches a dangerous pattern.")
+        
         try:
             result = subprocess.run(
                 command, shell=True, capture_output=True, text=True, 
@@ -226,12 +234,9 @@ class GitCreateBranchTool(Tool):
         return _run_git_command(["git", "checkout", "-b", branch_name])
 
 class GitAddTool(Tool):
-    name = "git_add"; description = "Stages a specific file or directory. Usage: git_add(path: str, force: bool = False)"; is_risky = True
-    async def __call__(self, path: str, force: bool = False) -> Tuple[bool, str]:
-        command = ["git", "add"];
-        if force: command.append("--force")
-        command.append(path)
-        return _run_git_command(command)
+    name = "git_add"; description = "Stages a specific file or directory. Usage: git_add(path: str)"; is_risky = True
+    async def __call__(self, path: str) -> Tuple[bool, str]:
+        return _run_git_command(["git", "add", path])
 
 class GitCommitTool(Tool):
     name = "git_commit"; description = "Creates a commit with the given message. Usage: git_commit(commit_message: str)"; is_risky = True
@@ -274,7 +279,8 @@ class GitRemoveFileTool(Tool):
     async def __call__(self, path: str) -> Tuple[bool, str]:
         p = Path(path)
         if not p.exists():
-            return (False, f"Error: File not found at {path}. Cannot remove.")
+            # This is not an error in a workflow; the desired state is "file is gone".
+            return (True, f"File not found at {path}. No action needed.")
         return _run_git_command(["git", "rm", path])
 
 # --- The Central Registry ---
