@@ -7,6 +7,7 @@ model_selection:
   json_corrector: "gemini-2.5-flash-lite"
 default_provider: "gemini"
 general:
+  # Path to the user's global personas directory, relative to the home directory.
   personas_directory: "personas"
   sessions_directory: ".ai_sessions"
   max_file_size_mb: 5
