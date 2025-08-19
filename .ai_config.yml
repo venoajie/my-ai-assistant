@@ -1,2 +1,6 @@
 # .ai_config.yml
 # Add this to your existing config or create a new one.
+
+general:
+  # We want to store session files in a custom directory for this project.
+  sessions_directory: "my_custom_sessions"

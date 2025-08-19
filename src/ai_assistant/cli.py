@@ -43,7 +43,7 @@ def list_available_plugins() -> List[str]:
         print(f"{Colors.YELLOW}⚠️  Warning: Could not load plugins from entry points: {e}{Colors.RESET}", file=sys.stderr)
         
     # 2. Discover and load local, project-specific plugins
-    local_plugins_path = Path.cwd() / ai_settings.general.local_plugins_directory
+    local_plugins_path = ai_settings.paths.local_plugins_dir
     if local_plugins_path.is_dir():
         for file_path in local_plugins_path.glob("*.py"):
             # Use a special suffix to distinguish local plugins

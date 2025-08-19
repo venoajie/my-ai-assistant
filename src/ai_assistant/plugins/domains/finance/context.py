@@ -1,3 +1,4 @@
+# src\ai_assistant\plugins\domains\finance\context.py
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from ai_assistant.context_plugin import ContextPluginBase

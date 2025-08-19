@@ -1,3 +1,4 @@
+# src\ai_assistant\plugins\domains\programming\context.py
 from ai_assistant.context_plugin import ContextPluginBase
 from typing import Dict, Any, List, Optional
 from pathlib import Path

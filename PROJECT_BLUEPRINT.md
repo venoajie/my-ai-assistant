@@ -24,7 +24,13 @@ A strict separation is maintained between **AI-driven analysis (thinking)** and 
 To enhance the safety of the "thinking" phase, the system employs an Adversarial Validation Chain. After an initial execution plan is generated, it is passed to a specialized, skeptical "critic" persona. This critic's sole purpose is to identify potential flaws, unstated assumptions, and risks in the plan. This principle acts as an automated "red team" review for the AI's own logic.
 
 ### 2.3. Explicit Governance
-The behavior and structure of the persona ecosystem are governed by a set of explicit, machine-readable rules in `persona_config.yml`. All personas are validated against these rules, and a cryptographically signed `persona_manifest.yml` ensures the application's runtime understanding of its capabilities is never out of sync with the committed source code.
+The behavior and structure of the persona ecosystem are governed by a set of explicit, machine-readable rules.
+
+#### 2.3.1. Persona Integrity
+All personas are validated against the rules in `persona_config.yml`, and a cryptographically signed `persona_manifest.yml` ensures the application's runtime understanding of its capabilities is never out of sync with the committed source code.
+
++#### 2.3.2. Data Contract Integrity
++The system's internal data contracts (e.g., the Output Package Manifest) are not just documented; they are programmatically enforced. Canonical documentation (`docs/system_contracts.yml`) serves as the single source of truth from which machine-readable schemas (JSON Schema) are generated. The automated testing suite validates all relevant code outputs against these schemas during CI/CD. This creates a closed-loop system that prevents drift between documentation, tests, and implementation, ensuring long-term stability.
 
 ---
 
@@ -61,6 +67,7 @@ The system relies on several key data contracts. While the detailed schemas are 
 
 ### 5.1. The Output Package
 A standardized directory (`manifest.json`, `workspace/`, `summary.md`) generated in the Two-Stage Workflow. It is the primary data contract for the `ai-execute` script.
++Its structure is formally defined in `docs/system_contracts.yml` and programmatically enforced by the automated testing suite.
 
 ### 5.2. The Project State File
 The `PROJECT_STATE.md` file is the single source of truth for a long-running, multi-agent project. It is created and managed by the `pmo-1` persona to maintain state across multiple CLI invocations.
