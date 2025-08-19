@@ -9,10 +9,11 @@ from .config import ai_settings
 class SessionManager:
     """Manages stateful conversation sessions with robust integrity checks."""
     
-    def __init__(self, session_dir: Path = None):
+    def __init__(self):
         # Use Path.cwd() to ensure the path is relative to the project root, not user's home
         self.session_dir = ai_settings.paths.sessions_dir
         self.session_dir.mkdir(parents=True, exist_ok=True)
+        
         
     def _get_session_path(self, session_id: str) -> Path:
         """Constructs the file path for a given session ID."""

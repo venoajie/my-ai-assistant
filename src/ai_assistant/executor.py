@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from pathlib import Path
 import argparse
+from importlib import resources
+import jsonschema
 
 class ExecutionError(Exception):
     """Custom exception for execution failures."""
@@ -27,12 +29,28 @@ class ManifestExecutor:
 
     def _load_manifest(self) -> dict:
         """Loads and validates the manifest file."""
-        print(f"ℹ️  Loading manifest from: {self.manifest_path}")
-        with open(self.manifest_path, 'r', encoding='utf-8') as f:
-            manifest = json.load(f)
         
-        if "actions" not in manifest or not isinstance(manifest["actions"], list):
-            raise ValueError("Manifest is invalid: Missing or malformed 'actions' list.")
+        print(f"ℹ️  Loading and validating manifest: {self.manifest_path}")
+        try:
+            # 1. Load the manifest instance from disk
+            with open(self.manifest_path, 'r', encoding='utf-8') as f:
+                manifest = json.load(f)
+
+            # 2. Load the canonical schema from package data
+            schema_path_traversable = resources.files('ai_assistant').joinpath('internal_data/schemas/output_package_manifest_schema.json')
+            with schema_path_traversable.open('r', encoding='utf-8') as f:
+                schema = json.load(f)
+
+            # 3. Perform validation
+            jsonschema.validate(instance=manifest, schema=schema)
+            print("   - ✅ Schema validation passed.")
+
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Manifest is not valid JSON. Error: {e}")
+        except jsonschema.ValidationError as e:
+            raise ValueError(f"Manifest failed schema validation. Reason: {e.message}")
+        except FileNotFoundError:
+            raise FileNotFoundError("Could not locate the canonical manifest schema within the package. The package may be corrupted.")
         
         return manifest
 

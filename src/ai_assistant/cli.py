@@ -402,6 +402,11 @@ async def async_main():
                     print(f"{Colors.MAGENTA}🔌 Persona '{args.persona}' triggered auto-loading of the '{temp_plugin.name}' context plugin.{Colors.RESET}")
                     context_plugin = temp_plugin
             
+            else:
+                # --- Feedback when an auto-plugin is not found ---
+                print(f"{Colors.DIM}   - Searched for plugin '{plugin_name_to_load}' (triggered by persona '{args.persona}') but it was not found.{Colors.RESET}")
+             
+             
     # --- Manual Override ---
     # If the user specifies --context, it overrides any auto-loaded plugin.
     if args.context:

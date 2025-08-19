@@ -19,10 +19,8 @@ class TestContractValidation(unittest.TestCase):
         """Set up paths for schemas and fixtures, and create a temporary directory for test outputs."""
         self.temp_dir = Path(tempfile.mkdtemp())
 
-        # --- THIS IS THE FIX ---
-        # Use the new, unambiguous package name to load resources.
         try:
-            schema_path = resources.files('ai_assistant._test_data.schemas').joinpath('output_package_manifest_schema.json')
+            schema_path = resources.files('ai_assistant').joinpath('internal_data/schemas/output_package_manifest_schema.json')
             with schema_path.open('r', encoding='utf-8') as f:
                 self.manifest_schema = json.load(f)
         except (FileNotFoundError, ModuleNotFoundError):
@@ -37,8 +35,7 @@ class TestContractValidation(unittest.TestCase):
         Validates a static, known-good manifest fixture against the JSON schema.
         This confirms the schema itself is correct and hasn't drifted from the fixture.
         """
-        # --- THIS IS THE FIX ---
-        # Use the new, unambiguous package name to load resources.
+
         try:
             fixture_path = resources.files('ai_assistant._test_data.fixtures').joinpath('sample_manifest.json')
             with fixture_path.open('r', encoding='utf-8') as f:

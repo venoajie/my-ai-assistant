@@ -11,8 +11,8 @@ def main():
     """
     project_root = Path(__file__).parent.parent.resolve()
     contracts_file = project_root / "docs" / "system_contracts.yml"
-    schemas_dir = project_root / "tests" / "schemas"
-    schemas_dir.mkdir(exist_ok=True)
+    schemas_dir = project_root / "src" / "ai_assistant" / "internal_data" / "schemas"
+    schemas_dir.mkdir(parents=True, exist_ok=True)
 
     print("--- Generating JSON Schemas from System Contracts ---")
     print(f"Source: {contracts_file.relative_to(project_root)}")
@@ -29,7 +29,15 @@ def main():
     }
     
     generated_count = 0
-    for contract in data.get("contracts", []):
+    
+    # --- THIS IS THE FIX ---
+    # Combine all contracts from the different sections of the YAML file.
+    all_contracts = data.get("persistent_contracts", []) + data.get("process_artifacts", [])
+    if not all_contracts:
+        print("⚠️  Warning: No 'persistent_contracts' or 'process_artifacts' found in the source file.", file=sys.stderr)
+        sys.exit(0)
+
+    for contract in all_contracts:
         contract_name = contract.get("name")
         if contract_name in contracts_to_generate:
             schema_def = contract.get("schema_definition")

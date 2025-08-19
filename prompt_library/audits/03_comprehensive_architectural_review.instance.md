@@ -20,7 +20,6 @@ persona_alias: core/arc-1
     <SECTION:ARTIFACTS_FOR_REVIEW>
         <!-- The Constitution of the Project -->
         <Inject src="PROJECT_BLUEPRINT.md"/>
-        <Inject src="TECHNICAL_DEBT.md"/>
         
         <!-- Core Governance Files (Corrected Paths & Content) -->
         <StaticFile path="src/ai_assistant/internal_data/persona_config.yml">
@@ -117,11 +116,16 @@ providers:
       </StaticFile>
       
               <StaticFile path="docs/system_contracts.yml">
-# Version: 1.1
+              # docs/system_contracts.yml
+# Version: 1.3
 # Description: This file is the canonical, machine-readable data dictionary for the AI Assistant.
-# It defines the schema and purpose of all major internal data contracts.
+# It defines the schema and purpose of all major internal data contracts and transient process artifacts.
 
-contracts:
+# SECTION 1: PERSISTENT DATA CONTRACTS
+# These contracts define the structure of data that is fundamental to the
+# long-term operation and state of the application. They represent the core,
+# persistent data models of the system.
+persistent_contracts:
   - name: Persona File
     path: "src/ai_assistant/personas/**/*.persona.md"
     type: File (Markdown with YAML Frontmatter)
@@ -146,25 +150,10 @@ contracts:
         type: string
         description: "The textual content of the message."
 
-  - name: Project State File
-    path: "PROJECT_STATE.md"
-    type: Markdown File
-    description: "The single source of truth for a long-running, multi-agent project. It is created and managed by the `pmo-1` persona to maintain state across multiple CLI invocations."
-    schema:
-      - field: metadata
-        type: Key-Value List
-        description: "Contains high-level project status, version, and the original goal."
-      - field: Project Plan
-        type: Markdown Section
-        description: "Defines the sequence of phases, the specialist persona assigned to each, and their dependency relationships."
-      - field: Artifact Sections
-        type: Markdown Sections
-        description: "Dedicated sections (e.g., 'Requirements', 'Architecture') that are populated by specialist personas as the project progresses."
-
   - name: Execution Plan
     source: Planner
     type: In-Memory Python List of Dictionaries
-    description: "The AI-generated, structured plan of tool calls to be executed by the Kernel or packaged by the Executor."
+    description: "The AI-generated, structured plan of tool calls to be executed by the Kernel or packaged by the Executor. This is the primary internal data contract for agentic action."
     schema:
       - field: thought
         type: string
@@ -182,32 +171,58 @@ contracts:
   - name: Output Package Manifest
     path: "[output_dir]/manifest.json"
     type: JSON File
-    description: "The machine-readable 'blueprint for action' generated in Output-First mode. It is the single source of truth for the `ai-execute` script."
+    description: "The machine-readable 'blueprint for action' generated in Output-First mode. It is the single source of truth for the `ai-execute` script, acting as the formal contract between the 'thinking' and 'doing' parts of the system."
+    schema_definition:
+      type: object
+      required: ["version", "sessionId", "generated_by", "actions"]
+      properties:
+        version:
+          type: string
+          description: "The schema version of the manifest."
+        sessionId:
+          type: string
+          description: "A unique, timestamp-based ID for the generation run."
+        generated_by:
+          type: string
+          description: "The alias of the persona that created the plan."
+        actions:
+          type: array
+          description: "A sequential list of action objects to be executed."
+          items:
+            type: object
+            required: ["type", "comment"]
+            properties:
+              type:
+                type: string
+                description: "The action to perform (e.g., 'create_branch', 'apply_file_change')."
+              comment:
+                type: string
+                description: "The AI's 'thought' or rationale for the action."
+            # Allows for other action-specific fields like 'branch_name', 'path', etc.
+            additionalProperties: true
+
+# SECTION 2: TRANSIENT PROCESS ARTIFACTS
+# These contracts define the structure of temporary or ephemeral files that hold
+# the state for a specific, transient workflow. They are critical for the duration
+# of the workflow but are not part of the application's long-term persistent state.
+process_artifacts:
+  - name: Project State File
+    path: "PROJECT_STATE.md"
+    type: Markdown File
+    lifecycle: "Created by the pmo-1 persona at the start of a multi-agent project. It is intended to be deleted upon project completion."
+    description: "The single source of truth for a long-running, multi-agent project. It is created and managed by the `pmo-1` persona to maintain state across multiple CLI invocations."
     schema:
-      - field: version
-        type: string
-        description: "The schema version of the manifest."
-      - field: sessionId
-        type: string
-        description: "A unique, timestamp-based ID for the generation run."
-      - field: generated_by
-        type: string
-        description: "The alias of the persona that created the plan."
-      - field: actions
-        type: array
-        description: "A sequential list of action objects to be executed."
-        schema:
-          - field: type
-            type: string
-            description: "The action to perform (e.g., 'create_branch', 'apply_file_change')."
-          - field: comment
-            type: string
-            description: "The AI's 'thought' or rationale for the action."
-          - field: ...other_params
-            type: any
-            description: "Action-specific fields (e.g., 'branch_name', 'path', 'message')."
-      
-      
+      - field: metadata
+        type: Key-Value List
+        description: "Contains high-level project status, version, and the original goal."
+      - field: Project Plan
+        type: Markdown Section
+        description: "Defines the sequence of phases, the specialist persona assigned to each, and their dependency relationships."
+      - field: Artifact Sections
+        type: Markdown Sections
+        description: "Dedicated sections (e.g., 'Requirements', 'Architecture') that are populated by specialist personas as the project progresses."
+      </StaticFile>
+
         <StaticFile path="pyproject.toml">
         # pyproject.toml
 
@@ -257,12 +272,130 @@ ai_assistant = [
     "default_config.yml",
     "personas/**/*.md",
     "personas/**/*.py",
-    "internal_data/*",
+    "internal_data/*.yml",
+    "internal_data/schemas/*.json",
 ]
+
 "ai_assistant._test_data" = [
     "fixtures/*.json",
     "schemas/*.json",
 ]
+        </StaticFile>
+
+        <StaticFile path=".github/workflows/ci.yml">
+# .github/workflows/ci.yml
+name: Python Package CI/CD
+
+# --- Trigger Conditions ---
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+# --- Job Definitions ---
+jobs:
+  # This job runs all tests and validation checks.
+  test-and-validate:
+    name: Test and Validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[test]
+      
+      - name: Generate Schemas from Contracts
+        run: python scripts/generate_schemas.py
+
+      - name: Validate Persona Standards
+        run: python scripts/generate_manifest.py
+          
+      - name: Run Unit Tests
+        run: python -m unittest discover tests
+
+  # This job runs in parallel to ensure generated files are committed.
+  validate-integrity:
+    name: Validate Generated File Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install package
+        run: pip install -e .
+
+      - name: Regenerate schemas to check for diff
+        run: python scripts/generate_schemas.py
+
+      - name: Check for stale schemas
+        run: |
+          if ! git diff --exit-code --quiet tests/schemas/; then
+            echo "❌ ERROR: JSON schemas are out of date. Run 'python scripts/generate_schemas.py' and commit the changes."
+            exit 1
+          fi
+          echo "✅ JSON schemas are up-to-date."
+
+      - name: Regenerate manifest to check for diff
+        run: python scripts/generate_manifest.py
+
+      - name: Check for stale manifest
+        run: |
+          manifest_file="src/ai_assistant/internal_data/persona_manifest.yml"
+          if ! git diff --exit-code --quiet "$manifest_file"; then
+            echo "❌ ERROR: $manifest_file is out of date."
+            echo "Please run 'python scripts/generate_manifest.py' locally and commit the changes."
+            exit 1
+          fi
+          echo "✅ Persona manifest is up-to-date."
+
+  # This job builds and publishes the package to PyPI.
+  publish-to-pypi:
+    name: Publish to PyPI
+    needs: [test-and-validate, validate-integrity]
+    
+    # This job ONLY runs on a tagged push to main
+    if: |
+      github.event_name == 'push' && 
+      github.ref_type == 'tag' &&
+      startsWith(github.ref, 'refs/tags/v')
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build package
+        run: python -m build
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
         </StaticFile>
 
         <!-- Core Application Logic -->
@@ -278,6 +411,7 @@ ai_assistant = [
         <Inject src="src/ai_assistant/session_manager.py"/>
         <Inject src="src/ai_assistant/utils/signature.py"/>
         <Inject src="scripts/generate_manifest.py"/>
+        <Inject src="scripts/generate_schema.py"/>
 
         <!-- New Plugin Architecture -->
         <Inject src="src/ai_assistant/plugins/trading_plugin.py"/>

@@ -2,7 +2,7 @@
 
 [project]
 name = "my-ai-assistant"
-version = "1.2.1"
+version = "1.2.2"
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -42,12 +42,6 @@ where = ["src"]
 include = ["ai_assistant*"]
 
 [tool.setuptools.package-data]
-ai_assistant = [
-    "default_config.yml",
-    "personas/**/*.md",
-    "personas/**/*.py",
-    "internal_data/*",
-]
 "ai_assistant._test_data" = [
     "fixtures/*.json",
     "schemas/*.json",
