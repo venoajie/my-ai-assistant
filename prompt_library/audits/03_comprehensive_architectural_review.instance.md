@@ -208,6 +208,9 @@ contracts:
             description: "Action-specific fields (e.g., 'branch_name', 'path', 'message')."
       
       
+        <StaticFile path="pyproject.toml">
+        # pyproject.toml
+
 [project]
 name = "my-ai-assistant"
 version = "1.2.1"
@@ -233,6 +236,7 @@ ai-execute = "ai_assistant.executor:main"
 "domains-programming" = "ai_assistant.plugins.domains.programming.context:ProgrammingContextPlugin"
 "domains-finance" = "ai_assistant.plugins.domains.finance.context:FinanceContextPlugin"
 "domains-writing" = "ai_assistant.plugins.domains.writing.context:WritingContextPlugin"
+"domains-trading" = "ai_assistant.plugins.domains.trading.context:TradingContextPlugin"
 
 [project.optional-dependencies]
 test = [
@@ -243,14 +247,22 @@ test = [
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-# --- THIS IS THE FIX (PART 1) ---
-# This tells setuptools to look for and obey a MANIFEST.in file.
-include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["ai_assistant*"]
 
+[tool.setuptools.package-data]
+ai_assistant = [
+    "default_config.yml",
+    "personas/**/*.md",
+    "personas/**/*.py",
+    "internal_data/*",
+]
+"ai_assistant._test_data" = [
+    "fixtures/*.json",
+    "schemas/*.json",
+]
         </StaticFile>
 
         <!-- Core Application Logic -->
