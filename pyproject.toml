@@ -41,13 +41,17 @@ where = ["src"]
 include = ["ai_assistant*"]
 
 [tool.setuptools.package-data]
+# Data for the main ai_assistant package
 ai_assistant = [
     "default_config.yml",
     "personas/**/*.md",
     "personas/**/*.py",
     "internal_data/*",
-    # --- ADD THIS BLOCK ---
-    # Include the test data from the new location
-    "tests/fixtures/*.json",
-    "tests/schemas/*.json"
+]
+# --- THIS IS THE FIX ---
+# Add a new, specific entry for the test data sub-package.
+# The key is the package name, and the paths are relative to that package.
+"ai_assistant.tests" = [
+    "fixtures/*.json",
+    "schemas/*.json",
 ]
