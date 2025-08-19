@@ -210,6 +210,8 @@ contracts:
       
         <StaticFile path="pyproject.toml">
         # pyproject.toml
+# pyproject.toml
+
 [project]
 name = "my-ai-assistant"
 version = "1.2.1"
@@ -240,6 +242,7 @@ ai-execute = "ai_assistant.executor:main"
 test = [
     "unittest-xml-reporting",
     "pytest",
+    "jsonschema",
 ]
 
 [tool.setuptools]
@@ -250,11 +253,19 @@ where = ["src"]
 include = ["ai_assistant*"]
 
 [tool.setuptools.package-data]
+# Data for the main ai_assistant package
 ai_assistant = [
     "default_config.yml",
     "personas/**/*.md",
     "personas/**/*.py",
-    "internal_data/*"
+    "internal_data/*",
+]
+# --- THIS IS THE FIX ---
+# Add a new, specific entry for the test data sub-package.
+# The key is the package name, and the paths are relative to that package.
+"ai_assistant.tests" = [
+    "fixtures/*.json",
+    "schemas/*.json",
 ]
         </StaticFile>
 
@@ -273,6 +284,7 @@ ai_assistant = [
         <Inject src="scripts/generate_manifest.py"/>
 
         <!-- New Plugin Architecture -->
+        <Inject src="src/ai_assistant/plugins/trading_plugin.py"/>
         <Inject src="src/ai_assistant/plugins/domains/programming/context.py"/>
         <Inject src="src/ai_assistant/plugins/domains/finance/context.py"/>
 
