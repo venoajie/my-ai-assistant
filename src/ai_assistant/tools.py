@@ -12,6 +12,12 @@ from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
 
 
+class Tool:
+    name: str = "Base Tool"
+    description: str = "This is a base tool."
+    is_risky: bool = False
+    def __call__(self, *args, **kwargs) -> Tuple[bool, str]: raise NotImplementedError
+    def to_dict(self) -> Dict[str, Any]: return {"name": self.name, "description": self.description, "is_risky": self.is_risky}
 
 class RefactorFileContentTool(Tool):
     name = "refactor_file_content"
@@ -23,8 +29,6 @@ class RefactorFileContentTool(Tool):
     is_risky = True
 
     def __call__(self, path: str, instructions: str) -> Tuple[bool, str]:
-        # This tool's execution is async, but the __call__ must be sync.
-        # We run the async logic in a new event loop.
         try:
             return asyncio.run(self._execute_refactor(path, instructions))
         except Exception as e:
@@ -38,7 +42,6 @@ class RefactorFileContentTool(Tool):
         try:
             original_content = p.read_text(encoding='utf-8')
 
-            # Use a simple, direct prompt for the synthesis model
             prompt = f"""You are an expert code refactoring agent. Your sole task is to modify the provided source code based on the user's instructions. You must return only the complete, final, modified code file. Do not add any commentary, explanations, or markdown formatting.
 
 <Instructions>
@@ -51,15 +54,14 @@ class RefactorFileContentTool(Tool):
 
 Modified Code:"""
 
-            # Use the powerful synthesis model for this task
             handler = ResponseHandler()
-            synthesis_model = "gemini-1.5-pro-latest" # Or your preferred powerful model
+            # NOTE: Ensure this model is configured in your default_config.yml
+            synthesis_model = "gemini-1.5-pro-latest" 
             result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
             
-            modified_content = result["content"]
+            modified_content = result["content"].strip()
 
-            # A simple guardrail to prevent accidental blanking of files
-            if not modified_content or not modified_content.strip():
+            if not modified_content:
                 return (False, "Error: Refactoring agent returned an empty response. No changes were made.")
 
             p.write_text(modified_content, encoding='utf-8')
@@ -68,11 +70,16 @@ Modified Code:"""
         except Exception as e:
             return (False, f"Error refactoring file {path}: {e}")
 
-class Tool:
-    name: str = "Base Tool"; description: str = "This is a base tool."; is_risky: bool = False
-    def __call__(self, *args, **kwargs) -> Tuple[bool, str]: raise NotImplementedError
-    def to_dict(self) -> Dict[str, Any]: return {"name": self.name, "description": self.description, "is_risky": self.is_risky}
-    
+class ReadFileTool(Tool):
+    name = "read_file"; description = "Reads the entire content of a specified file. Usage: read_file(path: str)"; is_risky = False
+    def __call__(self, path: str) -> Tuple[bool, str]:
+        p = Path(path)
+        if not p.exists(): return (False, f"Error: File not found at {path}")
+        if not p.is_file(): return (False, f"Error: Path {path} is a directory, not a file.")
+        try:
+            with open(p, 'r', encoding='utf-8') as f: return (True, f.read())
+        except Exception as e: return (False, f"Error: Could not read file {path}: {e}")
+        
 class ReadFileTool(Tool):
     name = "read_file"; description = "Reads the entire content of a specified file. Usage: read_file(path: str)"; is_risky = False
     def __call__(self, path: str) -> Tuple[bool, str]:
