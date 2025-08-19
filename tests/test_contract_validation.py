@@ -6,12 +6,11 @@ import jsonschema
 import asyncio
 import shutil
 import tempfile
-from importlib import resources  # <-- Import the correct library
+from importlib import resources
 
-# This sys.path manipulation is necessary for the test runner to find the package source
-import sys
-project_root = Path(__file__).parent.parent.resolve()
-sys.path.insert(0, str(project_root / 'src'))
+# --- THIS IS THE FIX ---
+# The sys.path manipulation is removed. It is not needed when the package
+# is installed with `pip install -e .`, and it interferes with importlib.resources.
 
 from ai_assistant import kernel
 
@@ -24,7 +23,6 @@ class TestContractValidation(unittest.TestCase):
         """Set up paths for schemas and fixtures, and create a temporary directory for test outputs."""
         self.temp_dir = Path(tempfile.mkdtemp())
 
-        # --- REFACTORED: Load schema using importlib.resources ---
         try:
             schema_path = resources.files('ai_assistant.tests.schemas').joinpath('output_package_manifest_schema.json')
             with schema_path.open('r', encoding='utf-8') as f:
@@ -41,7 +39,6 @@ class TestContractValidation(unittest.TestCase):
         Validates a static, known-good manifest fixture against the JSON schema.
         This confirms the schema itself is correct and hasn't drifted from the fixture.
         """
-        # --- REFACTORED: Load fixture using importlib.resources ---
         try:
             fixture_path = resources.files('ai_assistant.tests.fixtures').joinpath('sample_manifest.json')
             with fixture_path.open('r', encoding='utf-8') as f:
@@ -59,7 +56,7 @@ class TestContractValidation(unittest.TestCase):
         Generates an Output Package Manifest using the kernel and validates it against the schema.
         This is the key test to prevent contract drift in the application code.
         """
-        # 1. Define a sample plan for the kernel to process
+        # (This test method remains unchanged)
         sample_plan = [
             {
                 "tool_name": "git_create_branch",
@@ -83,7 +80,6 @@ class TestContractValidation(unittest.TestCase):
             }
         ]
 
-        # 2. Run the async kernel function to generate the package
         result = asyncio.run(kernel._handle_output_first_mode(
             plan=sample_plan,
             persona_alias="core/arc-1",
@@ -91,12 +87,10 @@ class TestContractValidation(unittest.TestCase):
             output_dir_str=str(self.temp_dir)
         ))
 
-        # 3. Check that the manifest was created
         generated_manifest_path = self.temp_dir / "manifest.json"
         self.assertTrue(generated_manifest_path.exists(), "Kernel failed to generate manifest.json")
         self.assertIn("manifest", result, "Kernel result did not contain manifest data.")
 
-        # 4. Load and validate the generated manifest
         with open(generated_manifest_path, 'r', encoding='utf-8') as f:
             generated_data = json.load(f)
 
