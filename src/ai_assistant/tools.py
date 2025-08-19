@@ -8,7 +8,6 @@ import subprocess
 from typing import List, Dict, Any, Tuple
 
 from ._security_guards import SHELL_COMMAND_BLOCKLIST
-from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
 
 
@@ -18,6 +17,18 @@ class Tool:
     is_risky: bool = False
     def __call__(self, *args, **kwargs) -> Tuple[bool, str]: raise NotImplementedError
     def to_dict(self) -> Dict[str, Any]: return {"name": self.name, "description": self.description, "is_risky": self.is_risky}
+
+
+class GitRemoveFileTool(Tool):
+    name = "git_remove_file"
+    description = "Removes a file from the working directory and stages the deletion for the next commit. Usage: git_remove_file(path: str)"
+    is_risky = True
+    def __call__(self, path: str) -> Tuple[bool, str]:
+        p = Path(path)
+        if not p.exists():
+            return (False, f"Error: File not found at {path}. Cannot remove.")
+        return _run_git_command(["git", "rm", path])
+
 
 class RefactorFileContentTool(Tool):
     name = "refactor_file_content"
@@ -283,6 +294,7 @@ class ToolRegistry:
         self.register(GitAddTool())
         self.register(GitCommitTool()) 
         self.register(GitPushTool())
+        self.register(GitRemoveFileTool())
         self.register(RefactorFileContentTool())
         self.register(GitListBranchesTool())
         self.register(GitCheckoutTool())
