@@ -1,0 +1,14 @@
+# MANIFEST.in
+
+# Include the tests directory and all its contents
+graft tests
+
+# Include the docs directory, which contains the system contracts source of truth
+graft docs
+
+# Include the scripts directory for completeness
+graft scripts
+
+# Explicitly include top-level config and documentation files
+include pyproject.toml
+include README.md
