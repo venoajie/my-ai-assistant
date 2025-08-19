@@ -281,6 +281,68 @@ class GitCheckoutTool(Tool):
     def __call__(self, branch_name: str) -> Tuple[bool, str]:
         return _run_git_command(["git", "checkout", branch_name])
 
+class ExecuteRefactoringWorkflowTool(Tool):
+    name = "execute_refactoring_workflow"
+    description = (
+        "Executes a complete, safe refactoring workflow in one atomic operation. "
+        "It creates a branch, removes specified files, refactors content in other files, and commits all changes. "
+        "This is the mandatory tool for any development task that modifies the codebase."
+    )
+    is_risky = True
+
+    def __call__(self, branch_name: str, commit_message: str, files_to_remove: List[str] = None, files_to_refactor: List[Dict[str, str]] = None) -> Tuple[bool, str]:
+        try:
+            # 1. Create Branch
+            success, result = _run_git_command(["git", "checkout", "-b", branch_name])
+            if not success:
+                return (False, f"Failed to create branch: {result}")
+            print(f"   - ✅ Branched: {branch_name}")
+
+            # 2. Remove Files
+            if files_to_remove:
+                for file_path in files_to_remove:
+                    p = Path(file_path)
+                    if p.exists():
+                        success, result = _run_git_command(["git", "rm", file_path])
+                        if not success:
+                            return (False, f"Failed to remove file {file_path}: {result}")
+                        print(f"   - ✅ Removed: {file_path}")
+                    else:
+                        print(f"   - ℹ️ Skipped removal (file not found): {file_path}")
+
+
+            # 3. Refactor Files
+            if files_to_refactor:
+                for item in files_to_refactor:
+                    path = item.get("path")
+                    instructions = item.get("instructions")
+                    if not path or not instructions:
+                        return (False, "Invalid 'files_to_refactor' item. 'path' and 'instructions' are required.")
+                    
+                    # Here we reuse the logic from our single refactor tool
+                    refactor_tool = RefactorFileContentTool()
+                    success, result = refactor_tool(path, instructions)
+                    if not success:
+                        return (False, f"Failed to refactor file {path}: {result}")
+                    print(f"   - ✅ Refactored: {path}")
+
+            # 4. Stage All Changes
+            success, result = _run_git_command(["git", "add", "."])
+            if not success:
+                return (False, f"Failed to stage changes: {result}")
+            print("   - ✅ Staged all changes.")
+
+            # 5. Commit
+            success, result = _run_git_command(["git", "commit", "-m", commit_message])
+            if not success:
+                return (False, f"Failed to commit changes: {result}")
+            print("   - ✅ Committed.")
+
+            return (True, f"Workflow completed successfully on branch '{branch_name}'.")
+
+        except Exception as e:
+            return (False, f"An unexpected error occurred during the workflow: {e}")
+
 class ToolRegistry:
     def __init__(self):
         self._tools = {}
@@ -294,6 +356,7 @@ class ToolRegistry:
         self.register(GitAddTool())
         self.register(GitCommitTool()) 
         self.register(GitPushTool())
+        self.register(ExecuteRefactoringWorkflowTool())
         self.register(GitRemoveFileTool())
         self.register(RefactorFileContentTool())
         self.register(GitListBranchesTool())
