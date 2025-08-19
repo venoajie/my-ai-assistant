@@ -212,7 +212,7 @@ contracts:
         # pyproject.toml
 [project]
 name = "my-ai-assistant"
-version = "1.2.0"
+version = "1.2.1"
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -234,7 +234,6 @@ ai-execute = "ai_assistant.executor:main"
 [project.entry-points."ai_assistant.context_plugins"]
 "domains-programming" = "ai_assistant.plugins.domains.programming.context:ProgrammingContextPlugin"
 "domains-finance" = "ai_assistant.plugins.domains.finance.context:FinanceContextPlugin"
-"domains-trading" = "ai_assistant.plugins.domains.trading.context:TradingContextPlugin"
 "domains-writing" = "ai_assistant.plugins.domains.writing.context:WritingContextPlugin"
 
 [project.optional-dependencies]
