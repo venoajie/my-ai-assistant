@@ -1,4 +1,4 @@
-# ai_assistant/config.py
+# src/ai_assistant/config.py
 import yaml
 from pathlib import Path
 from typing import Dict, Optional, List
@@ -87,25 +87,33 @@ def load_ai_settings() -> AIConfig:
     if user_config_path.exists():
         with open(user_config_path, 'r') as f:
             user_config = yaml.safe_load(f)
-        config_data = deep_merge(
-            config_data, 
-            user_config,
-            )
+        # --- FIX: Only merge if the loaded config is not empty ---
+        if user_config:
+            config_data = deep_merge(
+                config_data, 
+                user_config,
+                )
     
     # 3. Load project config overrides
     project_config_path = Path.cwd() / ".ai_config.yml"
     if project_config_path.exists():
         with open(project_config_path, 'r') as f:
             project_config = yaml.safe_load(f)
-        config_data = deep_merge(
-            config_data, 
-            project_config,
-            )
+        # --- FIX: Only merge if the loaded config is not empty ---
+        if project_config:
+            config_data = deep_merge(
+                config_data, 
+                project_config,
+                )
     
     return AIConfig.model_validate(config_data)
 
 def deep_merge(base: Dict, update: Dict) -> Dict:
     """Deep merge two dictionaries"""
+    # --- FIX: Add a guard clause for safety ---
+    if not isinstance(update, dict):
+        return base
+        
     for key, value in update.items():
         if isinstance(value, dict) \
             and key in base \
