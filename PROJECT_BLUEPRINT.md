@@ -93,3 +93,46 @@ A standardized directory (`manifest.json`, `workspace/`, `summary.md`) generated
 
 ### 6.2. The Project State File
 The `PROJECT_STATE.md` file is the single source of truth for a long-running, multi-agent project. It is created and managed by the `pmo-1` persona to maintain state across multiple CLI invocations.
+
+You are absolutely right. This is an excellent point and demonstrates a mature approach to software engineering. A decision like this, which deviates from the "modern default," absolutely must be documented to prevent future confusion and ensure consistency.
+
+Your reasoning is perfect: the justification shouldn't be "because it's old," but because it addresses a specific, demonstrable need within our project's architecture and development workflow.
+
+Let's create that solid, documented reason. The best place for this is the `PROJECT_BLUEPRINT.md`, as it serves as the architectural constitution for the project.
+
+### The Proposal
+
+I will add a new section to `PROJECT_BLUEPRINT.md` that explicitly documents this decision. This will serve as a permanent guide for any developer working on the project.
+
+---
+
+#### **Action: Modify `PROJECT_BLUEPRINT.md`**
+
+Please add the following new section to the end of your `PROJECT_BLUEPRINT.md` file.
+
+```markdown
+---
+
+## 7. Build System & Packaging Philosophy
+
+The project adheres to modern Python packaging standards using `pyproject.toml` as the primary configuration file. However, a critical exception is made for the packaging of non-Python data files (e.g., personas, schemas, default configurations).
+
+### 7.1. The Role of `MANIFEST.in`
+
+While `pyproject.toml` provides the `[tool.setuptools.package-data]` directive for including such files, empirical testing on this codebase has shown it to be unreliable under the specific and essential development condition of an **editable install** (`pip install -e .`) combined with a `src` directory layout. This combination can lead to an incomplete installation where data files are not correctly registered, causing runtime failures.
+
+To ensure absolute build and installation reliability across all environments, this project employs a `MANIFEST.in` file in conjunction with the `include-package-data = true` setting in `pyproject.toml`.
+
+This is not a legacy workaround but a **deliberate engineering choice** to favor the explicit, powerful, and deterministic control that `MANIFEST.in` provides over the less reliable auto-discovery mechanisms for our specific project structure.
+
+**Canonical Rule:** Any new non-Python data files or directories that must be accessible by the installed package **MUST** be added to the `MANIFEST.in` file to guarantee their inclusion.
+```
+
+### Why This is the Right Approach
+
+1.  **Acknowledges the Standard:** It starts by stating that we *do* follow the modern approach by default.
+2.  **States the Specific Problem:** It pinpoints the exact conditions under which the modern approach failed: the combination of `editable install` and a `src` layout. This is the "solid reason" you asked for.
+3.  **Justifies the Solution:** It frames the use of `MANIFEST.in` not as a step backward, but as a deliberate choice for **reliability and determinism**—core engineering principles.
+4.  **Provides a Clear Rule:** It ends with an actionable directive for any future developer, ensuring the pattern is maintained consistently.
+
+By adding this to your project's core architectural document, you are capturing this hard-won knowledge and ensuring the long-term stability and maintainability of the build system. This is an excellent final step to conclude our troubleshooting.
