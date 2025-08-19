@@ -180,8 +180,8 @@ def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBas
     try:
         # --- Handle local plugins ---
         if plugin_name.endswith(" (local)"):
-            base_name = plugin_name.removesuffix(" (local)")
-            local_plugins_path = Path.cwd() / ai_settings.general.local_plugins_directory
+            base_name = plugin_name.removesuffix(" (local)") # pyright: ignore
+            local_plugins_path = ai_settings.paths.local_plugins_dir
             plugin_file = local_plugins_path / f"{base_name}_plugin.py"
             
             if not plugin_file.exists():
@@ -303,6 +303,8 @@ async def async_main():
     parser.add_argument('--interactive', action='store_true', help='Start an interactive chat session.')
     parser.add_argument('--context', help='The name of the context plugin to use (e.g., Trading).')
     parser.add_argument('--output-dir', help='Activates Output-First mode, generating an execution package in the specified directory instead of executing live.')
+    # --- NEW: Add --show-context argument ---
+    parser.add_argument('--show-context', action='store_true', help='Build and display the context from files and plugins, then exit without running the agent.')
     session_group = parser.add_mutually_exclusive_group()
     session_group.add_argument('--session', help='Continue an existing session by ID.')
     session_group.add_argument('--new-session', action='store_true', help='Start a new session.')    
@@ -360,7 +362,9 @@ async def async_main():
         sys.exit(0) 
         
     # --- Sanity checks now run only when proceeding with a query ---
-    _run_prompt_sanity_checks(args, user_query)
+    # Don't run sanity checks if we are just showing context
+    if not args.show_context:
+        _run_prompt_sanity_checks(args, user_query)
 
     session_manager = SessionManager()
     history = []
@@ -392,8 +396,11 @@ async def async_main():
             
             # Only attempt to load if the plugin actually exists
             if plugin_name_to_load in available_plugins:
-                print(f"{Colors.MAGENTA}🔌 Persona domain '{domain_name}' detected. Attempting to auto-load context plugin...{Colors.RESET}")
-                context_plugin = load_context_plugin(plugin_name_to_load)
+                # --- REFACTORED: Load first, then print explicit message ---
+                temp_plugin = load_context_plugin(plugin_name_to_load)
+                if temp_plugin:
+                    print(f"{Colors.MAGENTA}🔌 Persona '{args.persona}' triggered auto-loading of the '{temp_plugin.name}' context plugin.{Colors.RESET}")
+                    context_plugin = temp_plugin
             
     # --- Manual Override ---
     # If the user specifies --context, it overrides any auto-loaded plugin.
@@ -409,6 +416,16 @@ async def async_main():
     if args.files:
         file_context = build_file_context(args.files, user_query)
         full_context_str += file_context
+
+    # --- NEW: Handle --show-context flag ---
+    if args.show_context:
+        print(f"\n{Colors.BOLD}{Colors.CYAN}--- Generated Context Preview ---{Colors.RESET}")
+        if full_context_str.strip():
+            print(full_context_str)
+        else:
+            print(f"{Colors.YELLOW}No context was generated from the provided files or plugins.{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.CYAN}---------------------------------{Colors.RESET}")
+        sys.exit(0) # Exit after showing context
 
     # --- UNIFIED CONTEXT INJECTION (TD-001 FIX) ---
     # If any context was built, inject it into the history now. This ensures
