@@ -46,8 +46,7 @@ ai_assistant = [
     "default_config.yml",
     "personas/**/*.md",
     "personas/**/*.py",
-    "internal_data/*.yml",
-    "internal_data/schemas/*.json",
+    "internal_data/**/*",
 ]
 
 "ai_assistant._test_data" = [
