@@ -5,6 +5,8 @@
 # Ignore generated build artifacts (e.g., final prompts, temp instances)
 /build
 
+# Generated Documentation
+docs/prompting_guide.md
 
 # Ignore the local, user-specific prompt library.
 # This directory is for private or experimental prompts that should not be
