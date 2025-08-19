@@ -1,0 +1,21 @@
+# This file is the single source of truth for governance rules
+# that need to be shared between runtime code and documentation.
+
+prompting_best_practices:
+  # This list is read by cli.py to power the sanity checker and
+  # by scripts/generate_docs.py to keep the prompting guide in sync.
+  risky_modification_keywords:
+    - "refactor"
+    - "fix"
+    - "modify"
+    - "commit"
+    - "change"
+    - "add"
+    - "create"
+    - "write"
+    - "remove"
+    - "delete"
+    - "update"
+    - "apply"
+    - "generate"
+    - "implement"

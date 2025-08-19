@@ -23,6 +23,13 @@ from .utils.colors import Colors
 from .utils.signature import calculate_persona_signature
 from .utils.result_presenter import present_result
 
+try:
+    governance_text = resources.files('ai_assistant').joinpath('internal_data/governance.yml').read_text(encoding='utf-8')
+    GOVERNANCE_RULES = yaml.safe_load(governance_text)
+    RISKY_KEYWORDS = GOVERNANCE_RULES.get("prompting_best_practices", {}).get("risky_modification_keywords", [])
+except Exception as e:
+    print(f"⚠️  Warning: Could not load governance rules for sanity checks. Reason: {e}", file=sys.stderr)
+    RISKY_KEYWORDS = []
 
 def list_available_plugins() -> List[str]:
     """Dynamically discovers available plugins from both entry points and the local project directory."""
@@ -255,8 +262,8 @@ def _run_prompt_sanity_checks(
         )
     # Check 3 (Fallback): Inferred risky action without the safe workflow
     elif not "<action>" in query_lower:
-        risky_keywords = ["refactor", "fix", "modify", "commit", "change", "add", "create", "write"]
-        if any(keyword in query_lower for keyword in risky_keywords) \
+        
+        if any(keyword in query_lower for keyword in RISKY_KEYWORDS) \
             and not args.output_dir:
             warnings.append(
                 "Your prompt seems to request a system modification. For clarity and safety, "

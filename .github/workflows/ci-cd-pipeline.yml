@@ -35,6 +35,9 @@ jobs:
       - name: Generate Schemas from Contracts
         run: python scripts/generate_schemas.py
 
+      - name: Generate Documentation from Templates
+        run: python scripts/generate_docs.py
+
       - name: Validate Persona Standards
         run: python scripts/generate_manifest.py
           

@@ -26,7 +26,7 @@ The single most important factor for achieving high-quality results is to **use 
     *   **Bad:** `ai --persona domains/programming/csa-1 "So, I was looking at our database code, and I think it's a bit slow. Maybe we could make it better? I was thinking about connection pooling..."`
 
 *   **DO Use the `<ACTION>` Tag and Two-Stage Workflow for Any Changes.**
-    For any task that modifies files or Git, you **MUST** use the `--output-dir` flag. To make your intent clear to both the system and the AI, you **SHOULD** wrap your core objective in `<ACTION>` tags. This is the standardized pattern for declaring a high-risk operation.
+    For any task that modifies files or Git, you **MUST** use the `--output-dir` flag. The system will automatically warn you if your prompt contains risky keywords (such as {{RISKY_KEYWORDS_LIST}}) without this flag. This is the standardized pattern for declaring a high-risk operation.
     *   **Best Practice:**
         ```bash
         ai --persona domains/programming/csa-1 --output-dir ./my_run \
@@ -42,6 +42,12 @@ The single most important factor for achieving high-quality results is to **use 
     *   **Good:** `"1. Create a new branch named 'feature/user-auth-cache'. 2. Modify auth.py to add Redis caching to the get_user function. 3. Commit the change with the message 'feat(auth): add caching to get_user'."`
     *   **Bad:** `"Add caching and make a branch."`
 
+*   **DO Guide the AI Towards the Right Tools for Critical Tasks.**
+    For complex operations like modifying a file, the AI has multiple tools it could use. Sometimes, it may choose a simpler but less safe option. You can make its plans more robust by explicitly guiding it to use the best tool for the job.
+    *   **Good (But Potentially Ambiguous):** `"<ACTION>Update the README to remove the legacy section.</ACTION>"`
+    *   **Better (Explicit and Safer):** `"<ACTION>Use the 'refactor_file_content' tool to update the README. The instructions are to remove the legacy section.</ACTION>"`
+    *   **Why?** The second prompt removes all ambiguity. It prevents the AI from defaulting to a more primitive and risky `read_file` + `write_file` pattern and forces it to use the specialized, safer tool designed for that exact purpose. This is a powerful way to increase the reliability of the generated plans.
+    
 ## Don'ts: Common Pitfalls to Avoid
 
 *   **DON'T Be Vague or Conversational.**

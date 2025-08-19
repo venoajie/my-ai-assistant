@@ -1,12 +1,72 @@
 # ai_assistant/tools.py
+import asyncio
 import os
 import re
+from pathlib import Path
 import shutil
 import subprocess
-from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
 from ._security_guards import SHELL_COMMAND_BLOCKLIST
+from .prompt_builder import PromptBuilder
+from .response_handler import ResponseHandler
+
+
+
+class RefactorFileContentTool(Tool):
+    name = "refactor_file_content"
+    description = (
+        "Reads a file, applies a set of refactoring instructions to its content, and writes the result back to the same file. "
+        "This is the preferred tool for modifying existing code. "
+        "Usage: refactor_file_content(path: str, instructions: str)"
+    )
+    is_risky = True
+
+    def __call__(self, path: str, instructions: str) -> Tuple[bool, str]:
+        # This tool's execution is async, but the __call__ must be sync.
+        # We run the async logic in a new event loop.
+        try:
+            return asyncio.run(self._execute_refactor(path, instructions))
+        except Exception as e:
+            return (False, f"Error during refactoring event loop: {e}")
+
+    async def _execute_refactor(self, path: str, instructions: str) -> Tuple[bool, str]:
+        p = Path(path)
+        if not p.exists() or not p.is_file():
+            return (False, f"Error: File not found at {path}")
+
+        try:
+            original_content = p.read_text(encoding='utf-8')
+
+            # Use a simple, direct prompt for the synthesis model
+            prompt = f"""You are an expert code refactoring agent. Your sole task is to modify the provided source code based on the user's instructions. You must return only the complete, final, modified code file. Do not add any commentary, explanations, or markdown formatting.
+
+<Instructions>
+{instructions}
+</Instructions>
+
+<OriginalCode path="{path}">
+{original_content}
+</OriginalCode>
+
+Modified Code:"""
+
+            # Use the powerful synthesis model for this task
+            handler = ResponseHandler()
+            synthesis_model = "gemini-1.5-pro-latest" # Or your preferred powerful model
+            result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
+            
+            modified_content = result["content"]
+
+            # A simple guardrail to prevent accidental blanking of files
+            if not modified_content or not modified_content.strip():
+                return (False, "Error: Refactoring agent returned an empty response. No changes were made.")
+
+            p.write_text(modified_content, encoding='utf-8')
+            return (True, f"Successfully refactored and wrote new content to {path}")
+
+        except Exception as e:
+            return (False, f"Error refactoring file {path}: {e}")
 
 class Tool:
     name: str = "Base Tool"; description: str = "This is a base tool."; is_risky: bool = False
@@ -216,6 +276,7 @@ class ToolRegistry:
         self.register(GitAddTool())
         self.register(GitCommitTool()) 
         self.register(GitPushTool())
+        self.register(RefactorFileContentTool())
         self.register(GitListBranchesTool())
         self.register(GitCheckoutTool())
 
