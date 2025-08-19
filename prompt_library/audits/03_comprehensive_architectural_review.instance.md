@@ -209,8 +209,7 @@ contracts:
       
       
         <StaticFile path="pyproject.toml">
-        # pyproject.toml
-# pyproject.toml
+ # pyproject.toml
 
 [project]
 name = "my-ai-assistant"
@@ -247,26 +246,14 @@ test = [
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+# --- THIS IS THE FIX (PART 1) ---
+# This tells setuptools to look for and obey a MANIFEST.in file.
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["ai_assistant*"]
 
-[tool.setuptools.package-data]
-# Data for the main ai_assistant package
-ai_assistant = [
-    "default_config.yml",
-    "personas/**/*.md",
-    "personas/**/*.py",
-    "internal_data/*",
-]
-# --- THIS IS THE FIX ---
-# Add a new, specific entry for the test data sub-package.
-# The key is the package name, and the paths are relative to that package.
-"ai_assistant.tests" = [
-    "fixtures/*.json",
-    "schemas/*.json",
-]
         </StaticFile>
 
         <!-- Core Application Logic -->
