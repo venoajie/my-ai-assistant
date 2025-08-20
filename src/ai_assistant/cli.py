@@ -22,8 +22,9 @@ from .session_manager import SessionManager
 from .utils.context_optimizer import ContextOptimizer
 from .utils.persona_validator import PersonaValidator
 from .utils.colors import Colors
-from .utils.signature import calculate_persona_signature
 from .utils.result_presenter import present_result
+from .utils.signature import calculate_persona_signature
+from .utils.symbol_extractor import extract_symbol_source
 
 logger = structlog.get_logger()
 
@@ -141,9 +142,14 @@ def is_manifest_invalid(manifest_path: Path):
 def build_file_context(
     files: List[str],
     query: str,
+    extract_symbols: Optional[List[List[str]]] = None,
     ) -> str:
     
     """Reads multiple files and formats them into a single context string."""
+    
+    # Create a map for easy lookup of symbols to extract
+    symbol_map = {path: symbol for path, symbol in extract_symbols} if extract_symbols else {}
+
     if not files:
         return ""
     
@@ -155,6 +161,9 @@ def build_file_context(
         )
     optimizer = ContextOptimizer()
     for file_path_str in files:
+        
+        symbol_to_extract = symbol_map.get(file_path_str)
+        
         path = Path(file_path_str)
         if not path.exists():
             logger.warning(
@@ -163,20 +172,31 @@ def build_file_context(
                 )
             continue
         
-        if path.stat().st_size > MAX_FILE_SIZE:
-            print(f"   - {Colors.YELLOW}⚠️  Warning: File exceeds 5MB limit, skipping: {file_path_str}{Colors.RESET}")
-            continue
-
-        try:
-            
+        content = ""
+        if symbol_to_extract:
+            logger.info("Performing surgical context pruning.", file=file_path_str, symbol=symbol_to_extract)
+            extracted_source = extract_symbol_source(path, symbol_to_extract)
+            if extracted_source:
+                content = extracted_source
+                logger.info("Symbol extracted successfully.", symbol=symbol_to_extract)
+            else:
+                logger.warning("Could not extract symbol, falling back to full file.", symbol=symbol_to_extract)
+                content = path.read_text(encoding='utf-8')
+        else:
+            # Fallback to existing logic for files without --extract-symbol
+            if path.stat().st_size > MAX_FILE_SIZE:
+                logger.warning("File exceeds size limit, skipping.", path=file_path_str)
+                continue
             content = path.read_text(encoding='utf-8')
-
+        
+        # The rest of the function uses the (potentially pruned) content
+        try:
             compressed_content = optimizer.compress_file_context(
                 file_path=file_path_str,
                 content=content, 
                 query=query,
             )
-
+            
             if len(compressed_content) < len(content):
                 logger.debug(
                     "Compressed file for relevance", 
@@ -321,6 +341,14 @@ async def async_main():
     parser = argparse.ArgumentParser(description='AI Assistant - Interactive Agent')
     parser.add_argument('--version', action='version', version=f'%(prog)s {metadata.version("my-ai-assistant")} (Config: v{ai_settings.config_version})')
     parser.add_argument('--list-personas', action='store_true', help='List available personas')
+    parser.add_argument(
+        '-e', '--extract-symbol',
+        dest='extract_symbols',
+        action='append',
+        nargs=2,
+        metavar=('FILE_PATH', 'SYMBOL_NAME'),
+        help="Extract only a specific class or function from a file for context. Use multiple times for multiple files."
+    )
     parser.add_argument('-f', '--file', dest='files', action='append', help='Attach a file to the context. Can be used multiple times.')
     parser.add_argument('--persona', help='The alias of the persona to use (e.g., core/SA-1).')
     parser.add_argument('--autonomous', action='store_true', help='Run in autonomous mode.')

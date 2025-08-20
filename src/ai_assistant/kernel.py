@@ -61,41 +61,10 @@ async def orchestrate_agent_run(
             logger.error("Persona loading failed", persona=persona_alias, error=str(e))
             return {"response": error_msg, "metrics": metrics}
 
-    # --- PRE-PROCESSING & DISTILLATION LOGIC ---
+    # --- PRE-PROCESSING LOGIC ---
     optimizer = ContextOptimizer()
-    original_query = query
     
-    # Check context size
-    temp_history_str = " ".join(turn['content'] for turn in history)
-    estimated_input = query + temp_history_str + (persona_context or "")
-    estimated_tokens = optimizer.estimate_tokens(estimated_input)
     threshold = ai_settings.context_optimizer.prompt_compression_threshold
-
-    if threshold > 0 and estimated_tokens > threshold:
-        logger.warning(
-            "Context size exceeds threshold. Activating Distillation Mode.",
-            tokens=estimated_tokens,
-            threshold=threshold
-        )
-        # 1. Create a lean, direct distillation prompt
-        distillation_prompt = f"""The user has provided a very large context including persona instructions, conversation history, and attached files. Your sole task is to distill all of this information into a concise, self-contained, and actionable mission briefing for a separate planning agent. The briefing must capture the user's final goal and all critical constraints or details needed to achieve it.
-
-<FullContext>
-{estimated_input}
-</FullContext>
-
-Distilled Mission Briefing:"""
-
-        # 2. Call the synthesis model DIRECTLY for maximum simplicity
-        response_handler = ResponseHandler()
-        synthesis_model = ai_settings.model_selection.synthesis
-        synthesis_result = await response_handler.call_api(distillation_prompt, model=synthesis_model)
-        
-        # 3. The distilled text becomes the new query
-        query = synthesis_result["content"]
-        history = [] # History has been distilled into the new query
-        persona_context = None # Persona context has been distilled
-        logger.info("Distillation complete. New concise query generated.", new_query=query)
 
     # --- THIS LOGIC NOW RUNS *AFTER* POTENTIAL DISTILLATION ---
     use_compact_protocol = False
@@ -108,7 +77,7 @@ Distilled Mission Briefing:"""
         use_compact_protocol = True
 
     # --- PLANNING & UNIFIED VALIDATION LOOP ---
-    plan_expectation = generate_plan_expectation(original_query) # Always validate against the ORIGINAL user intent
+    plan_expectation = generate_plan_expectation(query) # Always validate against the ORIGINAL user intent
     
     planner = Planner()
     max_retries = 2
