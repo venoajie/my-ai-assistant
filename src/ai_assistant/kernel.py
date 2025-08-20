@@ -61,24 +61,65 @@ async def orchestrate_agent_run(
             print(error_msg, file=sys.stderr)
             return {"response": error_msg, "metrics": metrics}
 
-    # --- PRE-PROCESSING & COMPRESSION LOGIC ---
+    # --- PRE-PROCESSING & DISTILLATION LOGIC ---
     optimizer = ContextOptimizer()
+    original_query = query
     optimized_query = optimizer.trim_to_limit(query)
     if len(optimized_query) < len(query):
         print(f"ℹ️  Context has been truncated to fit the token limit.")
 
-    use_compact_protocol = False
+
+    # Check context size
+    temp_history_str = " ".join(turn['content'] for turn in history)
+    estimated_input = query + temp_history_str + (persona_context or "")
+    estimated_tokens = optimizer.estimate_tokens(estimated_input)
     threshold = ai_settings.context_optimizer.prompt_compression_threshold
-    if threshold > 0:
-        temp_history_str = " ".join(turn['content'] for turn in history)
-        estimated_input = query + temp_history_str
-        estimated_tokens = optimizer.estimate_tokens(estimated_input)
-        if estimated_tokens > threshold:
-            print(f"ℹ️  Context size ({estimated_tokens} tokens) exceeds threshold ({threshold}). Using compact prompt format for planning.")
-            use_compact_protocol = True
+    
+    if threshold > 0 and estimated_tokens > threshold:
+        logger.warning(
+            "Context size exceeds threshold. Activating Distillation Mode.",
+            tokens=estimated_tokens,
+            threshold=threshold
+        )
+        # 1. Create a distillation prompt
+        distillation_prompt = f"""The user has provided a very large context. Your task is to distill it into a concise, actionable mission briefing for a planning agent. The final briefing should be self-contained. Here is all the information:
+
+<OriginalPersonaContext>
+{persona_context}
+</OriginalPersonaContext>
+
+<ConversationHistory>
+{temp_history_str}
+</ConversationHistory>
+
+<FinalUserQuery>
+{query}
+</FinalUserQuery>
+
+Distill all of this into a single, clear set of instructions for the planner:"""
+
+        # 2. Call the synthesis model (our powerful distiller)
+        distiller_loader = PersonaLoader()
+        _, distiller_context, _ = distiller_loader.load_persona_content("core/distiller-1")
+        
+        synthesis_prompt = PromptBuilder().build_synthesis_prompt(
+            query=distillation_prompt,
+            history=[], # History is already in the prompt
+            observations=[],
+            persona_context=distiller_context
+        )
+        
+        response_handler = ResponseHandler()
+        synthesis_model = ai_settings.model_selection.synthesis
+        synthesis_result = await response_handler.call_api(synthesis_prompt, model=synthesis_model)
+        
+        # 3. The distilled text becomes the new query
+        query = synthesis_result["content"]
+        history = [] # The history has been distilled, so we clear it for the planner
+        logger.info("Distillation complete. New concise query generated.", new_query=query)
 
     # --- PLANNING & UNIFIED VALIDATION LOOP ---
-    plan_expectation = generate_plan_expectation(query)
+    plan_expectation = generate_plan_expectation(original_query) # Validate against the ORIGINAL query
     if plan_expectation:
         print(f"ℹ️  Compliance rule triggered. Expected plan signature: {plan_expectation}")
         
