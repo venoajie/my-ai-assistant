@@ -45,7 +45,10 @@ where = ["src"]
 include = ["ai_assistant*"]
 
 [tool.setuptools.package-data]
-"ai_assistant._test_data" = [
-    "fixtures/*.json",
-    "schemas/*.json",
+"ai_assistant" = [
+    "default_config.yml",
+    "personas/**/*.persona.md",
+    "internal_data/governance.yml",
+    "internal_data/persona_config.yml",
+    "internal_data/schemas/**/*.json"
 ]
