@@ -26,21 +26,17 @@ class Planner:
         self.provider_name = provider_info["provider_name"]
         provider_config = provider_info["config"]
 
-        # --- THIS IS THE FINAL, DEFINITIVE FIX ---
-        # Use explicit, provider-specific patching methods instead of the generic patch().
         if self.provider_name == "gemini":
             api_key = os.getenv(provider_config.api_key_env)
             if not api_key:
                 raise ValueError(f"API key env var '{provider_config.api_key_env}' is not set.")
-            genai.configure(api_key=api_key)
             
-            # Use the explicit from_gemini() method
+            # Use the explicit from_gemini() method with the ASYNC client
             self.client = instructor.from_gemini(
                 client=genai.GenerativeModel(model_name=planning_model_name),
                 mode=instructor.Mode.GEMINI_JSON,
             )
         elif self.provider_name == "deepseek":
-            # Use the explicit from_openai() method
             self.client = instructor.from_openai(
                 client=AsyncOpenAI(
                     api_key=os.getenv(provider_config.api_key_env),
@@ -73,10 +69,13 @@ class Planner:
         planning_gen_config = ai_settings.generation_params.planning.model_dump(exclude_none=True)
 
         try:
+            # --- THIS IS THE FINAL FIX ---
             if self.provider_name == "gemini":
-                plan = await self.client.generate_content(
-                    prompt,
+                # For Gemini, instructor adds a 'create' method.
+                # We pass the prompt via a 'messages' list.
+                plan = await self.client.create(
                     response_model=ExecutionPlan,
+                    messages=[{"role": "user", "content": prompt}],
                     generation_config=genai.types.GenerationConfig(**planning_gen_config)
                 )
             else: # Assumes OpenAI-compatible (DeepSeek)
