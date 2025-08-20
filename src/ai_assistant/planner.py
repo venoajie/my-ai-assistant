@@ -72,7 +72,6 @@ class Planner:
                 plan = await self.client.create(
                     response_model=ExecutionPlan,
                     messages=[{"role": "user", "content": prompt}],
-                    # --- THIS IS THE FIX ---
                     # Pass the plain dictionary, not a GenerationConfig object.
                     generation_config=planning_gen_config
                 )
