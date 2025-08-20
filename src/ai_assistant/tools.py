@@ -65,7 +65,7 @@ Modified Code:"""
 
             handler = ResponseHandler()
             # NOTE: Ensure this model is configured in your default_config.yml
-            synthesis_model = "gemini-1.5-pro-latest" 
+            synthesis_model = "gemini-2.5-pro-latest" 
             result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
             
             modified_content = result["content"].strip()
