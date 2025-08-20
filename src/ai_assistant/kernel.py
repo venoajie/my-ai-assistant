@@ -58,82 +58,70 @@ async def orchestrate_agent_run(
             persona_directives, persona_context, allowed_tools = loader.load_persona_content(persona_alias)
         except (RecursionError, FileNotFoundError) as e:
             error_msg = f"🛑 HALTING: Could not load persona '{persona_alias}'. Reason: {e}"
-            print(error_msg, file=sys.stderr)
+            logger.error("Persona loading failed", persona=persona_alias, error=str(e))
             return {"response": error_msg, "metrics": metrics}
 
     # --- PRE-PROCESSING & DISTILLATION LOGIC ---
     optimizer = ContextOptimizer()
     original_query = query
-    optimized_query = optimizer.trim_to_limit(query)
-    if len(optimized_query) < len(query):
-        print(f"ℹ️  Context has been truncated to fit the token limit.")
-
-
+    
     # Check context size
     temp_history_str = " ".join(turn['content'] for turn in history)
     estimated_input = query + temp_history_str + (persona_context or "")
     estimated_tokens = optimizer.estimate_tokens(estimated_input)
     threshold = ai_settings.context_optimizer.prompt_compression_threshold
-    
+
     if threshold > 0 and estimated_tokens > threshold:
         logger.warning(
             "Context size exceeds threshold. Activating Distillation Mode.",
             tokens=estimated_tokens,
             threshold=threshold
         )
-        # 1. Create a distillation prompt
-        distillation_prompt = f"""The user has provided a very large context. Your task is to distill it into a concise, actionable mission briefing for a planning agent. The final briefing should be self-contained. Here is all the information:
+        # 1. Create a lean, direct distillation prompt
+        distillation_prompt = f"""The user has provided a very large context including persona instructions, conversation history, and attached files. Your sole task is to distill all of this information into a concise, self-contained, and actionable mission briefing for a separate planning agent. The briefing must capture the user's final goal and all critical constraints or details needed to achieve it.
 
-<OriginalPersonaContext>
-{persona_context}
-</OriginalPersonaContext>
+<FullContext>
+{estimated_input}
+</FullContext>
 
-<ConversationHistory>
-{temp_history_str}
-</ConversationHistory>
+Distilled Mission Briefing:"""
 
-<FinalUserQuery>
-{query}
-</FinalUserQuery>
-
-Distill all of this into a single, clear set of instructions for the planner:"""
-
-        # 2. Call the synthesis model (our powerful distiller)
-        distiller_loader = PersonaLoader()
-        _, distiller_context, _ = distiller_loader.load_persona_content("core/distiller-1")
-        
-        synthesis_prompt = PromptBuilder().build_synthesis_prompt(
-            query=distillation_prompt,
-            history=[], # History is already in the prompt
-            observations=[],
-            persona_context=distiller_context
-        )
-        
+        # 2. Call the synthesis model DIRECTLY for maximum simplicity
         response_handler = ResponseHandler()
         synthesis_model = ai_settings.model_selection.synthesis
-        synthesis_result = await response_handler.call_api(synthesis_prompt, model=synthesis_model)
+        synthesis_result = await response_handler.call_api(distillation_prompt, model=synthesis_model)
         
         # 3. The distilled text becomes the new query
         query = synthesis_result["content"]
-        history = [] # The history has been distilled, so we clear it for the planner
+        history = [] # History has been distilled into the new query
+        persona_context = None # Persona context has been distilled
         logger.info("Distillation complete. New concise query generated.", new_query=query)
 
+    # --- THIS LOGIC NOW RUNS *AFTER* POTENTIAL DISTILLATION ---
+    use_compact_protocol = False
+    # Re-estimate with the potentially shorter query
+    current_history_str = " ".join(turn['content'] for turn in history)
+    current_input = query + current_history_str
+    current_tokens = optimizer.estimate_tokens(current_input)
+    if threshold > 0 and current_tokens > threshold:
+        logger.info("Context still large after distillation. Using compact prompt format.", tokens=current_tokens)
+        use_compact_protocol = True
+
     # --- PLANNING & UNIFIED VALIDATION LOOP ---
-    plan_expectation = generate_plan_expectation(original_query) # Validate against the ORIGINAL query
-    if plan_expectation:
-        print(f"ℹ️  Compliance rule triggered. Expected plan signature: {plan_expectation}")
-        
+    plan_expectation = generate_plan_expectation(original_query) # Always validate against the ORIGINAL user intent
+    
     planner = Planner()
     max_retries = 2
+    plan = None
     for attempt in range(max_retries):
         plan, planning_result = await planner.create_plan(
-             optimized_query,
+             query, # Use the new, potentially distilled query
              history,
              persona_context,
              use_compact_protocol,
              is_output_mode=(output_dir is not None),
          )
-
+        
      # --- Explicit check for planner failure ---
         if plan is None:
             # The planner itself failed critically. No point in retrying.
