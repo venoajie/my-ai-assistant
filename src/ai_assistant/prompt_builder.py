@@ -1,7 +1,7 @@
 # src\ai_assistant\prompt_builder.py
-import re
 from typing import Dict, List, Any, Optional
 import json
+from .data_models import ExecutionPlan
 
 class PromptBuilder:
     """
@@ -30,7 +30,8 @@ class PromptBuilder:
         if is_output_mode:
             output_mode_heuristic = """5.  **OUTPUT-FIRST MODE:** You are in a special mode where your plan will NOT be executed directly. Instead, it will be saved to a manifest file. Your plan must be a complete, end-to-end sequence of actions (e.g., create branch, write file, add, commit, push) that can be executed by a separate, non-AI tool. Do not use read-only tools like `list_files` unless their output is critical for a subsequent step's condition. Your primary goal is to generate a complete and executable action plan."""
 
-        prompt = f"""{persona_section}You are a planning agent. Your SOLE purpose is to convert a user's request into a structured JSON plan of tool calls. You must adhere strictly to the provided tool signatures and planning heuristics.
+        # --- THIS PROMPT IS NOW MUCH SIMPLER ---
+        prompt = f"""{persona_section}You are a planning agent. Your SOLE purpose is to convert a user's request into a structured plan of tool calls. Adhere strictly to the provided tool signatures and planning heuristics.
 
 <AvailableTools>
 # You must use the function signatures below to construct your tool calls.
@@ -38,66 +39,18 @@ class PromptBuilder:
 </AvailableTools>
 
 **PLANNING HEURISTICS (Follow these strictly):**
-1.  **Conditional Branching for Uncertainty:** To handle situations with unknown state (e.g., whether a file or branch exists), you MUST create a conditional plan.
-    - **Step A:** The first step should be a read-only tool to check the state (e.g., `git_list_branches`).
-    - **Step B:** Subsequent steps that depend on this state MUST include a `condition` block that references the output of the first step.
-    - **Example:** `{{"tool": "git_create_branch", "args": ..., "condition": {{"from_step": 1, "not_in": "my-branch"}}}}`
-2.  **Handle Ignored Files:** When asked to `git_add` a file path that is likely to be ignored (e.g., in `logs/`), you MUST use the `force=True` parameter in the `git_add` call.
-3.  **CRITICAL: Use Pre-loaded Context for Code Generation:**
-    - The user's request may contain one or more `<AttachedFile path="...">` tags with file content. This is your primary source of truth.
-    - When the user asks to modify a file (e.g., "refactor this function"), your `write_file` step MUST be fully self-contained.
-    - **Step A:** Take the original code from inside the relevant `<AttachedFile>` tag.
-    - **Step B:** Perform the requested refactoring or modification on that code.
-    - **Step C:** Place the ENTIRE, new, complete file content into the `content` argument of the `write_file` tool.
-    - **Step D:** Use the exact file path from the `<AttachedFile path="...">` attribute for the `path` argument.
-    - **You are FORBIDDEN from using placeholders, comments like "... rest of file ...", or generating only a diff.** This is not optional. Your job is to generate the complete, final code.
-4.  **Summarize, Don't Read:** For read-only tasks (e.g., "summarize", "compare", "analyze"), if the necessary context is already provided in `<AttachedFile>` tags, your plan MUST be an empty array `[]`. You are FORBIDDEN from using `read_file` on a file that is already attached to the user's request.
+1.  **Conditional Branching:** For uncertainty, use a read-only tool first, then use a `condition` block on subsequent steps that references the first step's output.
+2.  **Handle Ignored Files:** When using `git_add` on a potentially ignored file, use the `force=True` parameter.
+3.  **CRITICAL: Use Pre-loaded Context for Code Generation:** When modifying a file provided in an `<AttachedFile>` tag, your `write_file` step MUST contain the ENTIRE, new, complete file content. Do not use placeholders.
+4.  **Summarize, Don't Read:** If context is already in `<AttachedFile>`, generate an empty plan `[]` for summarization tasks. Do not use `read_file` on an already attached file.
 {output_mode_heuristic}
 ---
-<Example>
-<UserRequest>
-I need to read the project's README.md file.
-</UserRequest>
-<JSON_PLAN>
-```json
-[
-  {{
-    "thought": "The user wants to read a single file. I will create a one-step plan.",
-    "tool_name": "read_file",
-    "args": {{
-      "path": "README.md"
-    }}
-  }}
-]
-```
-</JSON_PLAN>
-</Example>
----
-<Example>
-<UserRequest>
-<AttachedFile path="src/main.py">
-# Contents of main.py
-</AttachedFile>
-Analyze the attached file and tell me what it does.
-</UserRequest>
-<JSON_PLAN>
-```json
-[]
-```
-</JSON_PLAN>
-</Example>
----
-
 {history_section}
 <UserRequest>
 {query}
 </UserRequest>
 
-Based on the request, the example, and the heuristics, generate the JSON plan.
-You MUST ONLY respond with the JSON plan, enclosed in ```json markdown tags.
-Important: Always use a JSON ARRAY of steps, even for single-step plans.
-
-JSON_PLAN:
+Based on the request and heuristics, generate the plan.
 """
         return prompt
 
@@ -105,12 +58,14 @@ JSON_PLAN:
     def build_critique_prompt(
         self,
         query: str,
-        plan: List[Dict[str, Any]],
+        plan: ExecutionPlan,
         persona_context: str
     ) -> str:
         """Builds the prompt for the Plan Validation Analyst."""
-        plan_str = json.dumps(plan, indent=2)
-        
+
+        plan_dict = plan.model_dump() 
+        plan_str = json.dumps(plan_dict, indent=2)     
+           
         prompt = f"""<SystemPrompt>
 {persona_context}
 </SystemPrompt>

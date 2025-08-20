@@ -3,6 +3,7 @@ import yaml
 from typing import List, Dict, Any, Optional, Tuple
 from importlib import resources
 
+from .data_models import ExecutionPlan
 # Load the rules once at startup
 governance_text = resources.files('ai_assistant').joinpath('internal_data/governance.yml').read_text(encoding='utf-8')
 GOVERNANCE_RULES = yaml.safe_load(governance_text)
@@ -16,7 +17,7 @@ def generate_plan_expectation(prompt: str) -> Optional[Dict[str, Any]]:
             return rule.get("expected_signature")
     return None # No specific rule triggered
 
-def check_plan_compliance(plan: List[Dict[str, Any]], expectation: Dict[str, Any]) -> Tuple[bool, str]:
+def check_plan_compliance(plan: ExecutionPlan, expectation: Dict[str, Any]) -> Tuple[bool, str]:
     """Validates a generated plan against an expected signature."""
     if not expectation:
         return (True, "") # No expectation, so any plan is compliant.

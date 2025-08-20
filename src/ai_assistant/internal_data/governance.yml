@@ -1,3 +1,5 @@
+
+# src\ai_assistant\internal_data\governance.yml
 # This file is the single source of truth for governance rules
 # that need to be shared between runtime code and documentation.
 

@@ -14,6 +14,7 @@ from .planner import Planner
 from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
+from .data_models import ExecutionPlan
 
 async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Finds and injects content from files specified in the configuration."""
@@ -90,17 +91,16 @@ async def orchestrate_agent_run(
         
         # --- THE DEFINITIVE FIX IS HERE ---
         # This is the single, unified validation gate.
-        is_compliant, compliance_reason = check_plan_compliance(plan, plan_expectation)
+        is_compliant, compliance_reason = check_plan_compliance(plan, plan_expectation) # Pass the object
         
         persona_tools_valid = True
         persona_reason = ""
         if allowed_tools:
-            for step in plan:
-                tool_name = step.get("tool_name")
-                if tool_name not in allowed_tools:
+            for step in plan: # <--- This now iterates over plan.root
+                if step.tool_name not in allowed_tools: # <--- Use attribute access
                     persona_tools_valid = False
                     persona_reason = (
-                        f"Plan violates persona rules. Used forbidden tool '{tool_name}'. "
+                        f"Plan violates persona rules. Used forbidden tool '{step.tool_name}'. "
                         f"This persona can only use: {', '.join(allowed_tools)}."
                     )
                     break
@@ -126,7 +126,7 @@ async def orchestrate_agent_run(
     prompt_builder = PromptBuilder()
 
     # --- DIRECT RESPONSE (NO TOOLS) ---
-    if not plan or all(not step.get("tool_name") for step in plan):
+    if not plan or not plan.root or all(not step.tool_name for step in plan):
         print("📝 No tool execution required. Generating direct response...")
         direct_prompt = prompt_builder.build_synthesis_prompt(
             query=query,
@@ -144,7 +144,7 @@ async def orchestrate_agent_run(
 
     # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
     critique = None
-    if plan and any(step.get("tool_name") for step in plan):
+    if plan and plan.root and any(step.tool_name for step in plan):
         print("🕵️  Submitting plan for adversarial validation...")
         try:
             critic_loader = PersonaLoader()
@@ -188,11 +188,13 @@ async def orchestrate_agent_run(
     step_results: Dict[int, str] = {}
     any_risky_action_denied = False
 
-    for i, step in enumerate(plan):
+
+    for i, step in enumerate(plan): # <--- This now iterates over plan.root
         step_num = i + 1
-        if "condition" in step:
-            cond = step["condition"]
-            from_step_num = cond.get("from_step")
+        if step.condition: # <--- Use attribute access
+            cond = step.condition
+            from_step_num = cond.from_step
+            
             if from_step_num is None:
                  print(f"  - ⚠️  Warning: Conditional step {step_num} is missing 'from_step'. Skipping condition check.")
             else:
@@ -205,9 +207,11 @@ async def orchestrate_agent_run(
                 if not condition_met:
                     print(f"  - Skipping Step {step_num} because condition was not met.")
                     continue
-        tool_name = step.get("tool_name")
-        args = step.get("args") or {}
+        
+        tool_name = step.tool_name # <--- Use attribute access
+        args = step.args or {} # <--- Use attribute access
         print(f"  - Executing Step {step_num}: {tool_name}({args})")
+        
         tool = TOOL_REGISTRY.get_tool(tool_name)
         if tool:
             if tool.is_risky and not is_autonomous:

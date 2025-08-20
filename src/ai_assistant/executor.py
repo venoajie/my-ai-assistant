@@ -8,6 +8,9 @@ import argparse
 from importlib import resources
 import jsonschema
 
+import structlog
+from .logging_config import setup_logging 
+
 class ExecutionError(Exception):
     """Custom exception for execution failures."""
     pass
@@ -18,6 +21,7 @@ class ManifestExecutor:
     This class is designed to be simple, robust, and deterministic.
     """
     def __init__(self, package_dir: Path, dry_run: bool = False):
+        self.logger = structlog.get_logger(self.__class__.__name__)
         self.package_dir = package_dir.resolve()
         self.workspace_dir = self.package_dir / "workspace"
         self.manifest_path = self.package_dir / "manifest.json"
@@ -30,7 +34,7 @@ class ManifestExecutor:
     def _load_manifest(self) -> dict:
         """Loads and validates the manifest file."""
         
-        print(f"ℹ️  Loading and validating manifest: {self.manifest_path}")
+        self.logger.info("Loading and validating manifest", path=self.manifest_path)
         try:
             # 1. Load the manifest instance from disk
             with open(self.manifest_path, 'r', encoding='utf-8') as f:
@@ -43,7 +47,7 @@ class ManifestExecutor:
 
             # 3. Perform validation
             jsonschema.validate(instance=manifest, schema=schema)
-            print("   - ✅ Schema validation passed.")
+            self.logger.info("Schema validation passed.")
 
         except json.JSONDecodeError as e:
             raise ValueError(f"Manifest is not valid JSON. Error: {e}")
@@ -59,14 +63,18 @@ class ManifestExecutor:
         manifest = self._load_manifest()
         actions = manifest.get("actions", [])
         
-        print(f"✅ Manifest loaded. Found {len(actions)} actions to execute.")
+        self.logger.info("Manifest loaded.", action_count=len(actions))
         if self.dry_run:
-            print("\nDRY RUN MODE: No changes will be applied to the file system or Git repository.\n")
+            self.logger.warning("DRY RUN MODE: No changes will be applied.")
 
         for i, action in enumerate(actions):
             action_type = action.get("type")
-            print("-" * 50)
-            print(f"▶️  Executing Action {i+1}/{len(actions)}: {action_type}")
+
+            self.logger.info(
+                "Executing action", 
+                step=f"{i+1}/{len(actions)}", 
+                type=action_type
+            )
             
             try:
                 handler = getattr(self, f"_handle_{action_type}", None)
@@ -79,29 +87,38 @@ class ManifestExecutor:
                 print("🛑 Execution stopped. The system state may be partially modified.", file=sys.stderr)
                 sys.exit(1)
         
-        print("-" * 50)
-        print("✅ Plan executed successfully.")
+        self.logger.info("Plan executed successfully.")
 
     def _run_command(self, command: list[str], cwd: Path = None):
         """Helper to run a subprocess command."""
         cwd = cwd or self.project_root
         command_str = ' '.join(command)
-        print(f"   - Running command: `{command_str}` in `{cwd}`")
+        self.logger.info(
+            "Running command", 
+            command=command_str, 
+            cwd=str(cwd),
+            )
         if self.dry_run:
-            print("     (Skipped due to dry-run mode)")
+            self.logger.info(
+                "Skipped command due to dry-run mode", 
+                command=command_str,
+                )
             return
 
         result = subprocess.run(command, capture_output=True, text=True, cwd=cwd)
         if result.returncode != 0:
             error_details = f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
             raise ExecutionError(f"Command failed with exit code {result.returncode}.\n{error_details}")
-        print("   - ✅ Success.")
+        self.logger.debug(
+            "Command succeeded", 
+            command=command_str,
+            )
 
     def _handle_create_branch(self, action: dict):
         branch_name = action.get("branch_name")
         if not branch_name:
             raise ValueError("Action 'create_branch' is missing 'branch_name'.")
-        print(f"   - Branch to create: {branch_name}")
+        self.logger.info("Creating new branch", branch_name=branch_name)
         self._run_command(["git", "checkout", "-b", branch_name])
 
     def _handle_apply_file_change(self, action: dict):
@@ -113,21 +130,29 @@ class ManifestExecutor:
         source_path = (self.package_dir / source_rel).resolve()
         target_path = (self.project_root / target_rel).resolve()
 
-        print(f"   - Source: {source_path}")
-        print(f"   - Target: {target_path}")
+        self.logger.debug(
+            "Applying file change", 
+            source=source_path, 
+            target=target_path,
+            )
 
         if not source_path.exists():
             raise FileNotFoundError(f"Source file in workspace not found: {source_path}")
 
         if self.dry_run:
-            print(f"     (Skipped copying file due to dry-run mode)")
+            self.logger.info(
+                "Skipped copying file due to dry-run mode", 
+                source=source_path,
+                )
             return
         
         target_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_path, target_path)
-        print(f"   - ✅ Copied file to target destination.")
+        self.logger.info(
+            "Copied file to target destination", 
+            target=target_path,
+            )
 
-    # --- NEW: Handlers for filesystem operations (Recommendation 1 / TD-004) ---
     def _handle_create_directory(self, action: dict):
         path_rel = action.get("path")
         if not path_rel:
@@ -188,10 +213,12 @@ class ManifestExecutor:
         self._run_command(["git", "push", "--set-upstream", "origin", current_branch])
 
 def main():
+    setup_logging()
+    logger = structlog.get_logger()
+    
     parser = argparse.ArgumentParser(description="Execute an AI-generated plan from an output package.")
     parser.add_argument("package_dir", type=str, help="Path to the AI output package directory.")
     parser.add_argument("--confirm", action="store_true", help="Confirm and apply the changes. Without this flag, a dry-run is performed.")
-    
     args = parser.parse_args()
     
     is_dry_run = not args.confirm
@@ -200,10 +227,10 @@ def main():
         executor = ManifestExecutor(Path(args.package_dir), dry_run=is_dry_run)
         executor.execute_plan()
     except (FileNotFoundError, ValueError, ExecutionError) as e:
-        print(f"\n❌ EXECUTION FAILED: {e}", file=sys.stderr)
-        sys.exit(1)
+        logger.error("EXECUTION FAILED", error=str(e))
+        sys.exit(1) 
     except Exception as e:
-        print(f"\n❌ An unexpected error occurred: {e}", file=sys.stderr)
+        logger.error("An unexpected error occurred", error=str(e))
         sys.exit(1)
 
 if __name__ == "__main__":

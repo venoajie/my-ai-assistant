@@ -2,7 +2,7 @@
 
 [project]
 name = "my-ai-assistant"
-version = "1.2.2"
+version = "1.2.3"
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -11,6 +11,9 @@ dependencies = [
       "requests",
       "pyyaml",
       "pydantic>=2.0",
+      "structlog",
+      "instructor",
+      "openai",    
       ]
 
 [build-system]
