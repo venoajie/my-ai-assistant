@@ -9,6 +9,7 @@ import tempfile
 from importlib import resources
 
 from ai_assistant import kernel
+from ai_assistant.data_models import ExecutionPlan
 
 class TestContractValidation(unittest.TestCase):
     """
@@ -53,8 +54,8 @@ class TestContractValidation(unittest.TestCase):
         Generates an Output Package Manifest using the kernel and validates it against the schema.
         This is the key test to prevent contract drift in the application code.
         """
-        # (This test method remains unchanged)
-        sample_plan = [
+
+        sample_plan_data = [
             {
                 "tool_name": "git_create_branch",
                 "args": {"branch_name": "test-branch"},
@@ -77,8 +78,11 @@ class TestContractValidation(unittest.TestCase):
             }
         ]
 
+        # Create an instance of the ExecutionPlan model
+        execution_plan = ExecutionPlan(root=sample_plan_data)
+        
         result = asyncio.run(kernel._handle_output_first_mode(
-            plan=sample_plan,
+            plan=execution_plan,
             persona_alias="core/arc-1",
             metrics={},
             output_dir_str=str(self.temp_dir)

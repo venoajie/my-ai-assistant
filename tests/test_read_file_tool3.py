@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from src.ai_assistant.tools import ReadFileTool
 
-class TestReadFileTool(unittest.TestCase):
+class TestReadFileTool(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tool = ReadFileTool()
         self.test_file_path = 'test_file.txt'
