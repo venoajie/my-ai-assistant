@@ -16,10 +16,7 @@ from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
 
 async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Finds and injects content from files specified in the configuration.
-    This runs as a preliminary, low-cost step before the main orchestration.
-    """
+    """Finds and injects content from files specified in the configuration."""
     for filename in ai_settings.general.auto_inject_files:
         file_path = Path.cwd() / filename
         if file_path.exists():
@@ -42,14 +39,7 @@ async def orchestrate_agent_run(
 
     history = await _inject_project_context(history)
 
-    metrics = {
-        "timings": {},
-        "tokens": {
-            "planning": {}, 
-            "critique": {},
-            "synthesis": {},
-            }
-        }
+    metrics = {"timings": {}, "tokens": {"planning": {}, "critique": {}, "synthesis": {}}}
     timings = metrics["timings"]
 
     # --- PERSONA LOADING ---
@@ -98,7 +88,8 @@ async def orchestrate_agent_run(
              is_output_mode=(output_dir is not None),
          )
         
-        # --- UNIFIED VALIDATION GATE ---
+        # --- THE DEFINITIVE FIX IS HERE ---
+        # This is the single, unified validation gate.
         is_compliant, compliance_reason = check_plan_compliance(plan, plan_expectation)
         
         persona_tools_valid = True
