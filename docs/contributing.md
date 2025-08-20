@@ -2,6 +2,11 @@
 
 We welcome contributions to the AI Assistant! This guide provides the information you need to get started, from governing personas to extending the tool with plugins.
 
+## Core Requirements
+
+-   **Python Version:** Python 3.10 or higher is **required**.
+-   **Reason:** The project relies on modern dependencies (e.g., `instructor`) that use typing syntax (`|` for unions) introduced in Python 3.10. The application will not run on older versions.
+
 ## Persona Governance
 
 This project enforces a strict structural standard for all persona files to ensure quality and consistency. All contributions that add or modify personas must pass our validation script.
@@ -18,8 +23,8 @@ You must commit the updated `persona_manifest.yml` along with your persona chang
 
 ---
 
-## + Documentation-as-Code Workflow
-<!-- Rationale: Add the new, critical workflow for contributors. -->
+## Documentation-as-Code Workflow
+
 To prevent drift between the application's behavior and its documentation, some documentation files are generated from templates and a central `governance.yml` file.
 
 ### The Workflow
@@ -28,8 +33,7 @@ To prevent drift between the application's behavior and its documentation, some 
     ```bash
     python scripts/generate_docs.py
     ```
-3.  **Ignore Generated Files:** The final generated Markdown files (e.g., `docs/prompting_guide.md`) should be listed in the root `.gitignore` file. They should not be committed to the repository.
-4.  **Commit the Source:** Commit your changes to the template or `governance.yml` file. The CI pipeline will run the generator to verify that your changes are valid.
+3.  **Commit the Source:** Commit your changes to the template or `governance.yml` file. The CI pipeline will run the generator to verify that your changes are valid. **Do not commit the generated Markdown files** (e.g., `docs/prompting_guide.md`), as they should be listed in the root `.gitignore` file.
 
 ---
 
@@ -37,3 +41,4 @@ To prevent drift between the application's behavior and its documentation, some 
 
 -   **System Contracts:** The schemas for all major internal data objects are formally defined in **[`system_contracts.yml`](./system_contracts.yml)**.
 -   **Plugins:** To learn how to build your own plugins, please see the **[Extending with Plugins Guide](./plugins.md)**.
+```

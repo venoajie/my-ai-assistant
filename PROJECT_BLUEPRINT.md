@@ -1,6 +1,6 @@
 # PROJECT BLUEPRINT: AI Assistant
 
-<!-- Version: 2.3 -->
+<!-- Version: 2.4 -->
 
 ## 1. System Overview and Core Purpose
 
@@ -23,6 +23,9 @@ A strict separation is maintained between **AI-driven analysis (thinking)** and 
 #### 2.2.1. Adversarial Validation
 To enhance the safety of the "thinking" phase, the system employs an Adversarial Validation Chain. After an initial execution plan is generated, it is passed to a specialized, skeptical "critic" persona. This critic's sole purpose is to identify potential flaws, unstated assumptions, and risks in the plan. This principle acts as an automated "red team" review for the AI's own logic.
 
+#### 2.2.2. Data Contract Validation
+In addition to adversarial validation, all core data contracts, such as the `ExecutionPlan`, are enforced at runtime using Pydantic models. This provides an immediate, deterministic validation layer that rejects malformed plans *before* they are even passed to the critic, increasing system robustness and preventing entire classes of errors.
+
 ### 2.3. Explicit Governance
 The behavior and structure of the persona ecosystem are governed by a set of explicit, machine-readable rules.
 
@@ -33,7 +36,7 @@ All personas are validated against the rules in `persona_config.yml`, and a cryp
 The system's internal data contracts are programmatically enforced through a "Documentation-as-Code" pattern, where a central governance file (`governance.yml`) and documentation templates serve as the single source of truth for generating both runtime rules and user-facing documentation.
 
 #### 2.3.3. Deterministic Plan Validation
-To mitigate the inherent unreliability of probabilistic AI planners, the system MUST employ a deterministic validation layer. This layer operates between the AI Planner and the Execution Engine. Before planning, a deterministic function analyzes the user's prompt against rules in `governance.yml` to create an "Expected Plan Signature." After the AI generates a plan, a second deterministic function validates the plan against this signature. Non-compliant plans are rejected, and the AI is forced to retry with corrective feedback. This ensures that the final executed plan always adheres to the project's architectural rules, regardless of the AI's initial output.
+To mitigate the inherent unreliability of probabilistic AI planners, the system MUST employ a deterministic validation layer. This layer operates between the AI Planner and the Execution Engine. Before planning, a deterministic function analyzes the user's prompt against rules in `governance.yml` to create an "Expected Plan Signature." After the AI generates a plan, a second deterministic function validates the plan against this signature. Non-compliant plans are rejected, and the AI is forced to retry with corrective feedback. This process is further hardened by the use of a structured generation library (`instructor`) in the Planner, which forces the LLM's output to conform to the `ExecutionPlan`'s Pydantic schema, drastically reducing the likelihood of syntactically invalid plans.
 
 ---
 
@@ -54,11 +57,12 @@ The persona ecosystem is a team of specialists with a clear, hierarchical struct
 
 ## 4. The Workflow Tool Pattern
 
+
 To ensure maximum reliability and to simplify the AI Planner's task, the system favors a **Workflow Tool Pattern** for all complex, multi-step operations.
 
 Instead of asking the AI to generate a complex sequence of granular tools (e.g., `git_create_branch`, `refactor_file_content`, `git_add`), the system provides a single, powerful "workflow tool" (e.g., `execute_refactoring_workflow`) that encapsulates the entire best-practice sequence in deterministic Python code.
 
-**Canonical Rule:** Personas responsible for code modification (i.e., those inheriting from `_base/developer-agent-1`) **MUST** be instructed to use the appropriate high-level workflow tool in a single-step plan. This moves complex logic from the probabilistic AI Planner into reliable, auditable code.
+**Canonical Rule:** Personas responsible for code modification (i.e., those inheriting from `_base/developer-agent-1`) **MUST** be instructed to use the appropriate high-level workflow tool in a single-step plan. To enforce this, personas MUST also be explicitly instructed on the tool's argument schema (e.g., providing a single string for instructions) to safeguard against the AI inventing incompatible data structures.
 
 ---
 
@@ -110,7 +114,9 @@ The `PROJECT_STATE.md` file is the single source of truth for a long-running, mu
 
 The project adheres to modern Python packaging standards using `pyproject.toml`.
 
-### 8.1. The Role of `MANIFEST.in`
-To ensure absolute build and installation reliability for non-Python data files (e.g., personas, schemas), this project employs a `MANIFEST.in` file. This is a **deliberate engineering choice** to favor the explicit, deterministic control that `MANIFEST.in` provides, especially for editable installs with a `src` layout.
+### 8.1. Packaging of Non-Python Data
+To ensure absolute build and installation reliability for non-Python data files (e.g., personas, schemas), this project uses the `[tool.setuptools.package-data]` directive within `pyproject.toml`. This is a deliberate engineering choice to use modern, standardized packaging practices for explicit and deterministic control over packaged data.
 
-**Canonical Rule:** Any new non-Python data files that must be accessible by the installed package **MUST** be added to the `MANIFEST.in` file to guarantee their inclusion.
+**Canonical Rule:** Any new non-Python data files that must be accessible by the installed package **MUST** be added to the `[tool.setuptools.package-data]` configuration in `pyproject.toml` to guarantee their inclusion.
+
+
