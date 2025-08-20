@@ -24,35 +24,41 @@ class PromptBuilder:
         history_section = self._build_history_section(history, use_compact_format=use_compact_protocol)
         persona_section = ""
         if persona_content:
-            persona_section = f"<Persona>\n{persona_content}\n</Persona>\n\n"
+            persona_section = f"<PersonaInstructions>\n{persona_content}\n</PersonaInstructions>\n\n"
 
         output_mode_heuristic = ""
         if is_output_mode:
             output_mode_heuristic = """5.  **OUTPUT-FIRST MODE:** You are in a special mode where your plan will NOT be executed directly. Instead, it will be saved to a manifest file. Your plan must be a complete, end-to-end sequence of actions (e.g., create branch, write file, add, commit, push) that can be executed by a separate, non-AI tool. Do not use read-only tools like `list_files` unless their output is critical for a subsequent step's condition. Your primary goal is to generate a complete and executable action plan."""
 
         # --- THIS PROMPT IS NOW MUCH SIMPLER ---
-        prompt = f"""{persona_section}You are a planning agent. Your SOLE purpose is to convert a user's request into a structured plan of tool calls. Adhere strictly to the provided tool signatures and planning heuristics.
+        prompt = f"""{persona_section}
+<Task>
+You are a planning agent. Your SOLE purpose is to convert a user's request into a structured plan of tool calls. Adhere strictly to the provided tool signatures and planning heuristics.
 
 <AvailableTools>
 # You must use the function signatures below to construct your tool calls.
 {tool_descriptions}
 </AvailableTools>
 
-**PLANNING HEURISTICS (Follow these strictly):**
+<PlanningHeuristics>
 1.  **Conditional Branching:** For uncertainty, use a read-only tool first, then use a `condition` block on subsequent steps that references the first step's output.
 2.  **Handle Ignored Files:** When using `git_add` on a potentially ignored file, use the `force=True` parameter.
 3.  **CRITICAL: Use Pre-loaded Context for Code Generation:** When modifying a file provided in an `<AttachedFile>` tag, your `write_file` step MUST contain the ENTIRE, new, complete file content. Do not use placeholders.
 4.  **Summarize, Don't Read:** If context is already in `<AttachedFile>`, generate an empty plan `[]` for summarization tasks. Do not use `read_file` on an already attached file.
 {output_mode_heuristic}
----
-{history_section}
-<UserRequest>
-{query}
-</UserRequest>
+</PlanningHeuristics>
 
-Based on the request and heuristics, generate the plan.
+{history_section}
+
+<FinalUserRequest>
+{query}
+</FinalUserRequest>
+
+Based on the final user request and all provided context, generate the plan.
+</Task>
 """
         return prompt
+
 
 
     def build_critique_prompt(
