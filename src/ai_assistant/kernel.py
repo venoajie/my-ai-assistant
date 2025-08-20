@@ -109,14 +109,14 @@ async def orchestrate_agent_run(
                 if tool_name not in allowed_tools:
                     persona_tools_valid = False
                     persona_reason = (
-                        f"Plan used a forbidden tool '{tool_name}'. This persona is restricted "
-                        f"to only use: {', '.join(allowed_tools)}."
+                        f"Plan violates persona rules. Used forbidden tool '{tool_name}'. "
+                        f"This persona can only use: {', '.join(allowed_tools)}."
                     )
                     break
         
         if is_compliant and persona_tools_valid:
             print("✅ Plan passed all validation checks.")
-            break # Success!
+            break
 
         failure_reason = (compliance_reason + " " + persona_reason).strip()
         print(f"❌ Plan failed validation. Reason: {failure_reason}", file=sys.stderr)

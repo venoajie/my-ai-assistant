@@ -20,7 +20,6 @@ class PersonaLoader:
         
     def _parse_content(self, content: str) -> Tuple[Optional[str], str]:
         """Extracts directives and returns the remaining context."""
-        # --- FIX 3: Corrected this function's signature and return. It only parses body content. ---
         directives_section = None
         context_section = content
 
@@ -79,13 +78,15 @@ class PersonaLoader:
         if universal_base_alias and alias != universal_base_alias:
             self._loading_stack.clear()
             try:
-                # --- FIX 1: Unpack all three values from the universal base persona ---
+                # --- THE DEFINITIVE FIX IS HERE ---
+                # Load the universal base, but only use its text content.
+                # The rules (`allowed_tools`) must ALWAYS come from the specific persona's own inheritance chain.
                 base_directives, base_context, _ = self._load_recursive(universal_base_alias)
                 
                 final_directives = "\n".join(filter(None, [base_directives, specific_directives]))
                 final_context = (base_context + "\n" + specific_context).strip()
 
-                # --- FIX 2: Return all three values, preserving the *specific* persona's tool rules ---
+                # Always return the allowed_tools from the specific persona, not the universal base.
                 return (final_directives if final_directives else None, final_context, specific_allowed_tools)
             except (FileNotFoundError, RecursionError) as e:
                 print(f"⚠️ Warning: Could not load universal base persona '{universal_base_alias}'. Reason: {e}")
