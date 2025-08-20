@@ -20,20 +20,6 @@ from .data_models import ExecutionPlan
 
 logger = structlog.get_logger(__name__)
 
-async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Finds and injects content from files specified in the configuration."""
-    for filename in ai_settings.general.auto_inject_files:
-        file_path = Path.cwd() / filename
-        if file_path.exists():
-            print(f"ℹ️  Found '{filename}'. Injecting project context...")
-            try:
-                content = file_path.read_text(encoding='utf-8')
-                context_str = f"<InjectedProjectContext file_path='{filename}'>\n{content}\n</InjectedProjectContext>"
-                history.insert(0, {"role": "system", "content": context_str})
-            except Exception as e:
-                print(f"⚠️  Warning: Could not read or inject {filename}. Reason: {e}")
-    return history
-
 async def orchestrate_agent_run(
     query: str,
     history: List[Dict[str, Any]],
@@ -41,8 +27,6 @@ async def orchestrate_agent_run(
     is_autonomous: bool = False,
     output_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
-
-    history = await _inject_project_context(history)
 
     metrics = {"timings": {}, "tokens": {"planning": {}, "critique": {}, "synthesis": {}}}
     timings = metrics["timings"]
