@@ -15,49 +15,22 @@ from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
 
-
-def _validate_plan(
-    plan: List[Dict[str, Any]], 
-    allowed_tools: Optional[List[str]],
-    ) -> Tuple[bool, str]:
-    
-    """Checks a generated plan against the persona's allowed tools list."""
-    if not allowed_tools:
-        return (True, "") # If no list is specified, all tools are allowed.
-
-    for step in plan:
-        tool_name = step.get("tool_name")
-        if tool_name not in allowed_tools:
-            error_msg = (
-                f"Plan is invalid. It used the tool '{tool_name}', but this persona is restricted "
-                f"to only use the following tools: {', '.join(allowed_tools)}."
-            )
-            return (False, error_msg)
-    return (True, "")
-
 async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Finds and injects content from files specified in the configuration.
     This runs as a preliminary, low-cost step before the main orchestration.
     """
-    injected_any = False
     for filename in ai_settings.general.auto_inject_files:
         file_path = Path.cwd() / filename
         if file_path.exists():
             print(f"ℹ️  Found '{filename}'. Injecting project context...")
-            injected_any = True
             try:
                 content = file_path.read_text(encoding='utf-8')
                 context_str = f"<InjectedProjectContext file_path='{filename}'>\n{content}\n</InjectedProjectContext>"
-                # Prepend the context to the history for the planner
                 history.insert(0, {"role": "system", "content": context_str})
             except Exception as e:
                 print(f"⚠️  Warning: Could not read or inject {filename}. Reason: {e}")
-    
-    if injected_any:
-        return history
     return history
-
 
 async def orchestrate_agent_run(
     query: str,
@@ -80,7 +53,6 @@ async def orchestrate_agent_run(
     timings = metrics["timings"]
 
     # --- PERSONA LOADING ---
-    
     persona_directives: Optional[str] = None
     persona_context: Optional[str] = None
     allowed_tools: Optional[List[str]] = None
@@ -110,13 +82,11 @@ async def orchestrate_agent_run(
             print(f"ℹ️  Context size ({estimated_tokens} tokens) exceeds threshold ({threshold}). Using compact prompt format for planning.")
             use_compact_protocol = True
 
-    # --- NEW: PRE-FLIGHT COMPLIANCE CHECK ---
+    # --- PLANNING & UNIFIED VALIDATION LOOP ---
     plan_expectation = generate_plan_expectation(query)
     if plan_expectation:
         print(f"ℹ️  Compliance rule triggered. Expected plan signature: {plan_expectation}")
         
-    # --- PLANNING ---
-         
     planner = Planner()
     max_retries = 2
     for attempt in range(max_retries):
@@ -124,37 +94,40 @@ async def orchestrate_agent_run(
              optimized_query,
              history,
              persona_context,
-                      use_compact_protocol,
-         is_output_mode=(output_dir is not None),
+             use_compact_protocol,
+             is_output_mode=(output_dir is not None),
          )
         
-        # --- RUN THE COMPLIANCE CHECK ---
-        is_compliant, reason = check_plan_compliance(plan, plan_expectation)
+        # --- UNIFIED VALIDATION GATE ---
+        is_compliant, compliance_reason = check_plan_compliance(plan, plan_expectation)
         
-        if is_compliant:
-            print("✅ Plan is compliant.")
+        persona_tools_valid = True
+        persona_reason = ""
+        if allowed_tools:
+            for step in plan:
+                tool_name = step.get("tool_name")
+                if tool_name not in allowed_tools:
+                    persona_tools_valid = False
+                    persona_reason = (
+                        f"Plan used a forbidden tool '{tool_name}'. This persona is restricted "
+                        f"to only use: {', '.join(allowed_tools)}."
+                    )
+                    break
+        
+        if is_compliant and persona_tools_valid:
+            print("✅ Plan passed all validation checks.")
             break # Success!
 
-        print(f"❌ Plan failed compliance check. Reason: {reason}", file=sys.stderr)
-        if attempt < max_retries - 1:
-            history.append({"role": "system", "content": f"CORRECTION: Your plan was rejected. {reason} You MUST generate a new plan that is compliant."})
-        else:
-            return {"response": f"HALTED: The AI planner failed to generate a compliant plan. Reason: {reason}", "metrics": metrics}        
-        
-        # Validate the plan against the allowed tools
-        is_valid, reason = _validate_plan(plan, allowed_tools)
-        if is_valid:
-            print("✅ Plan passed validation.")
-            break # Exit the loop on success
-        
-        print(f"❌ Plan failed validation. Reason: {reason}", file=sys.stderr)
+        failure_reason = (compliance_reason + " " + persona_reason).strip()
+        print(f"❌ Plan failed validation. Reason: {failure_reason}", file=sys.stderr)
+
         if attempt < max_retries - 1:
             print("   - Retrying with corrective instructions...", file=sys.stderr)
-            # Inject a corrective message into the history for the next attempt
-            history.append({"role": "system", "content": f"CORRECTION: {reason} You MUST generate a new plan that adheres to the tool restrictions."})
+            history.append({"role": "system", "content": f"CORRECTION: Your plan was rejected. {failure_reason} You MUST generate a new plan that is compliant."})
         else:
+            halt_message = f"HALTED: The AI planner failed to generate a valid plan after {max_retries} attempts. Final reason: {failure_reason}"
             print("   - Max retries reached. Halting.", file=sys.stderr)
-            return {"response": f"HALTED: The AI planner failed to generate a valid plan after {max_retries} attempts. Reason: {reason}", "metrics": metrics}
+            return {"response": halt_message, "metrics": metrics}
     
     timings["planning"] = planning_result["duration"]
     metrics["tokens"]["planning"] = planning_result["tokens"]
@@ -184,9 +157,8 @@ async def orchestrate_agent_run(
         print("🕵️  Submitting plan for adversarial validation...")
         try:
             critic_loader = PersonaLoader()
-            # The critic persona is now loaded from config for better maintainability
             critic_alias = ai_settings.general.critique_persona_alias
-            _, critic_context = critic_loader.load_persona_content(critic_alias)
+            _, critic_context, _ = critic_loader.load_persona_content(critic_alias)
             
             critique_prompt = prompt_builder.build_critique_prompt(
                 query=query,
@@ -195,7 +167,6 @@ async def orchestrate_agent_run(
             )
             
             response_handler = ResponseHandler()
-            # Use the faster planning model for the critique
             critique_model = ai_settings.model_selection.critique
             critique_gen_config = ai_settings.generation_params.critique.model_dump()
             critique_result = await response_handler.call_api(
@@ -210,7 +181,6 @@ async def orchestrate_agent_run(
         except Exception as e:
             print(f"   - ⚠️ Warning: Could not perform plan validation. Reason: {e}")
             critique = "Plan validation step failed due to an internal error."
-
 
     # --- OUTPUT-FIRST MODE (GENERATE PACKAGE) ---
     if output_dir:
@@ -259,10 +229,8 @@ async def orchestrate_agent_run(
                     print("    🚫 Action denied by user. Skipping step.")
                     observations.append(f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\nAction denied by user.\n</Observation>")
                     any_risky_action_denied = True
-                    # If user denies, the entire plan is aborted. Break the loop.
                     break
             try:
-
                 success, result = await tool(**args)
                 step_results[step_num] = result
                 if success:
@@ -281,7 +249,6 @@ async def orchestrate_agent_run(
             print(f"    ❌ Failure: Tool '{tool_name}' not found.")
 
     # --- SYNTHESIS ---
-    # If the user denied a risky action, halt immediately. The check is now simpler and correct.
     if any_risky_action_denied:
         error_msg = "Task aborted by user. No actions were performed."
         print(f"\n🛑 {error_msg}")
@@ -316,7 +283,7 @@ async def orchestrate_agent_run(
         loader = PersonaLoader()
         try:
             failure_alias = ai_settings.general.failure_persona_alias
-            final_directives, final_context = loader.load_persona_content(failure_alias)
+            _, final_context, _ = loader.load_persona_content(failure_alias)
         except (FileNotFoundError, RecursionError) as e:
             print(f"   - ⚠️ CRITICAL: Could not load failure persona '{ai_settings.general.failure_persona_alias}'. Reason: {e}")
             final_context = "CRITICAL: The primary task failed, and the recovery persona could not be loaded. Your only job is to report the raw tool observations to the user clearly."
@@ -368,7 +335,7 @@ async def _handle_output_first_mode(
             }
 
     manifest = {
-        "version": "1.1", # Version bump for new actions
+        "version": "1.1",
         "sessionId": f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
         "generated_by": persona_alias,
         "actions": [],
@@ -405,7 +372,6 @@ async def _handle_output_first_mode(
                 print(f"  - ⚠️ Skipping invalid write_file step: missing path or content.")
                 continue
             
-            # Write content to workspace
             target_path_in_workspace = workspace_dir / path_str
             target_path_in_workspace.parent.mkdir(parents=True, exist_ok=True)
             target_path_in_workspace.write_text(content, encoding='utf-8')
@@ -441,7 +407,6 @@ async def _handle_output_first_mode(
         manifest["actions"].append(action)
         print(f"  - ✅ Packaged action: {action_type}")
 
-    # Write manifest and summary
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding='utf-8')
     (output_dir / "summary.md").write_text("\n".join(summary_parts), encoding='utf-8')
 
