@@ -52,7 +52,7 @@ providers:
       - "gemini-2.5-flash-lite" 
   deepseek:
     api_key_env: "DEEPSEEK_API_KEY"
-    api_endpoint: "https://api.deepseek.com/chat/completions"
+    api_endpoint: "https://api.deepseek.com"
     models:
       - "deepseek-reasoner"
       - "deepseek-coder"

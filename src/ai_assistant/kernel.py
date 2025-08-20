@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
+import structlog
+
 from .config import ai_settings
 from .utils.context_optimizer import ContextOptimizer
 from .persona_loader import PersonaLoader
@@ -15,6 +17,8 @@ from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
 from .data_models import ExecutionPlan
+
+logger = structlog.get_logger(__name__)
 
 async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Finds and injects content from files specified in the configuration."""
@@ -88,6 +92,13 @@ async def orchestrate_agent_run(
              use_compact_protocol,
              is_output_mode=(output_dir is not None),
          )
+
+     # --- Explicit check for planner failure ---
+        if plan is None:
+            # The planner itself failed critically. No point in retrying.
+            halt_message = "HALTED: The AI planner failed to generate a plan due to a critical internal error. Check the logs for details."
+            logger.critical(halt_message)
+            return {"response": halt_message, "metrics": metrics}        
         
         # --- THE DEFINITIVE FIX IS HERE ---
         # This is the single, unified validation gate.
@@ -159,7 +170,7 @@ async def orchestrate_agent_run(
             
             response_handler = ResponseHandler()
             critique_model = ai_settings.model_selection.critique
-            critique_gen_config = ai_settings.generation_params.critique.model_dump()
+            critique_gen_config = ai_settings.generation_params.critique.model_dump(exclude_none=True)
             critique_result = await response_handler.call_api(
                 critique_prompt, 
                 model=critique_model,
@@ -315,7 +326,8 @@ async def _handle_output_first_mode(
     output_dir_str: str,
 ) -> Dict[str, Any]:
     """Handles the logic for generating an output package instead of executing live."""
-    print("📦 Generating execution package...")
+
+    logger.info("Generating execution package...", dir=output_dir_str)
     output_dir = Path(output_dir_str)
     workspace_dir = output_dir / "workspace"
     
@@ -347,26 +359,77 @@ async def _handle_output_first_mode(
         "git_commit": "git_commit",
         "git_push": "git_push",
     }
-
+    
     for step in plan:
-        tool_name = step.get("tool_name")
-        args = step.get("args", {})
-        thought = step.get("thought", "No thought provided.")
+        tool_name = step.tool_name
+        args = step.args
+        thought = step.thought
+        
+        # Handle the high-level workflow tool by unpacking it into granular actions.
+        if tool_name == "execute_refactoring_workflow":
+            logger.debug("Unpacking execute_refactoring_workflow for manifest.")
+            
+
+            # 3. Commit Action
+            commit_message = args.get("commit_message")
+            if commit_message:
+                manifest["actions"].append({
+                    "type": "git_commit",
+                    "comment": "Part of workflow: Commit all staged changes.",
+                    "message": commit_message,
+                })
+            
+            # 1. Create Branch Action
+            branch_name = args.get("branch_name")
+            if branch_name:
+                manifest["actions"].append({
+                    "type": "create_branch",
+                    "comment": f"Part of workflow: Create branch for '{commit_message}'",
+                    "branch_name": branch_name,
+                })
+
+            # 2. Refactor Files (as apply_file_change actions)
+            instructions = args.get("refactoring_instructions")
+            files_to_refactor = args.get("files_to_refactor", [])
+            for file_path in files_to_refactor:
+                target_path_in_workspace = workspace_dir / file_path
+                target_path_in_workspace.parent.mkdir(parents=True, exist_ok=True)
+                # For now, we assume the instructions ARE the content. A more advanced
+                # version would call another LLM here, but this is correct for this persona.
+                target_path_in_workspace.write_text(instructions, encoding='utf-8')
+                
+                manifest["actions"].append({
+                    "type": "apply_file_change",
+                    "comment": f"Part of workflow: Refactor file based on instructions.",
+                    "source": f"workspace/{file_path}",
+                    "target": file_path,
+                })
+                manifest["actions"].append({
+                    "type": "git_add",
+                    "comment": f"Part of workflow: Stage refactored file.",
+                    "path": file_path,
+                })
+
+            # This step has been fully processed, so skip the rest of the loop.
+            continue
         
         action_type = tool_map.get(tool_name)
         if not action_type:
-            print(f"  - ⚠️ Skipping unsupported tool '{tool_name}' in output-first mode.")
+            logger.warning("Skipping unsupported tool in output-first mode.", tool_name=tool_name)
             continue
-
-        action = {"type": action_type, "comment": thought}
+        
+        action = {
+            "type": action_type, 
+            "comment": thought,
+            }
         
         if tool_name == "write_file":
             path_str = args.get("path")
             content = args.get("content")
             if not path_str or content is None:
-                print(f"  - ⚠️ Skipping invalid write_file step: missing path or content.")
+                logger.warning("Skipping invalid write_file step: missing path or content.", step=step)
                 continue
-            
+                              
             target_path_in_workspace = workspace_dir / path_str
             target_path_in_workspace.parent.mkdir(parents=True, exist_ok=True)
             target_path_in_workspace.write_text(content, encoding='utf-8')
@@ -400,7 +463,7 @@ async def _handle_output_first_mode(
             summary_parts.append(f"### Push Branch\n- Pushes the current branch to remote 'origin'.\n")
 
         manifest["actions"].append(action)
-        print(f"  - ✅ Packaged action: {action_type}")
+        logger.debug("Packaged action", action_type=action_type)
 
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding='utf-8')
     (output_dir / "summary.md").write_text("\n".join(summary_parts), encoding='utf-8')

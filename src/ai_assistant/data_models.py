@@ -33,9 +33,21 @@ class PlanStep(BaseModel):
             raise ValueError(f"Tool '{tool_name}' is not a valid, registered tool.")
         return self
 
+
 class ExecutionPlan(RootModel):
     """The root model for an execution plan, which is a list of steps."""
     root: List[PlanStep]
+
+    @model_validator(mode='before')
+    @classmethod
+    def wrap_single_step_in_list(cls, data: Any) -> Any:
+        """
+        Handles the common LLM mistake of returning a single dictionary for a single-step plan.
+        If the input is a dictionary, it wraps it in a list before further validation.
+        """
+        if isinstance(data, dict):
+            return [data]
+        return data
 
     def __iter__(self):
         return iter(self.root)

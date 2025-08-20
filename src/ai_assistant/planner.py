@@ -41,7 +41,7 @@ class Planner:
         persona_content: Optional[str] = None,
         use_compact_protocol: bool = False,
         is_output_mode: bool = False,
-        ) -> Tuple[ExecutionPlan, Dict[str, Any]]:
+        ) -> Tuple[Optional[ExecutionPlan], Dict[str, Any]]:
         
         logger.info("Generating execution plan with structured output...")
         tool_descriptions = TOOL_REGISTRY.get_tool_descriptions()
@@ -55,7 +55,7 @@ class Planner:
         )
         
         planning_model = ai_settings.model_selection.planning
-        planning_gen_config = ai_settings.generation_params.planning.model_dump()
+        planning_gen_config = ai_settings.generation_params.planning.model_dump(exclude_none=True)
 
         try:
             plan = await self.client.chat.completions.create(
@@ -77,4 +77,4 @@ class Planner:
         except Exception as e:
             logger.error("Failed to generate a valid plan with instructor.", error=str(e))
             # Return an empty, valid plan on failure
-            return ExecutionPlan(root=[]), {"duration": 0, "tokens": {}}
+            return None, {"duration": 0, "tokens": {}}

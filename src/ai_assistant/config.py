@@ -53,9 +53,11 @@ class DeepSeekDiscountConfig(BaseModel):
 
 class GenerationParams(BaseModel):
     temperature: float
-    topP: Optional[float] = None
-    topK: Optional[int] = None
-
+    # Use an alias to allow 'topP' in the config file but use 'top_p' in the code
+    top_p: Optional[float] = Field(None, alias='topP')
+    # Use an alias to allow 'topK' in the config file but use 'top_k' in the code
+    top_k: Optional[int] = Field(None, alias='topK')
+    
 class GenerationConfig(BaseModel):
     planning: GenerationParams
     synthesis: GenerationParams
