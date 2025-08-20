@@ -9,33 +9,29 @@ from importlib import resources
 from .config import ai_settings
 
 # Define a type alias for clarity
-ParsedPersona = Tuple[Optional[str], str]
+ParsedPersona = Tuple[Optional[str], str, Optional[List[str]]]
 
 class PersonaLoader:
     def __init__(self):
         self.user_personas_dir = ai_settings.paths.user_personas_dir
         self.user_personas_dir.mkdir(parents=True, exist_ok=True)
-        # --- Define the project-local persona directory ---
         self.project_local_personas_dir = ai_settings.paths.project_local_personas_dir
-        # --- Initialize the loading stack only once ---
         self._loading_stack = set()
         
-    def _parse_content(self, content: str) -> ParsedPersona:
+    def _parse_content(self, content: str) -> Tuple[Optional[str], str]:
         """Extracts directives and returns the remaining context."""
         directives_section = None
         context_section = content
 
-        # Use a regex to find and extract the <directives> block
         directives_match = re.search(r"<directives>.*?</directives>", content, re.DOTALL)
         if directives_match:
             directives_section = directives_match.group(0)
-            # Remove the directives from the main content to avoid duplication
             context_section = content.replace(directives_section, "").strip()
         
         return (directives_section, context_section)
 
     def _load_recursive(self, alias: str) -> ParsedPersona:
-        """Internal recursive loader, now returns a tuple of (directives, context)."""
+        """Internal recursive loader, now returns a tuple of (directives, context, allowed_tools)."""
         if alias in self._loading_stack:
             raise RecursionError(f"Circular persona inheritance detected: {alias} is in the stack {self._loading_stack}")
         self._loading_stack.add(alias)
@@ -51,71 +47,67 @@ class PersonaLoader:
             
             data = yaml.safe_load(frontmatter_str) or {}
             inherits_from = data.get("inherits_from")
+            allowed_tools = data.get("allowed_tools")
 
             current_directives, current_context = self._parse_content(body.strip())
 
             if inherits_from:
-                parent_directives, parent_context = self._load_recursive(inherits_from)
+                parent_directives, parent_context, parent_allowed_tools = self._load_recursive(inherits_from)
                 
-                # Combine directives and context from parent and child
+                final_allowed_tools = allowed_tools if allowed_tools is not None else parent_allowed_tools
+                
                 combined_directives = "\n".join(filter(None, [parent_directives, current_directives]))
                 combined_context = "\n".join([parent_context, current_context]).strip()
                 
-                return (combined_directives if combined_directives else None, combined_context)
+                return (combined_directives if combined_directives else None, combined_context, final_allowed_tools)
             else:
-                return (current_directives, current_context)
+                return (current_directives, current_context, allowed_tools)
         finally:
             self._loading_stack.remove(alias)
 
     def load_persona_content(self, alias: str) -> ParsedPersona:
         """
-        Loads and parses a persona, returning a tuple of (directives, context).
+        Loads and parses a persona, returning a tuple of (directives, context, allowed_tools).
         Prepends the universal base persona if configured.
         """
         self._loading_stack.clear()
         
-        specific_directives, specific_context = self._load_recursive(alias)
+        specific_directives, specific_context, specific_allowed_tools = self._load_recursive(alias)
         
         universal_base_alias = ai_settings.general.universal_base_persona
-        if universal_base_alias and universal_base_alias not in self._loading_stack:
+        if universal_base_alias and alias != universal_base_alias:
             self._loading_stack.clear()
             try:
-                base_directives, base_context = self._load_recursive(universal_base_alias)
+                # --- THE DEFINITIVE FIX IS HERE ---
+                # Load the universal base, but only use its text content.
+                # The rules (`allowed_tools`) must ALWAYS come from the specific persona's own inheritance chain.
+                base_directives, base_context, _ = self._load_recursive(universal_base_alias)
                 
-                # Combine universal base with the specific persona
                 final_directives = "\n".join(filter(None, [base_directives, specific_directives]))
                 final_context = (base_context + "\n" + specific_context).strip()
 
-                return (final_directives if final_directives else None, final_context)
+                # Always return the allowed_tools from the specific persona, not the universal base.
+                return (final_directives if final_directives else None, final_context, specific_allowed_tools)
             except (FileNotFoundError, RecursionError) as e:
                 print(f"⚠️ Warning: Could not load universal base persona '{universal_base_alias}'. Reason: {e}")
         
-        return (specific_directives, specific_context)
+        return (specific_directives, specific_context, specific_allowed_tools)
     
-        
     def _find_and_read_persona(self, alias: str):
-        """
-        Finds and reads a persona file, searching in a specific order:
-        1. Project-local directory (.ai/personas/)
-        2. User's global config directory (~/.config/ai_assistant/personas/)
-        3. Built-in package personas
-        """
+        """Finds and reads a persona file in the correct override order."""
         alias_norm = alias.lower().replace('/', os.sep)
         
-        # 1. Check project-local directory first
         if self.project_local_personas_dir.exists():
             project_local_path = self.project_local_personas_dir / f"{alias_norm}.persona.md"
             if project_local_path.exists():
                 print(f"ℹ️  Loading project-local persona: {alias}")
                 return project_local_path, project_local_path.read_text(encoding="utf-8")
 
-        # 2. Check user's global config directory
         user_path = self.user_personas_dir / f"{alias_norm}.persona.md"
         if user_path.exists():
             print(f"ℹ️  Loading user-defined persona: {alias}")
             return user_path, user_path.read_text(encoding="utf-8")
 
-        # 3. Fallback to built-in package personas
         resource_path = f"personas/{alias.lower()}.persona.md"
         try:
             traversable = resources.files("ai_assistant").joinpath(resource_path)
@@ -124,7 +116,6 @@ class PersonaLoader:
             return None, None 
         
     def list_builtin_personas(self) -> List[str]:
-
         personas = []
         try:
             base_dir = resources.files("ai_assistant").joinpath("personas")

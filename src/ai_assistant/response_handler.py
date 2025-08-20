@@ -106,7 +106,6 @@ class ResponseHandler:
         # Fallback in case the loop exits unexpectedly
         return _create_error_response(f"❌ ERROR: API call for model {model} failed unexpectedly after {max_retries} attempts.", provider_name)
 
-    # ... (The _call_gemini and _call_deepseek methods remain unchanged) ...
     async def _call_gemini(
         self, 
         session: aiohttp.ClientSession, 
@@ -150,7 +149,7 @@ class ResponseHandler:
         if not api_key:
             raise APIKeyNotFoundError(f"API key '{config.api_key_env}' not found.")
         
-        api_url = config.api_endpoint
+        api_url = f"{config.api_endpoint.strip('/')}/chat/completions"
         headers = {
             "Content-Type": "application/json", 
             "Authorization": f"Bearer {api_key}",

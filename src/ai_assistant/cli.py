@@ -10,10 +10,12 @@ import inspect
 import sys
 import time
 import yaml
+import structlog # Add this
 
 from . import kernel 
 from .config import ai_settings
 from .context_plugin import ContextPluginBase
+from .logging_config import setup_logging 
 from .persona_loader import PersonaLoader
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from .session_manager import SessionManager
@@ -23,6 +25,15 @@ from .utils.colors import Colors
 from .utils.signature import calculate_persona_signature
 from .utils.result_presenter import present_result
 
+logger = structlog.get_logger()
+
+try:
+    governance_text = resources.files('ai_assistant').joinpath('internal_data/governance.yml').read_text(encoding='utf-8')
+    GOVERNANCE_RULES = yaml.safe_load(governance_text)
+    RISKY_KEYWORDS = GOVERNANCE_RULES.get("prompting_best_practices", {}).get("risky_modification_keywords", [])
+except Exception as e:
+    print(f"⚠️  Warning: Could not load governance rules for sanity checks. Reason: {e}", file=sys.stderr)
+    RISKY_KEYWORDS = []
 
 def list_available_plugins() -> List[str]:
     """Dynamically discovers available plugins from both entry points and the local project directory."""
@@ -138,12 +149,18 @@ def build_file_context(
     
     MAX_FILE_SIZE = MAX_FILE_SIZE = ai_settings.general.max_file_size_mb * 1024 * 1024
     context_str = ""
-    print(f"{Colors.CYAN}📎 Attaching files to context...{Colors.RESET}")
+    logger.info(
+        "Attaching files to context...", 
+        count=len(files),
+        )
     optimizer = ContextOptimizer()
     for file_path_str in files:
         path = Path(file_path_str)
         if not path.exists():
-            print(f"   - {Colors.YELLOW}⚠️  Warning: File not found, skipping: {file_path_str}{Colors.RESET}")
+            logger.warning(
+                "File not found, skipping.", 
+                path=file_path_str,
+                )
             continue
         
         if path.stat().st_size > MAX_FILE_SIZE:
@@ -161,10 +178,16 @@ def build_file_context(
             )
 
             if len(compressed_content) < len(content):
-                print(f"   - {Colors.BLUE}ℹ️  Compressed for relevance: {file_path_str}{Colors.RESET}")
+                logger.debug(
+                    "Compressed file for relevance", 
+                    path=file_path_str,
+                    )
 
             context_str += f"<AttachedFile path=\"{file_path_str}\">\n{compressed_content}\n</AttachedFile>\n\n"
-            print(f"   - {Colors.GREEN}✅ Attached: {file_path_str}{Colors.RESET}")
+            logger.info(
+                "Attached file",
+                path=file_path_str,
+                )
         except Exception as e:
             print(f"   - {Colors.RED}❌ Error reading file {file_path_str}: {e}{Colors.RESET}")
             
@@ -175,7 +198,7 @@ def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBas
     if not plugin_name:
         return None
 
-    print(f"{Colors.MAGENTA}🔌 Loading context plugin: {plugin_name}...{Colors.RESET}")
+    logger.info("Loading context plugin", plugin_name=plugin_name)
     
     try:
         # --- Handle local plugins ---
@@ -255,8 +278,8 @@ def _run_prompt_sanity_checks(
         )
     # Check 3 (Fallback): Inferred risky action without the safe workflow
     elif not "<action>" in query_lower:
-        risky_keywords = ["refactor", "fix", "modify", "commit", "change", "add", "create", "write"]
-        if any(keyword in query_lower for keyword in risky_keywords) \
+        
+        if any(keyword in query_lower for keyword in RISKY_KEYWORDS) \
             and not args.output_dir:
             warnings.append(
                 "Your prompt seems to request a system modification. For clarity and safety, "
@@ -273,13 +296,14 @@ def _run_prompt_sanity_checks(
         )
 
     if warnings:
-        print(f"{Colors.YELLOW}--- 💡 Prompting Best Practice Reminders ---{Colors.RESET}", file=sys.stderr)
+        logger.warning("Prompting Best Practice Reminders")
         for i, warning in enumerate(warnings):
-            print(f"[{i+1}] {Colors.YELLOW}⚠️  {warning}{Colors.RESET}", file=sys.stderr)
+            logger.warning(f"[{i+1}] {warning}")
         print(f"{Colors.YELLOW}-------------------------------------------{Colors.RESET}", file=sys.stderr)
 
 def main():
     """Synchronous entry point for the 'ai' command, required by pyproject.toml."""
+    setup_logging()
     try:
         asyncio.run(async_main())
     except KeyboardInterrupt:
@@ -303,7 +327,6 @@ async def async_main():
     parser.add_argument('--interactive', action='store_true', help='Start an interactive chat session.')
     parser.add_argument('--context', help='The name of the context plugin to use (e.g., Trading).')
     parser.add_argument('--output-dir', help='Activates Output-First mode, generating an execution package in the specified directory instead of executing live.')
-    # --- NEW: Add --show-context argument ---
     parser.add_argument('--show-context', action='store_true', help='Build and display the context from files and plugins, then exit without running the agent.')
     session_group = parser.add_mutually_exclusive_group()
     session_group.add_argument('--session', help='Continue an existing session by ID.')
@@ -344,7 +367,7 @@ async def async_main():
             print(f"{Colors.RED}🛑 HALTING: The persona manifest is invalid. Reason: {reason}{Colors.RESET}", file=sys.stderr)
             print(f"{Colors.YELLOW}Please run 'python scripts/generate_manifest.py' to fix it.{Colors.RESET}", file=sys.stderr)
             sys.exit(1)
-        print(f"{Colors.GREEN}✅ Persona manifest is valid and up-to-date.{Colors.RESET}")
+        logger.info("Persona manifest is valid and up-to-date.")
         
     if args.list_plugins:
         print(f"{Colors.BOLD}Available Context Plugins:{Colors.RESET}")
@@ -371,7 +394,7 @@ async def async_main():
     session_id = None
     if args.new_session or (args.interactive and not args.session):
         session_id = session_manager.start_new_session()
-        print(f"{Colors.CYAN}✨ Starting new session: {session_id}{Colors.RESET}")
+        logger.info("Starting new session", session_id=session_id)
     elif args.session:
         session_id = args.session
         print(f"{Colors.CYAN}🔄 Continuing session: {session_id}{Colors.RESET}")
@@ -533,10 +556,10 @@ async def run_one_shot(
     output_dir: Optional[str] = None,
 ):
     start_time = time.monotonic()
-    print(f"{Colors.BLUE}🤖 Processing query: {display_query}{Colors.RESET}")
-    if persona_alias: print(f"{Colors.MAGENTA}👤 Embodying persona: {persona_alias}{Colors.RESET}")
-    if is_autonomous: print(f"{Colors.RED}{Colors.BOLD}🚨 RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED 🚨{Colors.RESET}")
-    if output_dir: print(f"{Colors.CYAN}📦 OUTPUT-FIRST MODE: Generating execution package in '{output_dir}'{Colors.RESET}")
+    logger.info("Processing one-shot query", query=display_query)
+    if persona_alias: logger.info("Embodying persona", persona=persona_alias)
+    if is_autonomous: logger.warning("RUNNING IN AUTONOMOUS MODE - NO CONFIRMATION WILL BE ASKED")
+    if output_dir: logger.info("OUTPUT-FIRST MODE: Generating execution package", dir=output_dir)
 
     result_data = await kernel.orchestrate_agent_run(
         query=query,

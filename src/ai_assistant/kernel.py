@@ -4,41 +4,35 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
+
+import structlog
 
 from .config import ai_settings
 from .utils.context_optimizer import ContextOptimizer
 from .persona_loader import PersonaLoader
+from .plan_validator import generate_plan_expectation, check_plan_compliance
 from .planner import Planner
 from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
+from .data_models import ExecutionPlan
 
+logger = structlog.get_logger(__name__)
 
 async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Finds and injects content from files specified in the configuration.
-    This runs as a preliminary, low-cost step before the main orchestration.
-    """
-    injected_any = False
+    """Finds and injects content from files specified in the configuration."""
     for filename in ai_settings.general.auto_inject_files:
         file_path = Path.cwd() / filename
         if file_path.exists():
             print(f"ℹ️  Found '{filename}'. Injecting project context...")
-            injected_any = True
             try:
                 content = file_path.read_text(encoding='utf-8')
                 context_str = f"<InjectedProjectContext file_path='{filename}'>\n{content}\n</InjectedProjectContext>"
-                # Prepend the context to the history for the planner
                 history.insert(0, {"role": "system", "content": context_str})
             except Exception as e:
                 print(f"⚠️  Warning: Could not read or inject {filename}. Reason: {e}")
-    
-    if injected_any:
-        return history
     return history
-
-
 
 async def orchestrate_agent_run(
     query: str,
@@ -50,23 +44,18 @@ async def orchestrate_agent_run(
 
     history = await _inject_project_context(history)
 
-    metrics = {
-        "timings": {},
-        "tokens": {
-            "planning": {}, 
-            "critique": {},
-            "synthesis": {},
-            }
-        }
+    metrics = {"timings": {}, "tokens": {"planning": {}, "critique": {}, "synthesis": {}}}
     timings = metrics["timings"]
 
     # --- PERSONA LOADING ---
     persona_directives: Optional[str] = None
     persona_context: Optional[str] = None
+    allowed_tools: Optional[List[str]] = None
+    
     if persona_alias:
         loader = PersonaLoader()
-        try:
-            persona_directives, persona_context = loader.load_persona_content(persona_alias)
+        try:            
+            persona_directives, persona_context, allowed_tools = loader.load_persona_content(persona_alias)
         except (RecursionError, FileNotFoundError) as e:
             error_msg = f"🛑 HALTING: Could not load persona '{persona_alias}'. Reason: {e}"
             print(error_msg, file=sys.stderr)
@@ -88,15 +77,59 @@ async def orchestrate_agent_run(
             print(f"ℹ️  Context size ({estimated_tokens} tokens) exceeds threshold ({threshold}). Using compact prompt format for planning.")
             use_compact_protocol = True
 
-    # --- PLANNING ---
+    # --- PLANNING & UNIFIED VALIDATION LOOP ---
+    plan_expectation = generate_plan_expectation(query)
+    if plan_expectation:
+        print(f"ℹ️  Compliance rule triggered. Expected plan signature: {plan_expectation}")
+        
     planner = Planner()
-    plan, planning_result = await planner.create_plan(
-         optimized_query,
-         history,
-         persona_context,
-         use_compact_protocol,
-         is_output_mode=(output_dir is not None),
+    max_retries = 2
+    for attempt in range(max_retries):
+        plan, planning_result = await planner.create_plan(
+             optimized_query,
+             history,
+             persona_context,
+             use_compact_protocol,
+             is_output_mode=(output_dir is not None),
          )
+
+     # --- Explicit check for planner failure ---
+        if plan is None:
+            # The planner itself failed critically. No point in retrying.
+            halt_message = "HALTED: The AI planner failed to generate a plan due to a critical internal error. Check the logs for details."
+            logger.critical(halt_message)
+            return {"response": halt_message, "metrics": metrics}        
+        
+        # --- THE DEFINITIVE FIX IS HERE ---
+        # This is the single, unified validation gate.
+        is_compliant, compliance_reason = check_plan_compliance(plan, plan_expectation) # Pass the object
+        
+        persona_tools_valid = True
+        persona_reason = ""
+        if allowed_tools:
+            for step in plan: # <--- This now iterates over plan.root
+                if step.tool_name not in allowed_tools: # <--- Use attribute access
+                    persona_tools_valid = False
+                    persona_reason = (
+                        f"Plan violates persona rules. Used forbidden tool '{step.tool_name}'. "
+                        f"This persona can only use: {', '.join(allowed_tools)}."
+                    )
+                    break
+        
+        if is_compliant and persona_tools_valid:
+            print("✅ Plan passed all validation checks.")
+            break
+
+        failure_reason = (compliance_reason + " " + persona_reason).strip()
+        print(f"❌ Plan failed validation. Reason: {failure_reason}", file=sys.stderr)
+
+        if attempt < max_retries - 1:
+            print("   - Retrying with corrective instructions...", file=sys.stderr)
+            history.append({"role": "system", "content": f"CORRECTION: Your plan was rejected. {failure_reason} You MUST generate a new plan that is compliant."})
+        else:
+            halt_message = f"HALTED: The AI planner failed to generate a valid plan after {max_retries} attempts. Final reason: {failure_reason}"
+            print("   - Max retries reached. Halting.", file=sys.stderr)
+            return {"response": halt_message, "metrics": metrics}
     
     timings["planning"] = planning_result["duration"]
     metrics["tokens"]["planning"] = planning_result["tokens"]
@@ -104,7 +137,7 @@ async def orchestrate_agent_run(
     prompt_builder = PromptBuilder()
 
     # --- DIRECT RESPONSE (NO TOOLS) ---
-    if not plan or all(not step.get("tool_name") for step in plan):
+    if not plan or not plan.root or all(not step.tool_name for step in plan):
         print("📝 No tool execution required. Generating direct response...")
         direct_prompt = prompt_builder.build_synthesis_prompt(
             query=query,
@@ -122,13 +155,12 @@ async def orchestrate_agent_run(
 
     # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
     critique = None
-    if plan and any(step.get("tool_name") for step in plan):
+    if plan and plan.root and any(step.tool_name for step in plan):
         print("🕵️  Submitting plan for adversarial validation...")
         try:
             critic_loader = PersonaLoader()
-            # The critic persona is now loaded from config for better maintainability
             critic_alias = ai_settings.general.critique_persona_alias
-            _, critic_context = critic_loader.load_persona_content(critic_alias)
+            _, critic_context, _ = critic_loader.load_persona_content(critic_alias)
             
             critique_prompt = prompt_builder.build_critique_prompt(
                 query=query,
@@ -137,9 +169,8 @@ async def orchestrate_agent_run(
             )
             
             response_handler = ResponseHandler()
-            # Use the faster planning model for the critique
             critique_model = ai_settings.model_selection.critique
-            critique_gen_config = ai_settings.generation_params.critique.model_dump()
+            critique_gen_config = ai_settings.generation_params.critique.model_dump(exclude_none=True)
             critique_result = await response_handler.call_api(
                 critique_prompt, 
                 model=critique_model,
@@ -152,7 +183,6 @@ async def orchestrate_agent_run(
         except Exception as e:
             print(f"   - ⚠️ Warning: Could not perform plan validation. Reason: {e}")
             critique = "Plan validation step failed due to an internal error."
-
 
     # --- OUTPUT-FIRST MODE (GENERATE PACKAGE) ---
     if output_dir:
@@ -169,11 +199,13 @@ async def orchestrate_agent_run(
     step_results: Dict[int, str] = {}
     any_risky_action_denied = False
 
-    for i, step in enumerate(plan):
+
+    for i, step in enumerate(plan): # <--- This now iterates over plan.root
         step_num = i + 1
-        if "condition" in step:
-            cond = step["condition"]
-            from_step_num = cond.get("from_step")
+        if step.condition: # <--- Use attribute access
+            cond = step.condition
+            from_step_num = cond.from_step
+            
             if from_step_num is None:
                  print(f"  - ⚠️  Warning: Conditional step {step_num} is missing 'from_step'. Skipping condition check.")
             else:
@@ -186,9 +218,11 @@ async def orchestrate_agent_run(
                 if not condition_met:
                     print(f"  - Skipping Step {step_num} because condition was not met.")
                     continue
-        tool_name = step.get("tool_name")
-        args = step.get("args") or {}
+        
+        tool_name = step.tool_name # <--- Use attribute access
+        args = step.args or {} # <--- Use attribute access
         print(f"  - Executing Step {step_num}: {tool_name}({args})")
+        
         tool = TOOL_REGISTRY.get_tool(tool_name)
         if tool:
             if tool.is_risky and not is_autonomous:
@@ -201,10 +235,9 @@ async def orchestrate_agent_run(
                     print("    🚫 Action denied by user. Skipping step.")
                     observations.append(f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\nAction denied by user.\n</Observation>")
                     any_risky_action_denied = True
-                    # If user denies, the entire plan is aborted. Break the loop.
                     break
             try:
-                success, result = tool(**args)
+                success, result = await tool(**args)
                 step_results[step_num] = result
                 if success:
                     observations.append(f"<Observation step='{step_num}' tool='{tool_name}' args='{args}'>\n{result}\n</Observation>")
@@ -222,7 +255,6 @@ async def orchestrate_agent_run(
             print(f"    ❌ Failure: Tool '{tool_name}' not found.")
 
     # --- SYNTHESIS ---
-    # If the user denied a risky action, halt immediately. The check is now simpler and correct.
     if any_risky_action_denied:
         error_msg = "Task aborted by user. No actions were performed."
         print(f"\n🛑 {error_msg}")
@@ -257,7 +289,7 @@ async def orchestrate_agent_run(
         loader = PersonaLoader()
         try:
             failure_alias = ai_settings.general.failure_persona_alias
-            final_directives, final_context = loader.load_persona_content(failure_alias)
+            _, final_context, _ = loader.load_persona_content(failure_alias)
         except (FileNotFoundError, RecursionError) as e:
             print(f"   - ⚠️ CRITICAL: Could not load failure persona '{ai_settings.general.failure_persona_alias}'. Reason: {e}")
             final_context = "CRITICAL: The primary task failed, and the recovery persona could not be loaded. Your only job is to report the raw tool observations to the user clearly."
@@ -294,7 +326,8 @@ async def _handle_output_first_mode(
     output_dir_str: str,
 ) -> Dict[str, Any]:
     """Handles the logic for generating an output package instead of executing live."""
-    print("📦 Generating execution package...")
+
+    logger.info("Generating execution package...", dir=output_dir_str)
     output_dir = Path(output_dir_str)
     workspace_dir = output_dir / "workspace"
     
@@ -309,7 +342,7 @@ async def _handle_output_first_mode(
             }
 
     manifest = {
-        "version": "1.1", # Version bump for new actions
+        "version": "1.1",
         "sessionId": f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
         "generated_by": persona_alias,
         "actions": [],
@@ -326,27 +359,77 @@ async def _handle_output_first_mode(
         "git_commit": "git_commit",
         "git_push": "git_push",
     }
-
+    
     for step in plan:
-        tool_name = step.get("tool_name")
-        args = step.get("args", {})
-        thought = step.get("thought", "No thought provided.")
+        tool_name = step.tool_name
+        args = step.args
+        thought = step.thought
+        
+        # Handle the high-level workflow tool by unpacking it into granular actions.
+        if tool_name == "execute_refactoring_workflow":
+            logger.debug("Unpacking execute_refactoring_workflow for manifest.")
+            
+
+            # 3. Commit Action
+            commit_message = args.get("commit_message")
+            if commit_message:
+                manifest["actions"].append({
+                    "type": "git_commit",
+                    "comment": "Part of workflow: Commit all staged changes.",
+                    "message": commit_message,
+                })
+            
+            # 1. Create Branch Action
+            branch_name = args.get("branch_name")
+            if branch_name:
+                manifest["actions"].append({
+                    "type": "create_branch",
+                    "comment": f"Part of workflow: Create branch for '{commit_message}'",
+                    "branch_name": branch_name,
+                })
+
+            # 2. Refactor Files (as apply_file_change actions)
+            instructions = args.get("refactoring_instructions")
+            files_to_refactor = args.get("files_to_refactor", [])
+            for file_path in files_to_refactor:
+                target_path_in_workspace = workspace_dir / file_path
+                target_path_in_workspace.parent.mkdir(parents=True, exist_ok=True)
+                # For now, we assume the instructions ARE the content. A more advanced
+                # version would call another LLM here, but this is correct for this persona.
+                target_path_in_workspace.write_text(instructions, encoding='utf-8')
+                
+                manifest["actions"].append({
+                    "type": "apply_file_change",
+                    "comment": f"Part of workflow: Refactor file based on instructions.",
+                    "source": f"workspace/{file_path}",
+                    "target": file_path,
+                })
+                manifest["actions"].append({
+                    "type": "git_add",
+                    "comment": f"Part of workflow: Stage refactored file.",
+                    "path": file_path,
+                })
+
+            # This step has been fully processed, so skip the rest of the loop.
+            continue
         
         action_type = tool_map.get(tool_name)
         if not action_type:
-            print(f"  - ⚠️ Skipping unsupported tool '{tool_name}' in output-first mode.")
+            logger.warning("Skipping unsupported tool in output-first mode.", tool_name=tool_name)
             continue
-
-        action = {"type": action_type, "comment": thought}
+        
+        action = {
+            "type": action_type, 
+            "comment": thought,
+            }
         
         if tool_name == "write_file":
             path_str = args.get("path")
             content = args.get("content")
             if not path_str or content is None:
-                print(f"  - ⚠️ Skipping invalid write_file step: missing path or content.")
+                logger.warning("Skipping invalid write_file step: missing path or content.", step=step)
                 continue
-            
-            # Write content to workspace
+                              
             target_path_in_workspace = workspace_dir / path_str
             target_path_in_workspace.parent.mkdir(parents=True, exist_ok=True)
             target_path_in_workspace.write_text(content, encoding='utf-8')
@@ -380,9 +463,8 @@ async def _handle_output_first_mode(
             summary_parts.append(f"### Push Branch\n- Pushes the current branch to remote 'origin'.\n")
 
         manifest["actions"].append(action)
-        print(f"  - ✅ Packaged action: {action_type}")
+        logger.debug("Packaged action", action_type=action_type)
 
-    # Write manifest and summary
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding='utf-8')
     (output_dir / "summary.md").write_text("\n".join(summary_parts), encoding='utf-8')
 

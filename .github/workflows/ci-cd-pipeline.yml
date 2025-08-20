@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
       - name: Check out code
@@ -34,6 +34,9 @@ jobs:
       
       - name: Generate Schemas from Contracts
         run: python scripts/generate_schemas.py
+
+      - name: Generate Documentation from Templates
+        run: python scripts/generate_docs.py
 
       - name: Validate Persona Standards
         run: python scripts/generate_manifest.py

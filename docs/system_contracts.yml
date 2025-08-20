@@ -1,5 +1,5 @@
 # docs/system_contracts.yml
-# Version: 1.3
+# Version: 1.4
 # Description: This file is the canonical, machine-readable data dictionary for the AI Assistant.
 # It defines the schema and purpose of all major internal data contracts and transient process artifacts.
 
@@ -83,6 +83,18 @@ persistent_contracts:
             # Allows for other action-specific fields like 'branch_name', 'path', etc.
             additionalProperties: true
 
+  - name: Governance Rules
+    path: "src/ai_assistant/internal_data/governance.yml"
+    type: YAML File
+    description: "The single source of truth for governance rules (e.g., lists of keywords, configuration constants) that must be shared between the application's runtime code and its documentation generation scripts to prevent drift."
+    schema:
+      - field: prompting_best_practices
+        type: dict
+        description: "Contains rules related to user prompting."
+      - field: risky_modification_keywords
+        type: list of strings
+        description: "The canonical list of keywords that trigger a safety warning in the CLI."
+  
 # SECTION 2: TRANSIENT PROCESS ARTIFACTS
 # These contracts define the structure of temporary or ephemeral files that hold
 # the state for a specific, transient workflow. They are critical for the duration

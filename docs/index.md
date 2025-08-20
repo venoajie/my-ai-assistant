@@ -11,13 +11,12 @@ Welcome to the official documentation for the AI Assistant. This site provides i
 -   **[Prompting Best Practices](./prompting_guide.md):** Discover the tips and tricks for writing effective prompts that lead to reliable, powerful results.
 
 ### Advanced Workflows
--   **[Orchestrating Multi-Agent Projects](./orchestrating_projects.md):** A guide to using the Project Manager (`pmo-1`) persona to manage complex, multi-stage projects from start to finish.
+-   **[Extending with Plugins](./plugins.md):** Learn how to create custom plugins to inject domain-specific knowledge into the assistant.
+-   **[Project-Specific Configuration](./project_configuration.md):** **(Recommended)** Learn how to use `.ai_config.yml` to automate context and create a seamless, project-aware workflow for your team.
+-   **[Orchestrating Multi-Agent Projects](./orchestrating_projects.md):** A guide to using the Project Manager (`pmo-1`) persona to manage complex, multi-stage projects.
 -   **[Safe Multi-Stage Refactoring](./multi_stage_refactoring.md):** The official guide for performing complex, multi-step file modifications safely and reliably.
--   **[Performing Live System Checks](./live_system_checks.md):** Learn how to use the AI to safely diagnose the status of running applications and services.
 -   **[Advanced Usage](./advanced_usage.md):** For experienced users. Learn how to build a reusable prompt library and use the powerful autonomous mode safely.
 
 ## For Developers & Contributors
 
--   **[Contributing Guide](./contributing.md):** Information on how to contribute to the project, including our persona governance standards.
--   **[System Contracts](./system_contracts.yml):** The canonical, machine-readable definition of the system's core data structures.
--   **[Extending with Plugins](./plugins.md):** Learn how to create custom plugins to inject domain-specific knowledge into the assistant.
+-   **[Contributing Guide](./contributing.md):** Information on how to contribute to the project, including our persona governance standards and an overview of the system's core data contracts.

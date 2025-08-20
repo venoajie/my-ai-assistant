@@ -2,7 +2,7 @@
 
 [project]
 name = "my-ai-assistant"
-version = "1.2.2"
+version = "1.2.3"
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -11,6 +11,9 @@ dependencies = [
       "requests",
       "pyyaml",
       "pydantic>=2.0",
+      "structlog",
+      "instructor",
+      "openai",    
       ]
 
 [build-system]
@@ -42,7 +45,10 @@ where = ["src"]
 include = ["ai_assistant*"]
 
 [tool.setuptools.package-data]
-"ai_assistant._test_data" = [
-    "fixtures/*.json",
-    "schemas/*.json",
+"ai_assistant" = [
+    "default_config.yml",
+    "personas/**/*.persona.md",
+    "internal_data/governance.yml",
+    "internal_data/persona_config.yml",
+    "internal_data/schemas/**/*.json"
 ]
