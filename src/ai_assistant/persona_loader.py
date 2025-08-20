@@ -9,7 +9,7 @@ from importlib import resources
 from .config import ai_settings
 
 # Define a type alias for clarity
-ParsedPersona = Tuple[Optional[str], str]
+ParsedPersona = Tuple[Optional[str], str, Optional[List[str]]]
 
 class PersonaLoader:
     def __init__(self):
@@ -51,19 +51,24 @@ class PersonaLoader:
             
             data = yaml.safe_load(frontmatter_str) or {}
             inherits_from = data.get("inherits_from")
+            allowed_tools = data.get("allowed_tools")
 
             current_directives, current_context = self._parse_content(body.strip())
 
-            if inherits_from:
-                parent_directives, parent_context = self._load_recursive(inherits_from)
+            if inherits_from:               
                 
-                # Combine directives and context from parent and child
+                parent_directives, parent_context, parent_allowed_tools = self._load_recursive(inherits_from)
+                
+                # Child's allowed_tools list overrides the parent's if it exists
+                final_allowed_tools = allowed_tools if allowed_tools is not None else parent_allowed_tools
+                
                 combined_directives = "\n".join(filter(None, [parent_directives, current_directives]))
                 combined_context = "\n".join([parent_context, current_context]).strip()
                 
-                return (combined_directives if combined_directives else None, combined_context)
+                return (combined_directives if combined_directives else None, combined_context, final_allowed_tools)
             else:
-                return (current_directives, current_context)
+                return (current_directives, current_context, allowed_tools)
+
         finally:
             self._loading_stack.remove(alias)
 
@@ -74,7 +79,7 @@ class PersonaLoader:
         """
         self._loading_stack.clear()
         
-        specific_directives, specific_context = self._load_recursive(alias)
+        specific_directives, specific_context, specific_allowed_tools = self._load_recursive(alias)
         
         universal_base_alias = ai_settings.general.universal_base_persona
         if universal_base_alias and universal_base_alias not in self._loading_stack:
@@ -90,7 +95,7 @@ class PersonaLoader:
             except (FileNotFoundError, RecursionError) as e:
                 print(f"⚠️ Warning: Could not load universal base persona '{universal_base_alias}'. Reason: {e}")
         
-        return (specific_directives, specific_context)
+        return (specific_directives, specific_context, specific_allowed_tools)
     
         
     def _find_and_read_persona(self, alias: str):

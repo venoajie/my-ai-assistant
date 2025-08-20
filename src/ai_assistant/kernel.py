@@ -15,6 +15,21 @@ from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
 
 
+def _validate_plan(plan: List[Dict[str, Any]], allowed_tools: Optional[List[str]]) -> Tuple[bool, str]:
+    """Checks a generated plan against the persona's allowed tools list."""
+    if not allowed_tools:
+        return (True, "") # If no list is specified, all tools are allowed.
+
+    for step in plan:
+        tool_name = step.get("tool_name")
+        if tool_name not in allowed_tools:
+            error_msg = (
+                f"Plan is invalid. It used the tool '{tool_name}', but this persona is restricted "
+                f"to only use the following tools: {', '.join(allowed_tools)}."
+            )
+            return (False, error_msg)
+    return (True, "")
+
 async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Finds and injects content from files specified in the configuration.
