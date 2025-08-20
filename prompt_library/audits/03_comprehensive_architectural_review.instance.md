@@ -199,6 +199,7 @@ persistent_contracts:
                 type: string
                 description: "The AI's 'thought' or rationale for the action."
             # Allows for other action-specific fields like 'branch_name', 'path', etc.
+           
             additionalProperties: true
 
 # SECTION 2: TRANSIENT PROCESS ARTIFACTS

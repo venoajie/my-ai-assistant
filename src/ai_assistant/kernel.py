@@ -4,18 +4,23 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 from .config import ai_settings
 from .utils.context_optimizer import ContextOptimizer
 from .persona_loader import PersonaLoader
+from .plan_validator import generate_plan_expectation, check_plan_compliance
 from .planner import Planner
 from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
 
 
-def _validate_plan(plan: List[Dict[str, Any]], allowed_tools: Optional[List[str]]) -> Tuple[bool, str]:
+def _validate_plan(
+    plan: List[Dict[str, Any]], 
+    allowed_tools: Optional[List[str]],
+    ) -> Tuple[bool, str]:
+    
     """Checks a generated plan against the persona's allowed tools list."""
     if not allowed_tools:
         return (True, "") # If no list is specified, all tools are allowed.
@@ -54,7 +59,6 @@ async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[st
     return history
 
 
-
 async def orchestrate_agent_run(
     query: str,
     history: List[Dict[str, Any]],
@@ -76,12 +80,15 @@ async def orchestrate_agent_run(
     timings = metrics["timings"]
 
     # --- PERSONA LOADING ---
+    
     persona_directives: Optional[str] = None
     persona_context: Optional[str] = None
+    allowed_tools: Optional[List[str]] = None
+    
     if persona_alias:
         loader = PersonaLoader()
-        try:
-            persona_directives, persona_context = loader.load_persona_content(persona_alias)
+        try:            
+            persona_directives, persona_context, allowed_tools = loader.load_persona_content(persona_alias)
         except (RecursionError, FileNotFoundError) as e:
             error_msg = f"🛑 HALTING: Could not load persona '{persona_alias}'. Reason: {e}"
             print(error_msg, file=sys.stderr)
@@ -103,15 +110,51 @@ async def orchestrate_agent_run(
             print(f"ℹ️  Context size ({estimated_tokens} tokens) exceeds threshold ({threshold}). Using compact prompt format for planning.")
             use_compact_protocol = True
 
+    # --- NEW: PRE-FLIGHT COMPLIANCE CHECK ---
+    plan_expectation = generate_plan_expectation(query)
+    if plan_expectation:
+        print(f"ℹ️  Compliance rule triggered. Expected plan signature: {plan_expectation}")
+        
     # --- PLANNING ---
+         
     planner = Planner()
-    plan, planning_result = await planner.create_plan(
-         optimized_query,
-         history,
-         persona_context,
-         use_compact_protocol,
+    max_retries = 2
+    for attempt in range(max_retries):
+        plan, planning_result = await planner.create_plan(
+             optimized_query,
+             history,
+             persona_context,
+                      use_compact_protocol,
          is_output_mode=(output_dir is not None),
          )
+        
+        # --- RUN THE COMPLIANCE CHECK ---
+        is_compliant, reason = check_plan_compliance(plan, plan_expectation)
+        
+        if is_compliant:
+            print("✅ Plan is compliant.")
+            break # Success!
+
+        print(f"❌ Plan failed compliance check. Reason: {reason}", file=sys.stderr)
+        if attempt < max_retries - 1:
+            history.append({"role": "system", "content": f"CORRECTION: Your plan was rejected. {reason} You MUST generate a new plan that is compliant."})
+        else:
+            return {"response": f"HALTED: The AI planner failed to generate a compliant plan. Reason: {reason}", "metrics": metrics}        
+        
+        # Validate the plan against the allowed tools
+        is_valid, reason = _validate_plan(plan, allowed_tools)
+        if is_valid:
+            print("✅ Plan passed validation.")
+            break # Exit the loop on success
+        
+        print(f"❌ Plan failed validation. Reason: {reason}", file=sys.stderr)
+        if attempt < max_retries - 1:
+            print("   - Retrying with corrective instructions...", file=sys.stderr)
+            # Inject a corrective message into the history for the next attempt
+            history.append({"role": "system", "content": f"CORRECTION: {reason} You MUST generate a new plan that adheres to the tool restrictions."})
+        else:
+            print("   - Max retries reached. Halting.", file=sys.stderr)
+            return {"response": f"HALTED: The AI planner failed to generate a valid plan after {max_retries} attempts. Reason: {reason}", "metrics": metrics}
     
     timings["planning"] = planning_result["duration"]
     metrics["tokens"]["planning"] = planning_result["tokens"]
