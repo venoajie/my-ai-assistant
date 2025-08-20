@@ -5,7 +5,7 @@ name = "my-ai-assistant"
 version = "1.2.3"
 description = "AI Assistant for Software Development"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = [
       "aiohttp",
       "requests",
