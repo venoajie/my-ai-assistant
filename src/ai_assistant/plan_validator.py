@@ -31,7 +31,7 @@ def check_plan_compliance(plan: ExecutionPlan, expectation: Dict[str, Any]) -> T
     allowed_tools = expectation.get("allowed_tools")
     if allowed_tools:
         for step in plan:
-            tool_name = step.get("tool_name")
+            tool_name = step.tool_name
             if tool_name not in allowed_tools:
                 return (False, f"Plan used a forbidden tool '{tool_name}'. Allowed tools are: {allowed_tools}.")
     
