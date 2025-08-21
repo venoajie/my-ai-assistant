@@ -11,6 +11,7 @@ from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
 from .config import ai_settings
 from .data_models import ExecutionPlan
+from .llm_client_factory import get_instructor_client
 
 logger = structlog.get_logger(__name__)
 
@@ -22,8 +23,12 @@ class Planner:
         provider_info = ResponseHandler().model_to_provider_map.get(planning_model_name)
         if not provider_info:
             raise ValueError(f"Planning model '{planning_model_name}' not found in any provider config.")
-        
-        self.provider_name = provider_info["provider_name"]
+
+        # Use the factory to get the client
+        self.client = get_instructor_client(planning_model_name)
+        # Store provider name for logging/debugging if needed
+        self.provider_name = self.client.provider        
+
         provider_config = provider_info["config"]
 
         if self.provider_name == "gemini":
@@ -56,6 +61,7 @@ class Planner:
         ) -> Tuple[Optional[ExecutionPlan], Dict[str, Any]]:
         
         logger.info("Generating execution plan with structured output...", provider=self.provider_name)
+    
         prompt = self.prompt_builder.build_planning_prompt(
             query,
             TOOL_REGISTRY.get_tool_descriptions(),
@@ -70,14 +76,14 @@ class Planner:
         planning_gen_config = ai_settings.generation_params.planning.model_dump(exclude_none=True)
 
         try:
+            # The call logic is now unified
             if self.provider_name == "gemini":
                 plan = await self.client.create(
                     response_model=ExecutionPlan,
                     messages=[{"role": "user", "content": prompt}],
-                    # Pass the plain dictionary, not a GenerationConfig object.
                     generation_config=planning_gen_config
                 )
-            else: # Assumes OpenAI-compatible (DeepSeek)
+            else: # Assumes OpenAI-compatible
                 plan = await self.client.chat.completions.create(
                     model=planning_model_name,
                     response_model=ExecutionPlan,

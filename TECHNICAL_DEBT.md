@@ -9,11 +9,7 @@ This document is the canonical tracker for known architectural and implementatio
 - - -
 
 ## Active Issues
-
-### TD-009: Inconsistent API Client Usage (Low Priority)
--   **Problem:** The refactored Planner (`planner.py`) uses the modern, `instructor`-patched `AsyncOpenAI` client for structured, reliable API calls. However, the Adversarial Critic (`kernel.py`) still uses the legacy, custom `ResponseHandler` for its API calls.
--   **Impact:** This creates minor code duplication and two different pathways for interacting with LLMs. While not a functional bug, it increases maintenance overhead and lacks architectural consistency.
--   **Required Action:** Refactor the Adversarial Critic's API call logic in `kernel.py` to also use an `instructor`-patched client. This may require creating a shared, reusable client factory to avoid re-instantiating clients in multiple places.
+*(There are currently no active high-priority technical debt items.)*
 
 ---
 
@@ -44,3 +40,7 @@ This document is the canonical tracker for known architectural and implementatio
 
 ### RESOLVED (TD-007): Improve Plugin Discovery and User Feedback
  -   **Resolution:** The `cli.py` module was enhanced to improve the user experience...
+
+ 
+### RESOLVED (TD-009): Inconsistent API Client Usage
+-   **Resolution:** This issue has been resolved by creating a centralized, reusable client factory in `src/ai_assistant/llm_client_factory.py`. This factory provides `instructor`-patched clients for any configured model. Both the `Planner` (`planner.py`) and the Adversarial Critic (`kernel.py`) have been refactored to use this factory, eliminating code duplication and ensuring a consistent, modern approach to all structured LLM calls. The legacy `ResponseHandler` is now only used for non-structured synthesis calls.
