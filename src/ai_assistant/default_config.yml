@@ -37,7 +37,6 @@ generation_params:
   synthesis:
     temperature: 0.15
     topP: 0.95
-    topK: 40
     max_tokens: 8192
   critique:
     temperature: 0.1

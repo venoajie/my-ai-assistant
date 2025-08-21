@@ -177,17 +177,34 @@ class ResponseHandler:
         if not api_key:
             raise APIKeyNotFoundError(f"API key '{config.api_key_env}' not found.")
         
-        # Use the unified endpoint from the config
         api_url = f"{config.api_endpoint.strip('/')}/chat/completions"
         headers = {
             "Content-Type": "application/json", 
             "Authorization": f"Bearer {api_key}",
         }
+
+        # --- THIS IS THE ROBUST FIX ---
+        # Define the set of parameters supported by the OpenAI Chat Completions standard.
+        SUPPORTED_PARAMS = {
+            "temperature",
+            "top_p",
+            "max_tokens",
+            "presence_penalty",
+            "frequency_penalty",
+            "stop",
+            "n",
+            "logit_bias",
+            "user",
+        }
+        
+        # Filter the provided gen_config to only include supported parameters.
+        filtered_gen_config = {k: v for k, v in gen_config.items() if k in SUPPORTED_PARAMS}
+
         request_body = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}], 
             "stream": False, 
-            **gen_config,
+            **filtered_gen_config, # Use the filtered config
         }
 
         async with session.post(api_url, headers=headers, json=request_body) as response:
