@@ -18,6 +18,19 @@ This software is provided on an "AS IS" basis. The author assumes no liability f
 
 ---
 
+## User Responsibility for Content and Actions
+
+> **You are responsible for what you ask the AI to do and how you use what it creates.**
+
+The AI will attempt to fulfill the instructions it is given. It does not have a moral compass or an understanding of legal boundaries. Therefore, the responsibility for using the tool ethically and lawfully rests entirely with you.
+
+-   **Do not ask it to create harmful content:** Do not use this tool to generate malware, phishing emails, discriminatory content, or to perform any other malicious or illegal activity.
+-   **You own the output:** You are responsible for the code and content generated from your prompts. If you use the AI to write code that causes damage to a third-party system, you are responsible for those damages.
+
+The safety features of this tool are designed to prevent accidental self-inflicted harm. They are not designed to prevent intentional misuse. By using this software, you agree to the terms laid out in the [NOTICE](../../NOTICE) file.
+
+---
+
 ## Data Privacy Warning
 
 > **Your code, prompts, and attached file contents will be sent to third-party API providers.**
