@@ -23,28 +23,31 @@ The AI Assistant works by sending your prompts and code to third-party Large Lan
 -   **Cost:** API calls are not free. Complex tasks or large files can result in significant token usage and incur costs on your provider account. **Always monitor your API usage and set spending limits** on the provider's platform.
 -   **Security:** Treat your API keys like passwords. The assistant loads them from environment variables. Do not commit them to your code or share them publicly.
 -   **Data Privacy:** Be aware that the content of the files you attach (`-f`) and your prompts are sent to the third-party LLM provider. **Do not send sensitive, private, or proprietary information** through this tool.
+-   **API Standard:** This application is built on the "OpenAI-compatible" API standard. This means you can use API keys from various providers (like DeepSeek or Google's new Gemini endpoint) that adhere to this common format.
+
 
 ## Your First Command: Read-Only Analysis
 
-Let's start with a simple, safe task that doesn't modify any files. We'll ask a specialist persona to review a file for us.
+Let's start with a simple, safe task that doesn't modify any files. We'll ask a specialist persona to review a document for us.
 
 1.  **Find a Persona:** First, list the available experts.
     ```bash
     ai --list-personas
     ```
-    You'll see a list of personas, including `core/arc-1`, the Architecture Reviewer.
+    You'll see a list of personas for different domains, such as programming, writing, and more.
 
-2.  **Run the Command:** Now, ask the architect to review a file. The `-f` flag attaches the file's content to your request.
+2.  **Run the Command:** Now, ask a writing expert to review a report. The `-f` flag attaches the file's content to your request.
     ```bash
-    ai --persona core/arc-1 -f path/to/your/file.py "Please provide a brief architectural review of this file."
+    # This example assumes a persona like 'domains/writing/editor-1' exists.
+    ai --persona domains/writing/editor-1 -f path/to/your/report.md "Please review this report for clarity, tone, and grammatical errors."
     ```
-The assistant will provide a structured analysis without touching your file system.
+The assistant will provide a structured analysis of your document without touching your file system.
 
 ---
 
 ## The Two-Stage Workflow: The Safest Way to Make Changes
 
-For any task that involves modifying files, the **two-stage workflow is the required and recommended approach.** It is the foundation of the system's **[Safety Model](./safety_model.md)**.
+For any task that involves modifying files—whether it's source code, a configuration file, or a chapter of a book—the **two-stage workflow is the required and recommended approach.** It is the foundation of the system's **[Safety Model](./safety_model.md)**.
 
 This workflow creates an "air gap" between the AI's "thinking" and the actual execution, giving you full control.
 

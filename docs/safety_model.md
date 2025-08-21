@@ -87,7 +87,7 @@ If you choose to bypass the recommended workflow and run a modification task in 
 
 1.  **Risky Tool Detection:** Tools like `write_file` and `run_shell` are internally flagged as `is_risky: True`.
 2.  **Adversarial Critique:** When the `kernel` sees a plan involving a risky tool, it automatically triggers an adversarial validation step. A skeptical "critic" persona reviews the plan for flaws.
-3.  **Explicit Confirmation Prompt:** The system then **halts execution**. It will print the adversarial critique to your terminal and present you with a direct confirmation prompt:
+3.  **Explicit Confirmation Prompt:** The system then **halts execution**. It will print the adversarial critique to your terminal—highlighting critical keywords in red to draw your attention to specific risks—and present you with a direct confirmation prompt:
     ```
     --- 🧐 ADVERSARIAL CRITIQUE ---
     - **Risk:** The `write_file` command will directly modify a file in the working directory.

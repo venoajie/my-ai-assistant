@@ -1,6 +1,6 @@
 # Guide: Orchestrating Multi-Agent Projects
 
-This guide covers the most advanced workflow in the AI Assistant: using the **Project Manager & Orchestrator (`pmo-1`)** persona to manage a complex, multi-stage project from start to finish. This workflow graduates the tool from a specialist assistant for discrete tasks to a guided project management platform.
+This guide covers the most advanced workflow in the AI Assistant: using the **Project Management & Orchestrator (`pmo-1`)** persona to manage a complex, multi-stage project from start to finish. This workflow graduates the tool from a specialist assistant for discrete tasks to a guided project management platform.
 
 ## When to Use This Workflow
 
@@ -9,14 +9,13 @@ Use this workflow for complex goals that cannot be completed in a single step, s
 -   Performing a multi-stage refactoring that involves design, implementation, and testing.
 -   Executing a complex audit that requires multiple specialists.
 
-For simpler, single-focus tasks like "refactor this one file," the standard [Two-Stage Workflow](./getting_started.md) is more appropriate.
+## The Core Concepts: PMO-as-Code
 
-## The Core Concepts
+This workflow revolves around a structured "Project Management Office as Code" system located in the `.ai_pmo/` directory at your project's root.
 
-This workflow revolves around two key components:
-
-1.  **The Orchestrator (`pmo-1`):** The `core/pmo-1` persona acts as the project manager. It does not write code or perform analysis itself. Its sole job is to maintain the project's state and tell you, the user, which specialist to call next and with what instructions.
-2.  **The State File (`PROJECT_STATE.md`):** This file is the single source of truth for the entire project. It contains the project goal, the plan, the dependency chain of tasks, and the current status. The `pmo-1` persona reads and writes to this file to track progress.
+1.  **The Orchestrator (`pmo-1`):** The `core/pmo-1` persona acts as the project manager. It does not write code itself. Its sole job is to maintain the project's state and tell you, the user, which specialist to call next and with what instructions.
+2.  **The Portfolio Dashboard (`PROGRAM_STATE.md`):** This is the master file providing a high-level view of all active and planned projects.
+3.  **The Project Charter (`projects/*.md`):** Each project gets its own detailed charter file. This is the single source of truth for a specific project's goal, plan, dependency chain, and current status.
 
 You, the user, act as the bridge, executing the commands given by the `pmo-1` and feeding the results back to it.
 
@@ -32,72 +31,41 @@ You start by giving the high-level goal to the `pmo-1` persona.
 
 **Your Command:**
 ```bash
-ai --persona core/pmo-1 "I want to build a command-line tool that fetches and displays the weather for a given city."
+ai --persona core/pmo-1 --output-dir ./ai_runs/init-weather-cli-project \
+  "<ACTION>I want to build a command-line tool that fetches and displays the weather for a given city. Create a new project charter for this in the workspace, and also create the initial PROGRAM_STATE.md dashboard.</ACTION>"
 ```
+After executing the output package, you will have the `.ai_pmo/` directory structure.
 
-**The `pmo-1`'s Response:**
-The orchestrator will create the initial `PROJECT_STATE.md` file and give you the command for the next step: defining the requirements with a specialist.
+### Step 2: Get the Next Action from the Orchestrator
 
-```text
-### Next Command
-Execute the following command to have the `csa-1` persona define the project requirements:
-```bash
-ai --persona domains/programming/csa-1 -f PROJECT_STATE.md "Based on the project state, generate a detailed list of functional and non-functional requirements. Update the 'Requirements' section of the attached file with your findings."
-```
-
-### Step 2: Defining Requirements & Architecture
-
-You run the command provided by `pmo-1`. The `csa-1` (Collaborative Systems Architect) will generate the requirements and architecture, updating the `PROJECT_STATE.md` file. After it finishes, you check back in with the project manager.
+Now that the project is initialized, you ask the orchestrator for the first concrete step.
 
 **Your Command:**
 ```bash
-# You provide the updated state file from the previous step
-ai --persona core/pmo-1 -f PROJECT_STATE.md "The requirements and architecture are complete. What is the next step?"
+ai --persona core/pmo-1 \
+  -f .ai_pmo/PROGRAM_STATE.md \
+  -f .ai_pmo/projects/P-001_WEATHER_CLI.md \
+  "The project is initialized. What is the next command I need to run?"
 ```
 
 **The `pmo-1`'s Response:**
-The orchestrator sees that the design phase is done, updates the status, and gives you the next command for the implementation phase. **Note that it now hands off the task to a different specialist, the `rce-1` (Refactoring & Code Enhancement) persona, who is an expert in writing code.**
+The orchestrator will analyze the project charter, see that the "Requirements" phase is pending, and give you the exact command to execute with the correct specialist.
 
 ```text
-### Analysis & Plan
-The project's `PENDING_DESIGN` phase is complete. The next step is `Implementation`. I will update the state file and assign this task to the `rce-1` persona.
-
----
-### Generated Artifacts
-<!-- FILENAME: PROJECT_STATE.md -->
-```markdown
-# Project State: Weather CLI Tool
-
-- **version**: 1.0
-- **status**: PENDING_IMPLEMENTATION
-- **goal**: "Create a command-line tool that fetches and displays the weather for a given city."
-
-## Project Plan & Dependency Chain
-1.  **Phase: Requirements Definition**
-    -   **Specialist:** `domains/programming/csa-1`
-    -   **Status:** COMPLETE
-2.  **Phase: Architectural Design**
-    -   **Specialist:** `domains/programming/csa-1`
-    -   **Status:** COMPLETE
-3.  **Phase: Implementation**
-    -   **Specialist:** `domains/programming/rce-1`
-    -   **Status:** PENDING
-```
-
----
 ### Next Command
-Execute the following command to have `rce-1` implement the CLI tool. Use the `--output-dir` flag for safety:
+The 'Requirements Definition' phase is pending. Execute the following command to have the `csa-1` persona define the project requirements:
 ```bash
-ai --persona domains/programming/rce-1 --output-dir ./ai_runs/weather-cli \
-  -f PROJECT_STATE.md \
-  "<ACTION>Based on the architecture in the state file, implement the weather CLI tool. Create all necessary files.</ACTION>"
+ai --persona domains/programming/csa-1 --output-dir ./ai_runs/weather-cli-reqs \
+  -f .ai_pmo/projects/P-001_WEATHER_CLI.md \
+  "<ACTION>Based on the project charter, generate a detailed list of functional and non-functional requirements. Update the 'Requirements' section of the charter file and place it in the workspace.</ACTION>"
 ```
 
-### Step 3 and Beyond
+### Step 3 and Beyond: The Execution Loop
 
-You continue this cycle:
-1.  Run the command provided by `pmo-1` to have a specialist complete a task.
-2.  Take the updated `PROJECT_STATE.md` from the specialist.
-3.  Give the updated state file back to `pmo-1` and ask "What's next?".
+You continue this cycle for the entire project:
+1.  Run the command provided by `pmo-1` to have a specialist complete a task (e.g., writing code, running tests).
+2.  Execute the resulting output package to apply the changes.
+3.  Commit the code changes and the updated project charter to your feature branch.
+4.  Ask `pmo-1` "What's next?" by providing the updated charter file.
 
-The `pmo-1` will guide you through the entire project lifecycle until the `status` in the state file is `COMPLETE`.
+The `pmo-1` will guide you through the entire project lifecycle—handing off tasks to different specialists for design, implementation, and testing—until the `status` in the charter is `COMPLETE`.
