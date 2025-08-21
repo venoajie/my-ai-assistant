@@ -163,7 +163,8 @@ async def orchestrate_agent_run(
             critique_client = get_instructor_client(critique_model_name)
             critique_gen_config = ai_settings.generation_params.critique.model_dump(exclude_none=True)
 
-            if critique_client.provider == "gemini":
+            provider_name_str = str(critique_client.provider).lower()
+            if "gemini" in provider_name_str:
                 critique_response = await critique_client.create(
                     response_model=CritiqueResponse,
                     messages=[{"role": "user", "content": critique_prompt}],

@@ -1,13 +1,8 @@
 # src/ai_assistant/planner.py
-import os
-import instructor
 import structlog
-from openai import AsyncOpenAI
-import google.generativeai as genai
 from typing import List, Dict, Any, Optional, Tuple
 
 from .prompt_builder import PromptBuilder
-from .response_handler import ResponseHandler
 from .tools import TOOL_REGISTRY
 from .config import ai_settings
 from .data_models import ExecutionPlan
@@ -17,38 +12,19 @@ logger = structlog.get_logger(__name__)
 
 class Planner:
     def __init__(self):
+        """
+        Initializes the Planner by getting a pre-configured, instructor-patched
+        client from the central factory.
+        """
         self.prompt_builder = PromptBuilder()
-        
         planning_model_name = ai_settings.model_selection.planning
-        provider_info = ResponseHandler().model_to_provider_map.get(planning_model_name)
-        if not provider_info:
-            raise ValueError(f"Planning model '{planning_model_name}' not found in any provider config.")
-
-        # Use the factory to get the client
+        
+        # The constructor's ONLY job is to get the client from the factory.
         self.client = get_instructor_client(planning_model_name)
-        # Store provider name for logging/debugging if needed
-        self.provider_name = self.client.provider        
-
-        provider_config = provider_info["config"]
-
-        if self.provider_name == "gemini":
-            api_key = os.getenv(provider_config.api_key_env)
-            if not api_key:
-                raise ValueError(f"API key env var '{provider_config.api_key_env}' is not set.")
-            
-            self.client = instructor.from_gemini(
-                client=genai.GenerativeModel(model_name=planning_model_name),
-                mode=instructor.Mode.GEMINI_JSON,
-            )
-        elif self.provider_name == "deepseek":
-            self.client = instructor.from_openai(
-                client=AsyncOpenAI(
-                    api_key=os.getenv(provider_config.api_key_env),
-                    base_url=provider_config.api_endpoint,
-                )
-            )
-        else:
-            raise NotImplementedError(f"Planning is not implemented for provider: '{self.provider_name}'")
+        
+        # We get the provider name directly from the client for logging.
+        # The client.provider attribute might be a string or an enum, so we convert to string.
+        self.provider_name = str(self.client.provider)
 
     async def create_plan(
         self,
@@ -76,14 +52,15 @@ class Planner:
         planning_gen_config = ai_settings.generation_params.planning.model_dump(exclude_none=True)
 
         try:
-            # The call logic is now unified
-            if self.provider_name == "gemini":
+            # we check if the lowercase provider string CONTAINS "gemini".
+            # This correctly handles 'Provider.GEMINI' and 'gemini'.
+            if "gemini" in self.provider_name.lower():
                 plan = await self.client.create(
                     response_model=ExecutionPlan,
                     messages=[{"role": "user", "content": prompt}],
                     generation_config=planning_gen_config
                 )
-            else: # Assumes OpenAI-compatible
+            else: # Assumes OpenAI-compatible (like DeepSeek)
                 plan = await self.client.chat.completions.create(
                     model=planning_model_name,
                     response_model=ExecutionPlan,
