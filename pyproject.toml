@@ -2,7 +2,7 @@
 
 [project]
 name = "my-ai-assistant"
-version = "1.2.3"
+version = "1.2.4"
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.10"
