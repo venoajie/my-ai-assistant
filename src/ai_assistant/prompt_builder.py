@@ -1,4 +1,4 @@
-# src\ai_assistant\prompt_builder.py
+# src/ai_assistant/prompt_builder.py
 from typing import Dict, List, Any, Optional
 import json
 from .data_models import ExecutionPlan
@@ -17,8 +17,10 @@ class PromptBuilder:
         persona_content: str = None,
         use_compact_protocol: bool = False,
         is_output_mode: bool = False,
+        plan_expectation: Optional[Dict[str, Any]] = None, 
         ) -> str:
         """
+
         Builds the prompt for the Planner, instructing it to create a JSON tool plan.
         """
         history_section = self._build_history_section(history, use_compact_format=use_compact_protocol)
@@ -26,14 +28,36 @@ class PromptBuilder:
         if persona_content:
             persona_section = f"<PersonaInstructions>\n{persona_content}\n</PersonaInstructions>\n\n"
 
+        # --- Dynamically build the compliance section ---
+        compliance_section = ""
+        if plan_expectation:
+            allowed_tools_str = ", ".join(f"'{t}'" for t in plan_expectation.get('allowed_tools', []))
+            max_steps = plan_expectation.get('max_steps')
+            rules = []
+            if allowed_tools_str:
+                rules.append(f"- The plan MUST exclusively use tools from this list: [{allowed_tools_str}].")
+            if max_steps is not None:
+                rules.append(f"- The plan MUST NOT exceed {max_steps} step(s).")
+            
+            if rules:
+                rules_str = "\n".join(rules)
+                compliance_section = f"""
+<ComplianceRequirements>
+CRITICAL: Based on an automated analysis of the user's request, you MUST adhere to the following strict rules when generating the plan. Failure to comply will result in immediate rejection.
+{rules_str}
+</ComplianceRequirements>
+"""
+
         output_mode_heuristic = ""
         if is_output_mode:
             output_mode_heuristic = """5.  **OUTPUT-FIRST MODE:** You are in a special mode where your plan will NOT be executed directly. Instead, it will be saved to a manifest file. Your plan must be a complete, end-to-end sequence of actions (e.g., create branch, write file, add, commit, push) that can be executed by a separate, non-AI tool. Do not use read-only tools like `list_files` unless their output is critical for a subsequent step's condition. Your primary goal is to generate a complete and executable action plan."""
 
-        # --- THIS PROMPT IS NOW MUCH SIMPLER ---
         prompt = f"""{persona_section}
 <Task>
 You are a planning agent. Your SOLE purpose is to convert a user's request into a structured plan of tool calls. Adhere strictly to the provided tool signatures and planning heuristics.
+</Task>
+
+{compliance_section} 
 
 <AvailableTools>
 # You must use the function signatures below to construct your tool calls.
@@ -55,10 +79,8 @@ You are a planning agent. Your SOLE purpose is to convert a user's request into 
 </FinalUserRequest>
 
 Based on the final user request and all provided context, generate the plan.
-</Task>
 """
         return prompt
-
 
 
     def build_critique_prompt(
