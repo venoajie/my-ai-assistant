@@ -58,6 +58,11 @@ def list_available_plugins() -> List[str]:
     local_plugins_path = ai_settings.paths.local_plugins_dir
     if local_plugins_path.is_dir():
         for file_path in local_plugins_path.glob("*.py"):
+            # --- THIS IS THE FIX ---
+            # Explicitly ignore __init__.py files
+            if file_path.name == "__init__.py":
+                continue
+            
             # Use a special suffix to distinguish local plugins
             plugin_name = f"{file_path.stem.replace('_plugin', '')} (local)"
             if plugin_name not in discovered_plugins:
@@ -407,10 +412,28 @@ async def async_main():
         sys.exit(0)
         
     if args.list_personas:
-        print(f"{Colors.BOLD}Built-in Personas:{Colors.RESET}")
-        for p in PersonaLoader().list_builtin_personas():
-            print(f" - {p}")
-        sys.exit(0) 
+        loader = PersonaLoader()
+        all_personas = loader.list_all_personas()
+        
+        if all_personas.get("project"):
+            print(f"{Colors.BOLD}Project-Local Personas (in .ai/personas):{Colors.RESET}")
+            for p in all_personas["project"]:
+                print(f" - {p}")
+        
+        if all_personas.get("user"):
+            print(f"{Colors.BOLD}User-Global Personas (in ~/.config/ai_assistant/personas):{Colors.RESET}")
+            for p in all_personas["user"]:
+                print(f" - {p}")
+
+        if all_personas.get("builtin"):
+            print(f"{Colors.BOLD}Built-in Personas:{Colors.RESET}")
+            for p in all_personas["builtin"]:
+                print(f" - {p}")
+
+        if not any(all_personas.values()):
+            print("No personas found.")
+
+        sys.exit(0)
         
     # --- Sanity checks now run only when proceeding with a query ---
     # Don't run sanity checks if we are just showing context

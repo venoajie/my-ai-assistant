@@ -3,7 +3,7 @@ import os
 import re
 import yaml
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from importlib import resources
 
 from .config import ai_settings
@@ -129,3 +129,41 @@ class PersonaLoader:
             return sorted(personas)
         except FileNotFoundError:
             return []
+        
+        
+    def list_all_personas(self) -> Dict[str, List[str]]:
+        """Discovers all available personas from all valid locations."""
+        all_personas = {
+            "project": [],
+            "user": [],
+            "builtin": [],
+        }
+
+        # 1. Discover project-local personas
+        if self.project_local_personas_dir.is_dir():
+            for path in self.project_local_personas_dir.rglob("*.persona.md"):
+                try:
+                    rel_path = path.relative_to(self.project_local_personas_dir)
+                    persona_id = str(rel_path).replace(".persona.md", "").replace(os.path.sep, "/")
+                    all_personas["project"].append(persona_id)
+                except ValueError:
+                    continue
+        
+        # 2. Discover user-global personas
+        if self.user_personas_dir.is_dir():
+            for path in self.user_personas_dir.rglob("*.persona.md"):
+                try:
+                    rel_path = path.relative_to(self.user_personas_dir)
+                    persona_id = str(rel_path).replace(".persona.md", "").replace(os.path.sep, "/")
+                    all_personas["user"].append(persona_id)
+                except ValueError:
+                    continue
+
+        # 3. Discover built-in personas
+        all_personas["builtin"] = self.list_builtin_personas()
+
+        # Sort all lists
+        for key in all_personas:
+            all_personas[key] = sorted(all_personas[key])
+
+        return all_personas
