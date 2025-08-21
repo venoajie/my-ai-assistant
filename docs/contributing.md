@@ -41,4 +41,3 @@ To prevent drift between the application's behavior and its documentation, some 
 
 -   **System Contracts:** The schemas for all major internal data objects are formally defined in **[`system_contracts.yml`](./system_contracts.yml)**.
 -   **Plugins:** To learn how to build your own plugins, please see the **[Extending with Plugins Guide](./plugins.md)**.
-```

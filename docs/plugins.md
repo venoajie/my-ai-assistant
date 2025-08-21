@@ -71,4 +71,3 @@ ai --context 'datascience (local)' \
 The AI will now receive the critical, project-specific context you defined, guiding it to generate a correct and compliant answer that uses your internal library.
 
 > **Pro Tip:** Manually loading your plugin with `--context` is great for testing, but the real power comes from automation. Learn how to make the assistant automatically load your plugin and other key files in the **[Project-Specific Configuration Guide](./project_configuration.md)**.
-```

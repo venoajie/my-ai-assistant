@@ -77,4 +77,3 @@ ai --persona domains/cooking/recipe-generator-1 "I have chicken, rice, and brocc
 ```
 
 > **Pro Tip:** Manually typing `--persona` works, but the best practice is to automate it. Learn how to set a default persona and automatically provide it with critical context in the **[Project-Specific Configuration Guide](./project_configuration.md)**.
-```

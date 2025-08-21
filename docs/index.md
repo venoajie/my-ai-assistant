@@ -21,4 +21,3 @@ Welcome to the official documentation for the AI Assistant. This site provides i
 ## For Developers & Contributors
 
 -   **[Contributing Guide](./contributing.md):** Information on how to contribute to the project, including our persona governance standards and an overview of the system's core data contracts.
-```

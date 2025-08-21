@@ -57,4 +57,3 @@ The true power of the AI Assistant is unlocked when you combine project configur
 ```
 
 With this structure, you can create a `.ai_config.yml` that automatically injects your project's most important documents. This creates a powerful foundation where any developer on your team can easily call the right expert (`--persona`) with the right knowledge (`--context`) and the right architectural context (`auto_inject_files`) for any given task.
-```

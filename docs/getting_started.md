@@ -96,4 +96,3 @@ This is the best-practice workflow used by advanced teams. By creating project-l
 
 -   **Then, learn how to automatically provide these experts with the knowledge they need to succeed:**
     **[➡️ Guide: Project-Specific Configuration](./project_configuration.md)**
-```
