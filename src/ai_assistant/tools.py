@@ -37,8 +37,8 @@ def _run_git_command(command_parts: List[str]) -> Tuple[bool, str]:
 class CreateServiceFromTemplateTool(Tool):
     name = "create_service_from_template"
     description = (
-        "Creates configuration files (Dockerfile, pyproject.toml) for a new service by "
-        "copying and adapting them from an existing template service. "
+        "The mandatory tool for creating new service configurations (like Dockerfile, pyproject.toml) "
+        "by using an existing service as a template. Use this instead of manual file operations. "
         "Usage: create_service_from_template(template_service_name: str, new_service_name: str, new_service_path: str)"
     )
     is_risky = True
@@ -126,9 +126,10 @@ Modified Code:"""
 class ExecuteRefactoringWorkflowTool(Tool):
     name = "execute_refactoring_workflow"
     description = (
-        "Executes a complete, safe refactoring workflow in one atomic operation. "
+        "Executes a complete, safe refactoring workflow for existing code within a new git branch. "
         "It creates a branch, removes specified files, refactors content in other files, and commits all changes. "
-        "This is the mandatory tool for any development task that modifies the codebase."
+        "This is the mandatory tool for any development task that modifies the codebase. "
+        "Do NOT use this for creating a new service from a template; use 'create_service_from_template' for that specific task."
     )
     is_risky = True
 
