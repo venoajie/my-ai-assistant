@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-20T09:36:00.480322+00:00'
+generated_at_utc: '2025-08-21T03:50:14.234985+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: 12bb1f83e709580f5779d58aa0beefa736101d07ac370ecd9f2d0b23b52a0014
+validation_signature: 5e1fa4ec655807f0bf100ab92edf95ca84e8560d08a1248759f22a8954c56f10
 personas:
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant
@@ -10,6 +10,10 @@ personas:
   title: Contextual Intelligence Analyst
   description: Automatically discovers and injects project-specific context from a
     root AGENTS.md file.
+- alias: core/distiller-1
+  title: Context Distillation Agent
+  description: Specializes in reading a large, complex context and distilling it into
+    a concise, actionable mission briefing for another agent.
 - alias: core/jan-1
   title: Project Janitor
   description: Performs code cleanup tasks like removing comments, formatting, and

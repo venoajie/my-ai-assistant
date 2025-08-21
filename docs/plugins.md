@@ -26,7 +26,7 @@ In your new file, define a class that inherits from `ContextPluginBase`. It must
 
 ```python
 # .ai/plugins/datascience_plugin.py
-from typing import List
+from typing import List, Dict
 from pathlib import Path
 from ai_assistant.context_plugin import ContextPluginBase
 
@@ -36,9 +36,6 @@ class DataScienceContextPlugin(ContextPluginBase):
     """
     name = "DataScience"
     
-    def __init__(self, project_root: Path):
-        self.project_root = project_root
-
     def get_context(self, query: str, files: List[str]) -> str:
         """
         If the query mentions 'dataframe' or 'etl', inject knowledge
@@ -73,4 +70,4 @@ ai --context 'datascience (local)' \
 
 The AI will now receive the critical, project-specific context you defined, guiding it to generate a correct and compliant answer that uses your internal library.
 
-> **Pro Tip:** While you can load your plugin manually with the `--context` flag, the best practice is to combine it with a project configuration file to automate context injection. Learn more in the **[Project-Specific Configuration Guide](./project_configuration.md)**.
+> **Pro Tip:** Manually loading your plugin with `--context` is great for testing, but the real power comes from automation. Learn how to make the assistant automatically load your plugin and other key files in the **[Project-Specific Configuration Guide](./project_configuration.md)**.

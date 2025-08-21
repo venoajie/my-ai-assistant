@@ -1,6 +1,6 @@
 # PROJECT BLUEPRINT: AI Assistant
 
-<!-- Version: 2.4 -->
+<!-- Version: 2.5 -->
 
 ## 1. System Overview and Core Purpose
 
@@ -24,10 +24,10 @@ A strict separation is maintained between **AI-driven analysis (thinking)** and 
 To enhance the safety of the "thinking" phase, the system employs an Adversarial Validation Chain. After an initial execution plan is generated, it is passed to a specialized, skeptical "critic" persona. This critic's sole purpose is to identify potential flaws, unstated assumptions, and risks in the plan. This principle acts as an automated "red team" review for the AI's own logic.
 
 #### 2.2.2. Data Contract Validation
-In addition to adversarial validation, all core data contracts, such as the `ExecutionPlan`, are enforced at runtime using Pydantic models. This provides an immediate, deterministic validation layer that rejects malformed plans *before* they are even passed to the critic, increasing system robustness and preventing entire classes of errors.
+In addition to adversarial validation, all core data contracts, such as the `ExecutionPlan`, are enforced at runtime using Pydantic models. This provides an immediate, deterministic validation layer that rejects malformed plans. The system heavily utilizes the `instructor` library to force the LLM's output to conform to these Pydantic schemas, drastically reducing the likelihood of syntactically invalid plans and increasing overall system robustness.
 
 ### 2.3. Explicit Governance
-The behavior and structure of the persona ecosystem are governed by a set of explicit, machine-readable rules.
+The behavior and structure of the persona ecosystem are governed by a set of explicit, machine-readable rules. This includes persona integrity checks, data contract validation, and deterministic plan validation against rules defined in `governance.yml`.
 
 #### 2.3.1. Persona Integrity
 All personas are validated against the rules in `persona_config.yml`, and a cryptographically signed `persona_manifest.yml` ensures the application's runtime understanding of its capabilities is never out of sync with the committed source code.
@@ -37,6 +37,15 @@ The system's internal data contracts are programmatically enforced through a "Do
 
 #### 2.3.3. Deterministic Plan Validation
 To mitigate the inherent unreliability of probabilistic AI planners, the system MUST employ a deterministic validation layer. This layer operates between the AI Planner and the Execution Engine. Before planning, a deterministic function analyzes the user's prompt against rules in `governance.yml` to create an "Expected Plan Signature." After the AI generates a plan, a second deterministic function validates the plan against this signature. Non-compliant plans are rejected, and the AI is forced to retry with corrective feedback. This process is further hardened by the use of a structured generation library (`instructor`) in the Planner, which forces the LLM's output to conform to the `ExecutionPlan`'s Pydantic schema, drastically reducing the likelihood of syntactically invalid plans.
+
+### 2.4. Documentation-as-Code
+The project mandates a "Documentation-as-Code" pattern to prevent drift between documentation, runtime artifacts, and core configuration. A single, human-readable source of truth (typically a YAML or Markdown file) MUST be used to programmatically generate related artifacts. This is enforced by the CI pipeline.
+
+**Canonical Examples:**
+1.  **Data Schemas:** `docs/system_contracts.yml` is used by `scripts/generate_schemas.py` to create the JSON Schema files used for runtime validation by the `executor`.
+2.  **User Guides:** `governance.yml` and `default_config.yml` are used by `scripts/generate_docs.py` to inject up-to-date keywords and model names into user-facing documentation like `prompting_guide.md`.
+3.  **Persona Manifest:** The individual `.persona.md` files are the source of truth used by `scripts/generate_manifest.py` to create the signed, machine-readable `persona_manifest.yml` used at runtime.
+
 
 ---
 
@@ -119,4 +128,19 @@ To ensure absolute build and installation reliability for non-Python data files 
 
 **Canonical Rule:** Any new non-Python data files that must be accessible by the installed package **MUST** be added to the `[tool.setuptools.package-data]` configuration in `pyproject.toml` to guarantee their inclusion.
 
+---
 
+## 9. Project Management & State
+**NEW:** To manage a portfolio of complex, multi-phase, AI-driven tasks, the project uses a "PMO-as-Code" (Project Management Office as Code) system.
+
+### 9.1. The PMO Directory
+The single source of truth for all project management is the `.ai_pmo/` directory at the project root.
+
+-   **`.ai_pmo/PROGRAM_STATE.md`**: This is the master portfolio dashboard. It provides a high-level, at-a-glance view of all active and planned projects, their status, and their priority.
+-   **`.ai_pmo/projects/`**: This directory contains the detailed "Project Charters" for each individual initiative (e.g., `P-001_JULES_INTEGRATION.md`).
+
+### 9.2. The Project Charter
+Each project charter is a Markdown file that serves as the complete, version-controlled plan for a specific initiative. It defines the goal, the multi-phase roadmap, the specialist personas assigned to each phase, and the current status.
+
+### 9.3. Control Mechanism
+The `core/pmo-1` persona is the designated agent responsible for maintaining the integrity of the PMO system. All status updates to the program dashboard and project charters should be performed by this persona to ensure consistency.

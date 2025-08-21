@@ -1,6 +1,6 @@
 # src/ai_assistant/plan_validator.py
 import yaml
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple
 from importlib import resources
 
 from .data_models import ExecutionPlan
@@ -17,7 +17,10 @@ def generate_plan_expectation(prompt: str) -> Optional[Dict[str, Any]]:
             return rule.get("expected_signature")
     return None # No specific rule triggered
 
-def check_plan_compliance(plan: ExecutionPlan, expectation: Dict[str, Any]) -> Tuple[bool, str]:
+def check_plan_compliance(
+    plan: ExecutionPlan, 
+    expectation: Dict[str, Any],
+    ) -> Tuple[bool, str]:
     """Validates a generated plan against an expected signature."""
     if not expectation:
         return (True, "") # No expectation, so any plan is compliant.
@@ -31,7 +34,7 @@ def check_plan_compliance(plan: ExecutionPlan, expectation: Dict[str, Any]) -> T
     allowed_tools = expectation.get("allowed_tools")
     if allowed_tools:
         for step in plan:
-            tool_name = step.get("tool_name")
+            tool_name = step.tool_name
             if tool_name not in allowed_tools:
                 return (False, f"Plan used a forbidden tool '{tool_name}'. Allowed tools are: {allowed_tools}.")
     

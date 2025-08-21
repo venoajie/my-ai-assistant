@@ -33,7 +33,7 @@ To prevent drift between the application's behavior and its documentation, some 
     ```bash
     python scripts/generate_docs.py
     ```
-3.  **Commit the Source:** Commit your changes to the template or `governance.yml` file. The CI pipeline will run the generator to verify that your changes are valid. **Do not commit the generated Markdown files** (e.g., `docs/prompting_guide.md`), as they should be listed in the root `.gitignore` file.
+3.  **Commit Both Source and Output:** You must commit your changes to the source file (e.g., the template) **and** the final generated Markdown file (e.g., `docs/prompting_guide.md`). The CI pipeline is configured to verify that the committed Markdown is perfectly in sync with the source templates, and it will fail if they do not match.
 
 ---
 
@@ -41,4 +41,3 @@ To prevent drift between the application's behavior and its documentation, some 
 
 -   **System Contracts:** The schemas for all major internal data objects are formally defined in **[`system_contracts.yml`](./system_contracts.yml)**.
 -   **Plugins:** To learn how to build your own plugins, please see the **[Extending with Plugins Guide](./plugins.md)**.
-```

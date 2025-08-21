@@ -22,8 +22,9 @@ from .session_manager import SessionManager
 from .utils.context_optimizer import ContextOptimizer
 from .utils.persona_validator import PersonaValidator
 from .utils.colors import Colors
-from .utils.signature import calculate_persona_signature
 from .utils.result_presenter import present_result
+from .utils.signature import calculate_persona_signature
+from .utils.symbol_extractor import extract_symbol_source
 
 logger = structlog.get_logger()
 
@@ -57,6 +58,11 @@ def list_available_plugins() -> List[str]:
     local_plugins_path = ai_settings.paths.local_plugins_dir
     if local_plugins_path.is_dir():
         for file_path in local_plugins_path.glob("*.py"):
+            # --- THIS IS THE FIX ---
+            # Explicitly ignore __init__.py files
+            if file_path.name == "__init__.py":
+                continue
+            
             # Use a special suffix to distinguish local plugins
             plugin_name = f"{file_path.stem.replace('_plugin', '')} (local)"
             if plugin_name not in discovered_plugins:
@@ -137,59 +143,73 @@ def is_manifest_invalid(manifest_path: Path):
 
     return False, "Manifest is valid and up-to-date."
 
-
 def build_file_context(
     files: List[str],
     query: str,
-    ) -> str:
-    
-    """Reads multiple files and formats them into a single context string."""
+    extract_symbols: Optional[List[List[str]]] = None,
+) -> str:
+    """Reads multiple files, formats them into a single context string, and provides clear logging."""
     if not files:
         return ""
+
+    symbol_map = {path: symbol for path, symbol in extract_symbols} if extract_symbols else {}
+    MAX_FILE_SIZE = ai_settings.general.max_file_size_mb * 1024 * 1024
     
-    MAX_FILE_SIZE = MAX_FILE_SIZE = ai_settings.general.max_file_size_mb * 1024 * 1024
     context_str = ""
-    logger.info(
-        "Attaching files to context...", 
-        count=len(files),
-        )
+    attached_files = []
+    skipped_files = [] # Store tuples of (path, reason)
+    
+    logger.info("Attaching files to context...", requested_count=len(files))
     optimizer = ContextOptimizer()
+
     for file_path_str in files:
         path = Path(file_path_str)
         if not path.exists():
-            logger.warning(
-                "File not found, skipping.", 
-                path=file_path_str,
-                )
+            skipped_files.append((file_path_str, "File not found"))
             continue
         
         if path.stat().st_size > MAX_FILE_SIZE:
-            print(f"   - {Colors.YELLOW}⚠️  Warning: File exceeds 5MB limit, skipping: {file_path_str}{Colors.RESET}")
+            skipped_files.append((file_path_str, f"Exceeds size limit of {ai_settings.general.max_file_size_mb}MB"))
             continue
 
+        content = ""
+        symbol_to_extract = symbol_map.get(file_path_str)
+        
         try:
+            if symbol_to_extract:
+                logger.debug("Performing surgical context pruning.", file=file_path_str, symbol=symbol_to_extract)
+                extracted_source = extract_symbol_source(path, symbol_to_extract)
+                if extracted_source:
+                    content = extracted_source
+                    logger.debug("Symbol extracted successfully.", symbol=symbol_to_extract)
+                else:
+                    logger.warning("Could not extract symbol, falling back to full file.", symbol=symbol_to_extract)
+                    content = path.read_text(encoding='utf-8')
+            else:
+                content = path.read_text(encoding='utf-8')
             
-            content = path.read_text(encoding='utf-8')
-
             compressed_content = optimizer.compress_file_context(
                 file_path=file_path_str,
-                content=content, 
+                content=content,
                 query=query,
             )
-
-            if len(compressed_content) < len(content):
-                logger.debug(
-                    "Compressed file for relevance", 
-                    path=file_path_str,
-                    )
-
+            
             context_str += f"<AttachedFile path=\"{file_path_str}\">\n{compressed_content}\n</AttachedFile>\n\n"
-            logger.info(
-                "Attached file",
-                path=file_path_str,
-                )
+            attached_files.append(file_path_str)
+
         except Exception as e:
-            print(f"   - {Colors.RED}❌ Error reading file {file_path_str}: {e}{Colors.RESET}")
+            skipped_files.append((file_path_str, f"Error reading file: {e}"))
+
+    # --- FINAL SUMMARY LOGGING ---
+    logger.info(
+        "File context processing complete.",
+        attached=len(attached_files),
+        skipped=len(skipped_files),
+        total=len(files)
+    )
+    # Log the details of any skipped files for clarity
+    for file_path, reason in skipped_files:
+        logger.warning("Skipped file", path=file_path, reason=reason)
             
     return context_str
 
@@ -321,6 +341,14 @@ async def async_main():
     parser = argparse.ArgumentParser(description='AI Assistant - Interactive Agent')
     parser.add_argument('--version', action='version', version=f'%(prog)s {metadata.version("my-ai-assistant")} (Config: v{ai_settings.config_version})')
     parser.add_argument('--list-personas', action='store_true', help='List available personas')
+    parser.add_argument(
+        '-e', '--extract-symbol',
+        dest='extract_symbols',
+        action='append',
+        nargs=2,
+        metavar=('FILE_PATH', 'SYMBOL_NAME'),
+        help="Extract only a specific class or function from a file for context. Use multiple times for multiple files."
+    )
     parser.add_argument('-f', '--file', dest='files', action='append', help='Attach a file to the context. Can be used multiple times.')
     parser.add_argument('--persona', help='The alias of the persona to use (e.g., core/SA-1).')
     parser.add_argument('--autonomous', action='store_true', help='Run in autonomous mode.')
@@ -379,10 +407,28 @@ async def async_main():
         sys.exit(0)
         
     if args.list_personas:
-        print(f"{Colors.BOLD}Built-in Personas:{Colors.RESET}")
-        for p in PersonaLoader().list_builtin_personas():
-            print(f" - {p}")
-        sys.exit(0) 
+        loader = PersonaLoader()
+        all_personas = loader.list_all_personas()
+        
+        if all_personas.get("project"):
+            print(f"{Colors.BOLD}Project-Local Personas (in .ai/personas):{Colors.RESET}")
+            for p in all_personas["project"]:
+                print(f" - {p}")
+        
+        if all_personas.get("user"):
+            print(f"{Colors.BOLD}User-Global Personas (in ~/.config/ai_assistant/personas):{Colors.RESET}")
+            for p in all_personas["user"]:
+                print(f" - {p}")
+
+        if all_personas.get("builtin"):
+            print(f"{Colors.BOLD}Built-in Personas:{Colors.RESET}")
+            for p in all_personas["builtin"]:
+                print(f" - {p}")
+
+        if not any(all_personas.values()):
+            print("No personas found.")
+
+        sys.exit(0)
         
     # --- Sanity checks now run only when proceeding with a query ---
     # Don't run sanity checks if we are just showing context

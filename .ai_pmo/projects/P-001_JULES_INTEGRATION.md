@@ -1,4 +1,4 @@
-# Project State: External Agent Integration (Jules)
+# Project Charter: P-001 - External Agent Integration (Jules)
 
 - **version**: 1.1
 - **status**: PENDING_HANDOFF_PREPARATION
@@ -14,14 +14,8 @@
 - **Inputs:** `pyproject.toml`, `README.md`
 - **Output:** A new `AGENTS.md` file.
 
-ai-instruction:
-(.venv) ubuntu@LAPTOP-KDN0MGVF:~/my-ai-assistance$ ai --persona core/amd-1 --output-dir ./ai_runs/generate-agents-md-v2 \
->   -f pyproject.toml \
->   "<ACTION>Analyze the attached pyproject.toml file. Based *only* on its content, generate a new AGENTS.md file that documents the canonical, machine-executable commands for installing dependencies, running tests, and running the application. Place the generated file in the workspace.</ACTION>"
-
-
 ### Phase 2: Handoff Preparation
-- **Objective:** Use the generated `AGENTS.md` to prepare a schema-validated `JULES_MANIFEST.json` for a sample task (e.g., creating a unit test).
+- **Objective:** Use the generated `AGENTS.md` to prepare a schema-validated `JULES_MANIFEST.json` for a sample task.
 - **Specialist:** `core/ia-1` (Integration Architect)
 - **Status:** **PENDING**
 - **Inputs:** An output package from `csa-1`, the `AGENTS.md` from Phase 1.
@@ -34,11 +28,11 @@ ai-instruction:
 
 ### Phase 4: Result Ingestion & Debugging
 - **Objective:** Create and test the personas required to parse the results from Jules and debug any failures.
-- **Specialist:** `core/pa-1` (Persona Architect) to build `jri-1` and integrate `da-1`.
+- **Specialist:** `core/pa-1` (Persona Architect)
 - **Status:** BLOCKED (depends on Phase 3)
 
 ---
 ## Current Task Brief
-- **Task ID:** P2-T1
+- **Task ID:** P1-P2-T1
 - **Assigned To:** `core/ia-1`
-- **Objective:** Take a sample implementation package and the project's `AGENTS.md` file, and generate a validated `JULES_MANIFEST.json`. This will test the handoff preparation workflow.
+- **Objective:** Take a sample implementation package and the project's `AGENTS.md` file, and generate a validated `JULES_MANIFEST.json`.

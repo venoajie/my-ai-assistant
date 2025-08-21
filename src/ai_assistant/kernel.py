@@ -5,34 +5,25 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
+import time 
 
 import structlog
 
 from .config import ai_settings
 from .utils.context_optimizer import ContextOptimizer
+from .utils.colors import Colors
 from .persona_loader import PersonaLoader
 from .plan_validator import generate_plan_expectation, check_plan_compliance
 from .planner import Planner
 from .prompt_builder import PromptBuilder
-from .response_handler import ResponseHandler
+from .response_handler import ResponseHandler  # Still needed for synthesis
 from .tools import TOOL_REGISTRY
 from .data_models import ExecutionPlan
+from .data_models import ExecutionPlan, CritiqueResponse
+from .llm_client_factory import get_instructor_client 
 
 logger = structlog.get_logger(__name__)
-
-async def _inject_project_context(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Finds and injects content from files specified in the configuration."""
-    for filename in ai_settings.general.auto_inject_files:
-        file_path = Path.cwd() / filename
-        if file_path.exists():
-            print(f"ℹ️  Found '{filename}'. Injecting project context...")
-            try:
-                content = file_path.read_text(encoding='utf-8')
-                context_str = f"<InjectedProjectContext file_path='{filename}'>\n{content}\n</InjectedProjectContext>"
-                history.insert(0, {"role": "system", "content": context_str})
-            except Exception as e:
-                print(f"⚠️  Warning: Could not read or inject {filename}. Reason: {e}")
-    return history
+# src/ai_assistant/kernel.py
 
 async def orchestrate_agent_run(
     query: str,
@@ -41,8 +32,6 @@ async def orchestrate_agent_run(
     is_autonomous: bool = False,
     output_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
-
-    history = await _inject_project_context(history)
 
     metrics = {"timings": {}, "tokens": {"planning": {}, "critique": {}, "synthesis": {}}}
     timings = metrics["timings"]
@@ -58,41 +47,40 @@ async def orchestrate_agent_run(
             persona_directives, persona_context, allowed_tools = loader.load_persona_content(persona_alias)
         except (RecursionError, FileNotFoundError) as e:
             error_msg = f"🛑 HALTING: Could not load persona '{persona_alias}'. Reason: {e}"
-            print(error_msg, file=sys.stderr)
+            logger.error("Persona loading failed", persona=persona_alias, error=str(e))
             return {"response": error_msg, "metrics": metrics}
 
-    # --- PRE-PROCESSING & COMPRESSION LOGIC ---
+    # --- PRE-PROCESSING LOGIC ---
     optimizer = ContextOptimizer()
-    optimized_query = optimizer.trim_to_limit(query)
-    if len(optimized_query) < len(query):
-        print(f"ℹ️  Context has been truncated to fit the token limit.")
-
-    use_compact_protocol = False
+    
     threshold = ai_settings.context_optimizer.prompt_compression_threshold
-    if threshold > 0:
-        temp_history_str = " ".join(turn['content'] for turn in history)
-        estimated_input = query + temp_history_str
-        estimated_tokens = optimizer.estimate_tokens(estimated_input)
-        if estimated_tokens > threshold:
-            print(f"ℹ️  Context size ({estimated_tokens} tokens) exceeds threshold ({threshold}). Using compact prompt format for planning.")
-            use_compact_protocol = True
+
+    # --- THIS LOGIC NOW RUNS *AFTER* POTENTIAL DISTILLATION ---
+    use_compact_protocol = False
+    # Re-estimate with the potentially shorter query
+    current_history_str = " ".join(turn['content'] for turn in history)
+    current_input = query + current_history_str
+    current_tokens = optimizer.estimate_tokens(current_input)
+    if threshold > 0 and current_tokens > threshold:
+        logger.info("Context still large after distillation. Using compact prompt format.", tokens=current_tokens)
+        use_compact_protocol = True
 
     # --- PLANNING & UNIFIED VALIDATION LOOP ---
-    plan_expectation = generate_plan_expectation(query)
-    if plan_expectation:
-        print(f"ℹ️  Compliance rule triggered. Expected plan signature: {plan_expectation}")
-        
+    plan_expectation = generate_plan_expectation(query) # Always validate against the ORIGINAL user intent
+    
     planner = Planner()
     max_retries = 2
+    plan = None
     for attempt in range(max_retries):
         plan, planning_result = await planner.create_plan(
-             optimized_query,
+             query,
              history,
              persona_context,
              use_compact_protocol,
              is_output_mode=(output_dir is not None),
+             plan_expectation=plan_expectation, 
          )
-
+        
      # --- Explicit check for planner failure ---
         if plan is None:
             # The planner itself failed critically. No point in retrying.
@@ -107,8 +95,8 @@ async def orchestrate_agent_run(
         persona_tools_valid = True
         persona_reason = ""
         if allowed_tools:
-            for step in plan: # <--- This now iterates over plan.root
-                if step.tool_name not in allowed_tools: # <--- Use attribute access
+            for step in plan: # This correctly iterates over plan.steps due to __iter__
+                if step.tool_name not in allowed_tools:
                     persona_tools_valid = False
                     persona_reason = (
                         f"Plan violates persona rules. Used forbidden tool '{step.tool_name}'. "
@@ -137,7 +125,8 @@ async def orchestrate_agent_run(
     prompt_builder = PromptBuilder()
 
     # --- DIRECT RESPONSE (NO TOOLS) ---
-    if not plan or not plan.root or all(not step.tool_name for step in plan):
+    # --- MODIFIED: Check plan.steps instead of plan.root ---
+    if not plan or not plan.steps or all(not step.tool_name for step in plan):
         print("📝 No tool execution required. Generating direct response...")
         direct_prompt = prompt_builder.build_synthesis_prompt(
             query=query,
@@ -155,8 +144,9 @@ async def orchestrate_agent_run(
 
     # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
     critique = None
-    if plan and plan.root and any(step.tool_name for step in plan):
+    if plan and plan.steps and any(step.tool_name for step in plan):
         print("🕵️  Submitting plan for adversarial validation...")
+        start_time = time.monotonic()
         try:
             critic_loader = PersonaLoader()
             critic_alias = ai_settings.general.critique_persona_alias
@@ -168,17 +158,35 @@ async def orchestrate_agent_run(
                 persona_context=critic_context
             )
             
-            response_handler = ResponseHandler()
-            critique_model = ai_settings.model_selection.critique
+            # --- REFACTORED CRITIC CALL ---
+            critique_model_name = ai_settings.model_selection.critique
+            critique_client = get_instructor_client(critique_model_name)
             critique_gen_config = ai_settings.generation_params.critique.model_dump(exclude_none=True)
-            critique_result = await response_handler.call_api(
-                critique_prompt, 
-                model=critique_model,
-                generation_config=critique_gen_config
-            )
-            critique = critique_result["content"]
-            metrics["timings"]["critique"] = critique_result["duration"]
-            metrics["tokens"]["critique"] = critique_result["tokens"]     
+
+            provider_name_str = str(critique_client.provider).lower()
+            if "gemini" in provider_name_str:
+                critique_response = await critique_client.create(
+                    response_model=CritiqueResponse,
+                    messages=[{"role": "user", "content": critique_prompt}],
+                    generation_config=critique_gen_config,
+                )
+            else: # Assumes OpenAI-compatible
+                critique_response = await critique_client.chat.completions.create(
+                    model=critique_model_name,
+                    response_model=CritiqueResponse,
+                    messages=[{"role": "user", "content": critique_prompt}],
+                    **critique_gen_config,
+                )
+
+            critique = critique_response.critique
+            # NOTE: Token calculation is now an estimation as we don't get it from instructor.
+            # This is an acceptable trade-off for architectural consistency.
+            optimizer = ContextOptimizer()
+            prompt_tokens = optimizer.estimate_tokens(critique_prompt)
+            response_tokens = optimizer.estimate_tokens(critique)
+            
+            metrics["timings"]["critique"] = time.monotonic() - start_time
+            metrics["tokens"]["critique"] = {"prompt": prompt_tokens, "response": response_tokens, "total": prompt_tokens + response_tokens}
             print("   ✅ Critique received.")
         except Exception as e:
             print(f"   - ⚠️ Warning: Could not perform plan validation. Reason: {e}")
@@ -200,9 +208,9 @@ async def orchestrate_agent_run(
     any_risky_action_denied = False
 
 
-    for i, step in enumerate(plan): # <--- This now iterates over plan.root
+    for i, step in enumerate(plan): # This correctly iterates over plan.steps due to __iter__
         step_num = i + 1
-        if step.condition: # <--- Use attribute access
+        if step.condition:
             cond = step.condition
             from_step_num = cond.from_step
             
@@ -219,8 +227,8 @@ async def orchestrate_agent_run(
                     print(f"  - Skipping Step {step_num} because condition was not met.")
                     continue
         
-        tool_name = step.tool_name # <--- Use attribute access
-        args = step.args or {} # <--- Use attribute access
+        tool_name = step.tool_name
+        args = step.args or {}
         print(f"  - Executing Step {step_num}: {tool_name}({args})")
         
         tool = TOOL_REGISTRY.get_tool(tool_name)
@@ -230,6 +238,12 @@ async def orchestrate_agent_run(
                     print("\n--- 🧐 ADVERSARIAL CRITIQUE ---")
                     print(critique)
                     print("----------------------------")
+                    
+                # --- CRITICAL REMINDER ---
+                print(f"\n{Colors.YELLOW}{Colors.BOLD}⚠️  DISCLAIMER: Review the plan and critique carefully.{Colors.RESET}")
+                print(f"{Colors.YELLOW}   The AI can make mistakes or generate incorrect code.{Colors.RESET}")
+                print(f"{Colors.YELLOW}   You are responsible for approving this action.{Colors.RESET}")
+                    
                 confirm = await asyncio.to_thread(input, "      Proceed? [y/N]: ")
                 if confirm.lower().strip() != 'y':
                     print("    🚫 Action denied by user. Skipping step.")
@@ -320,7 +334,7 @@ async def orchestrate_agent_run(
     }
 
 async def _handle_output_first_mode(
-    plan: List[Dict[str, Any]],
+    plan: ExecutionPlan,
     persona_alias: str,
     metrics: Dict[str, Any],
     output_dir_str: str,

@@ -21,9 +21,21 @@ prompting_best_practices:
     - "apply"
     - "generate"
     - "implement"
-    
+  
 # This new section maps user intent keywords to expected plan structures.
 plan_compliance_rules:
+  # This rule MUST come BEFORE the general "Code Modification" rule.
+  - intent: "Create Service from Template"
+    trigger_keywords:
+      - "from the 'receiver' service as a template"
+      - "use the attached files... as a template"
+      - "create... from template"
+      - "new service from template"
+    expected_signature:
+      max_steps: 1
+      allowed_tools:
+        - "create_service_from_template"
+
   - intent: "Code Modification Workflow"
     # Keywords that trigger this rule.
     trigger_keywords:
@@ -40,7 +52,7 @@ plan_compliance_rules:
       max_steps: 1
       allowed_tools:
         - "execute_refactoring_workflow"
-  
+    
   - intent: "Simple File Read"
     trigger_keywords:
       - "read file"
