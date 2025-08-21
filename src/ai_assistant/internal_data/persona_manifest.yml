@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-20T14:14:21.478502+00:00'
+generated_at_utc: '2025-08-21T03:50:14.234985+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: c44f29b08a27c6ca16cca790276bbc3f6b329dfb055bafb99310dd7bd07571c1
+validation_signature: 5e1fa4ec655807f0bf100ab92edf95ca84e8560d08a1248759f22a8954c56f10
 personas:
 - alias: core/arc-1
   title: Architecture Reviewer & Consultant
@@ -114,9 +114,6 @@ personas:
   title: Systems Integrity Analyst
   description: Audits system configurations and state to ensure they align with a
     declared 'source of truth' document.
-- alias: domains/programming/simple-adder-1
-  title: Simple Function Adder
-  description: A specialist agent that adds a new function to an existing Python file.
 - alias: domains/programming/sre-1
   title: Site Reliability Engineer
   description: Optimizes the host environment, container runtime, and infrastructure
