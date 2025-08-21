@@ -10,7 +10,6 @@ class SessionManager:
     """Manages stateful conversation sessions with robust integrity checks."""
     
     def __init__(self):
-        # Use Path.cwd() to ensure the path is relative to the project root, not user's home
         self.session_dir = ai_settings.paths.sessions_dir
         self.session_dir.mkdir(parents=True, exist_ok=True)
         
@@ -27,13 +26,16 @@ class SessionManager:
         self, 
         history: List[Dict[str, Any]], 
         role: str, 
-        content: str
+        content: str,
     ) -> List[Dict[str, Any]]:
         """Appends a new message to the history."""
         history.append({"role": role, "content": content})
         return history
 
-    def load_session(self, session_id: str) -> Optional[List[Dict[str, Any]]]:
+    def load_session(
+        self, 
+        session_id: str,
+        ) -> Optional[List[Dict[str, Any]]]:
         """Loads a session with enhanced integrity checking, sanitization, and recovery."""
         session_path = self._get_session_path(session_id)
         
@@ -103,14 +105,23 @@ class SessionManager:
             print(f"❌ Error: An unexpected error occurred while loading session {session_id}: {e}")
             return None
 
-    def save_session(self, session_id: str, history: List[Dict[str, Any]]):
+    def save_session(
+        self, 
+        session_id: str, 
+        history: List[Dict[str, Any]],
+        ):
         """Saves the conversation history with atomic write and backup."""
         session_path = self._get_session_path(session_id)
         temp_path = session_path.with_suffix('.tmp')
         
         try:
             with open(temp_path, 'w', encoding='utf-8') as f:
-                json.dump(history, f, indent=2, ensure_ascii=False)
+                json.dump(
+                    history, 
+                    f, 
+                    indent=2,
+                    ensure_ascii=False,
+                    )
             
             # Atomically replace the old session file with the new one
             temp_path.replace(session_path)

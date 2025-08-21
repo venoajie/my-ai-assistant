@@ -42,19 +42,32 @@ class ResponseHandler:
         start_time = time.monotonic()
         
         # Centralized function to create a consistent error response
-        def _create_error_response(content: str, provider: str) -> Dict[str, Any]:
+        def _create_error_response(
+            content: str, 
+            provider: str,
+            ) -> Dict[str, Any]:
             return {
                 "content": content,
                 "duration": time.monotonic() - start_time,
                 "provider_name": provider,
-                "tokens": {"prompt": 0, "response": 0, "total": 0}
+                "tokens": {
+                    "prompt": 0, 
+                    "response": 0,
+                    "total": 0,
+                    }
             }
 
         if model not in self.model_to_provider_map:
-            return _create_error_response(f"❌ ERROR: Model '{model}' is not configured.", "internal")
+            return _create_error_response(
+                f"❌ ERROR: Model '{model}' is not configured.", 
+                "internal",
+                )
         
         if not prompt or not prompt.strip():
-            return _create_error_response("❌ ERROR: Empty prompt provided to call_api.", "internal")
+            return _create_error_response(
+                "❌ ERROR: Empty prompt provided to call_api.", 
+                "internal",
+                )
 
         provider_info = self.model_to_provider_map[model]
         provider_name = provider_info["provider_name"]
@@ -68,9 +81,21 @@ class ResponseHandler:
 
                     content = ""
                     if provider_name == "gemini":
-                        content = await self._call_gemini(session, prompt, model, provider_config, final_gen_config)
+                        content = await self._call_gemini(
+                            session, 
+                            prompt,
+                            model,
+                            provider_config, 
+                            final_gen_config,
+                            )
                     elif provider_name == "deepseek":
-                        content = await self._call_deepseek(session, prompt, model, provider_config, final_gen_config)
+                        content = await self._call_deepseek(
+                            session,
+                            prompt, 
+                            model, 
+                            provider_config, 
+                            final_gen_config,
+                            )
                     else:
                         content = f"❌ ERROR: No call implementation for provider '{provider_name}'."
 
@@ -104,7 +129,10 @@ class ResponseHandler:
                     await asyncio.sleep(wait_time)
 
         # Fallback in case the loop exits unexpectedly
-        return _create_error_response(f"❌ ERROR: API call for model {model} failed unexpectedly after {max_retries} attempts.", provider_name)
+        return _create_error_response(
+            f"❌ ERROR: API call for model {model} failed unexpectedly after {max_retries} attempts.", 
+            provider_name,
+            )
 
     async def _call_gemini(
         self, 
@@ -125,7 +153,11 @@ class ResponseHandler:
             "generationConfig": gen_config,
             }
         
-        async with session.post(api_url, headers=headers, json=request_body) as response:
+        async with session.post(
+            api_url, 
+            headers=headers,
+            json=request_body,
+            ) as response:
             response.raise_for_status()
             response_data = await response.json()
         
@@ -158,7 +190,7 @@ class ResponseHandler:
             "model": model,
             "messages": [
                 {"role": "user", 
-                 "content": prompt
+                 "content": prompt,
                  }
                 ], 
             "stream": False, 

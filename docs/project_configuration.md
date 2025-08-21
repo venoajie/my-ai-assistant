@@ -16,14 +16,14 @@ A well-configured project might have a `.ai_config.yml` file that looks like thi
 
 ```yaml
 # .ai_config.yml
-# This is the configuration manifest for our project.
 
 general:
   # These files will be automatically attached to every prompt.
   auto_inject_files:
-    - "PROJECT_BLUEPRINT_V2.5.md"
+    - "PROJECT_BLUEPRINT.md"
     - "AMBIGUITY_REPORT.md"
     - "AGENTS.md"
+    - "etc"
 ```
 
 **What this achieves:**

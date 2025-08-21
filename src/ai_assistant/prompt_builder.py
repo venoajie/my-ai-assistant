@@ -23,7 +23,10 @@ class PromptBuilder:
 
         Builds the prompt for the Planner, instructing it to create a JSON tool plan.
         """
-        history_section = self._build_history_section(history, use_compact_format=use_compact_protocol)
+        history_section = self._build_history_section(
+            history,
+            use_compact_format=use_compact_protocol,
+            )
         persona_section = ""
         if persona_content:
             persona_section = f"<PersonaInstructions>\n{persona_content}\n</PersonaInstructions>\n\n"
@@ -87,7 +90,7 @@ Based on the final user request and all provided context, generate the plan.
         self,
         query: str,
         plan: ExecutionPlan,
-        persona_context: str
+        persona_context: str,
     ) -> str:
         """Builds the prompt for the Plan Validation Analyst."""
 
@@ -124,7 +127,7 @@ Critically evaluate this plan based on your operational protocol. Identify unsta
         observations: List[str],
         persona_context: str,
         directives: Optional[str] = None,
-        use_compact_protocol: bool = False
+        use_compact_protocol: bool = False,
         ) -> str:
         """
         Builds the prompt for the Synthesizer.
@@ -141,7 +144,10 @@ Critically evaluate this plan based on your operational protocol. Identify unsta
             raise ValueError("`persona_context` is a mandatory argument for build_synthesis_prompt.")
 
         directives_section = directives or ""
-        history_section = self._build_history_section(history, use_compact_format=use_compact_protocol)
+        history_section = self._build_history_section(
+            history, 
+            use_compact_format=use_compact_protocol,
+            )
         observation_section = "\n".join(observations)
         persona_context_section = f"<SystemPrompt>\n{persona_context}\n</SystemPrompt>"
 
