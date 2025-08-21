@@ -77,12 +77,13 @@ This process ensures you always have the final say before any file is modified.
 
 ## Next Steps: Unlocking Project-Specific Power
 
-You've now mastered the basic workflows. The true power of the AI Assistant comes from teaching it about **your specific project**. You do this by creating project-local experts and knowledge bases.
+You have now mastered the basic workflows. The true power of the AI Assistant comes from transforming it from a generic tool into a **specialized co-pilot for your specific project.**
 
-This is the best-practice workflow used by advanced teams to turn the generic assistant into a specialized co-pilot for their codebase.
+This is the best-practice workflow used by advanced teams. By creating project-local experts and knowledge bases, you can automate complex, domain-specific tasks with much higher reliability.
 
--   **First, learn how to create project-specific experts:**
+-   **First, learn how to create project-specific experts that are shared with your team:**
     **[➡️ Guide: The Persona System](./personas.md)**
 
--   **Then, learn how to inject project-specific knowledge:**
-    **[➡️ Guide: Extending with Plugins](./plugins.md)**
+-   **Then, learn how to automatically provide these experts with the knowledge they need to succeed:**
+    **[➡️ Guide: Project-Specific Configuration](./project_configuration.md)**
+```

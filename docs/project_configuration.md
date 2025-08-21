@@ -41,3 +41,20 @@ general:
 3.  **List Your Canonical Files:** Add the paths to the files you want to be automatically included. These paths should be relative to your project's root directory.
 
 This simple configuration is the single most effective step you can take to create a powerful, project-aware AI workflow.
+
+## Putting It All Together: A Complete Example
+
+The true power of the AI Assistant is unlocked when you combine project configuration, local personas, and local plugins. Here is what a best-practice setup looks like in a project's `.ai/` directory:
+
+```
+.ai/
+├── plugins/
+│   └── my_project_plugin.py  # Provides project-specific knowledge
+└── personas/
+    └── domains/
+        └── my_project/
+            └── data_analyst-1.persona.md # A project-specific expert
+```
+
+With this structure, you can create a `.ai_config.yml` that automatically injects your project's most important documents. This creates a powerful foundation where any developer on your team can easily call the right expert (`--persona`) with the right knowledge (`--context`) and the right architectural context (`auto_inject_files`) for any given task.
+```

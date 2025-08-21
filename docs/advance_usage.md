@@ -52,7 +52,7 @@ This mode allows the assistant to complete an entire task—including making fil
 
 **Example: Autonomous Refactoring**
 ```bash
-ai --new-session --persona domains/programming/rce-1 --autonomous \
+ai --new-session --persona domains/programming/coder-1 --autonomous \
   -f src/services/distributor.py \
   "Refactor the 'distributor' service in the attached file to improve its logging and add error handling. When done, commit the changes to a new git branch named 'refactor/distributor-logging'."
 ```
@@ -66,11 +66,12 @@ Before running a complex automation script, it is a best practice to ensure your
 ```bash
 # WARNING: These commands will permanently delete all uncommitted changes and untracked files.
 
-# 1. Switch to your main development branch (e.g., 'develop')
-git switch develop
+# 1. Switch to your main development branch (e.g., 'main' or 'develop')
+git switch main
 
 # 2. Reset your local files to be an exact match of the last commit
 git reset --hard HEAD
 
 # 3. Remove all untracked files and directories (like leftover ai_runs/)
-git clean -df
+git clean -dfx
+```
