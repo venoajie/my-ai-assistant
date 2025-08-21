@@ -14,6 +14,16 @@ pip install my-ai-assistant
 pip install -e .
 ```
 
+## A Critical Note on API Keys, Costs, and Security
+
+> **IMPORTANT: You are responsible for your API keys and any costs incurred.**
+
+The AI Assistant works by sending your prompts and code to third-party Large Language Model (LLM) providers (like Google Gemini or DeepSeek). To do this, you must provide an API key from that provider.
+
+-   **Cost:** API calls are not free. Complex tasks or large files can result in significant token usage and incur costs on your provider account. **Always monitor your API usage and set spending limits** on the provider's platform.
+-   **Security:** Treat your API keys like passwords. The assistant loads them from environment variables. Do not commit them to your code or share them publicly.
+-   **Data Privacy:** Be aware that the content of the files you attach (`-f`) and your prompts are sent to the third-party LLM provider. **Do not send sensitive, private, or proprietary information** through this tool.
+
 ## Your First Command: Read-Only Analysis
 
 Let's start with a simple, safe task that doesn't modify any files. We'll ask a specialist persona to review a file for us.

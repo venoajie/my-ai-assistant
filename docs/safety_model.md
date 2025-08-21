@@ -14,7 +14,20 @@ The mechanisms described below are designed to give you the information and cont
 
 ## Legal Disclaimer
 
-This software is provided on an "AS IS" basis. The author assumes no liability for any damages, data loss, or other incidents caused by its operation. By using this software, you accept full responsibility for its outcomes.
+This software is provided on an "AS IS" basis. The author assumes no liability for any damages, data loss, or other incidents caused by its operation. By using this software, you accept full responsibility for its outcomes. For the complete legal terms, refer to the [NOTICE](../../NOTICE) file.
+
+---
+
+## Data Privacy Warning
+
+> **Your code, prompts, and attached file contents will be sent to third-party API providers.**
+
+The AI Assistant functions by sending data to external Large Language Model (LLM) providers (e.g., Google, DeepSeek, OpenAI). This means that any information you include in a prompt or attach via the `-f` flag will leave your local machine and be processed on their servers.
+
+-   **Do not send sensitive data:** This includes passwords, private keys, personally identifiable information (PII), or any proprietary source code you are not authorized to share.
+-   **Review provider policies:** You are subject to the terms of service and privacy policies of the third-party LLM provider whose API key you are using.
+
+The AI Assistant application itself does not store or log your prompt data, but it cannot control what happens to the data once it is sent to the external provider.
 
 ---
 
