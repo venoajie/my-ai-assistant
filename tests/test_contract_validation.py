@@ -38,6 +38,7 @@ class TestContractValidation(unittest.TestCase):
         """
 
         try:
+            # Assuming you have a _test_data package within your main package for test assets
             fixture_path = resources.files('ai_assistant._test_data.fixtures').joinpath('sample_manifest.json')
             with fixture_path.open('r', encoding='utf-8') as f:
                 fixture_data = json.load(f)
@@ -78,8 +79,9 @@ class TestContractValidation(unittest.TestCase):
             }
         ]
 
-        # Create an instance of the ExecutionPlan model
-        execution_plan = ExecutionPlan(root=sample_plan_data)
+        # --- THIS IS THE FIX ---
+        # Create an instance of the ExecutionPlan model using the 'steps' field.
+        execution_plan = ExecutionPlan(steps=sample_plan_data)
         
         result = asyncio.run(kernel._handle_output_first_mode(
             plan=execution_plan,
