@@ -2,6 +2,22 @@
 
 This document explains the safety-first design principles that govern how the AI Assistant interacts with your file system. Understanding this model is critical for using the tool safely and effectively.
 
+## The First Principle: The AI is a Tool, Not an Oracle
+
+> **CRITICAL: The AI can and will make mistakes.**
+
+The AI Assistant is a powerful tool for automating tasks, but it is not infallible. It can misinterpret your intent, hallucinate facts, generate incorrect code, or produce plans that have unintended side effects.
+
+**You, the user, are the final and most important part of the safety system.** Your role is to act as a skeptical reviewer. Always read the AI's proposed plan and the adversarial critique carefully before granting approval. You are ultimately responsible for the actions performed on your system.
+
+The mechanisms described below are designed to give you the information and control you need to make informed decisions.
+
+## Legal Disclaimer
+
+This software is provided on an "AS IS" basis. The author assumes no liability for any damages, data loss, or other incidents caused by its operation. By using this software, you accept full responsibility for its outcomes.
+
+---
+
 ## The System's Safety Contract
 
 The AI Assistant operates on a fundamental "Safety Contract" with you, the user:
@@ -9,8 +25,6 @@ The AI Assistant operates on a fundamental "Safety Contract" with you, the user:
 > **The AI is only ever allowed to *propose* changes. The user must always give explicit, manual approval before any of those changes are applied to the local file system or Git repository.**
 
 This contract is non-negotiable and is enforced by two primary mechanisms.
-
----
 
 ### Mechanism 1: The Two-Stage Workflow (Recommended)
 

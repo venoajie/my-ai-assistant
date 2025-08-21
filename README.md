@@ -4,6 +4,12 @@ Welcome to the AI Assistant, a command-line tool designed to be your collaborati
 
 The assistant's power comes from its **Persona System** and a **safety-first design**, which allows you to confidently delegate complex tasks to specialized AI agents.
 
+## Disclaimer of Liability
+
+**This software is provided "AS IS" and you use it at your own risk.**
+
+The author is not responsible for any loss, damage, incidents, or any other consequences that may arise from the use of this code. The AI can generate incorrect or harmful content, and the file system operations can lead to data loss if not used carefully. By using this software, you agree that you are solely responsible for any outcomes. 
+
 ## Key Features
 
 -   **Expert Persona System:** Assign tasks to pre-built expert profiles for higher-quality, consistent results.
