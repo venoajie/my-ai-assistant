@@ -69,11 +69,12 @@ async def orchestrate_agent_run(
     plan = None
     for attempt in range(max_retries):
         plan, planning_result = await planner.create_plan(
-             query, # Use the new, potentially distilled query
+             query,
              history,
              persona_context,
              use_compact_protocol,
              is_output_mode=(output_dir is not None),
+             plan_expectation=plan_expectation, 
          )
         
      # --- Explicit check for planner failure ---
