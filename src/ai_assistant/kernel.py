@@ -19,6 +19,7 @@ from .tools import TOOL_REGISTRY
 from .data_models import ExecutionPlan
 
 logger = structlog.get_logger(__name__)
+# src/ai_assistant/kernel.py
 
 async def orchestrate_agent_run(
     query: str,
@@ -89,8 +90,8 @@ async def orchestrate_agent_run(
         persona_tools_valid = True
         persona_reason = ""
         if allowed_tools:
-            for step in plan: # <--- This now iterates over plan.root
-                if step.tool_name not in allowed_tools: # <--- Use attribute access
+            for step in plan: # This correctly iterates over plan.steps due to __iter__
+                if step.tool_name not in allowed_tools:
                     persona_tools_valid = False
                     persona_reason = (
                         f"Plan violates persona rules. Used forbidden tool '{step.tool_name}'. "
@@ -119,7 +120,8 @@ async def orchestrate_agent_run(
     prompt_builder = PromptBuilder()
 
     # --- DIRECT RESPONSE (NO TOOLS) ---
-    if not plan or not plan.root or all(not step.tool_name for step in plan):
+    # --- MODIFIED: Check plan.steps instead of plan.root ---
+    if not plan or not plan.steps or all(not step.tool_name for step in plan):
         print("📝 No tool execution required. Generating direct response...")
         direct_prompt = prompt_builder.build_synthesis_prompt(
             query=query,
@@ -137,7 +139,8 @@ async def orchestrate_agent_run(
 
     # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
     critique = None
-    if plan and plan.root and any(step.tool_name for step in plan):
+    # --- MODIFIED: Check plan.steps instead of plan.root ---
+    if plan and plan.steps and any(step.tool_name for step in plan):
         print("🕵️  Submitting plan for adversarial validation...")
         try:
             critic_loader = PersonaLoader()
@@ -182,9 +185,9 @@ async def orchestrate_agent_run(
     any_risky_action_denied = False
 
 
-    for i, step in enumerate(plan): # <--- This now iterates over plan.root
+    for i, step in enumerate(plan): # This correctly iterates over plan.steps due to __iter__
         step_num = i + 1
-        if step.condition: # <--- Use attribute access
+        if step.condition:
             cond = step.condition
             from_step_num = cond.from_step
             
@@ -201,8 +204,8 @@ async def orchestrate_agent_run(
                     print(f"  - Skipping Step {step_num} because condition was not met.")
                     continue
         
-        tool_name = step.tool_name # <--- Use attribute access
-        args = step.args or {} # <--- Use attribute access
+        tool_name = step.tool_name
+        args = step.args or {}
         print(f"  - Executing Step {step_num}: {tool_name}({args})")
         
         tool = TOOL_REGISTRY.get_tool(tool_name)
@@ -302,7 +305,7 @@ async def orchestrate_agent_run(
     }
 
 async def _handle_output_first_mode(
-    plan: List[Dict[str, Any]],
+    plan: ExecutionPlan,
     persona_alias: str,
     metrics: Dict[str, Any],
     output_dir_str: str,
