@@ -1,6 +1,6 @@
 # src/ai_assistant/data_models.py
 from typing import List, Dict, Any, Optional, Literal
-from pydantic import BaseModel, Field, RootModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from .tools import TOOL_REGISTRY
 
@@ -34,26 +34,33 @@ class PlanStep(BaseModel):
         return self
 
 
-class ExecutionPlan(RootModel):
+class ExecutionPlan(BaseModel):
     """The root model for an execution plan, which is a list of steps."""
-    root: List[PlanStep]
+    steps: List[PlanStep] = Field(..., description="A list of sequential steps to execute.")
 
     @model_validator(mode='before')
     @classmethod
-    def wrap_single_step_in_list(cls, data: Any) -> Any:
+    def handle_llm_edge_cases(cls, data: Any) -> Any:
         """
-        Handles the common LLM mistake of returning a single dictionary for a single-step plan.
-        If the input is a dictionary, it wraps it in a list before further validation.
+        Handles two common LLM mistakes:
+        1. Returning a single dictionary for a single-step plan.
+        2. Returning a raw list instead of a dictionary with a 'steps' key.
         """
-        if isinstance(data, dict):
-            return [data]
+        # Case 1: LLM returns a raw list `[...]` instead of `{"steps": [...]}`
+        if isinstance(data, list):
+            return {"steps": data}
+        
+        # Case 2: LLM returns a single step object `{...}` instead of `{"steps": [{...}]}`
+        if isinstance(data, dict) and "steps" not in data:
+            return {"steps": [data]}
+            
         return data
 
     def __iter__(self):
-        return iter(self.root)
+        return iter(self.steps)
 
     def __getitem__(self, item):
-        return self.root[item]
+        return self.steps[item]
     
     def __len__(self):
-        return len(self.root)
+        return len(self.steps)
