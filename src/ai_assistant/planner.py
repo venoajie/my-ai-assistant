@@ -45,8 +45,6 @@ class Planner:
         else:
             raise NotImplementedError(f"Planning is not implemented for provider: '{self.provider_name}'")
 
-class Planner:
-
     async def create_plan(
         self,
         query: str,
