@@ -10,6 +10,7 @@ import structlog
 
 from .config import ai_settings
 from .utils.context_optimizer import ContextOptimizer
+from .utils.colors import Colors
 from .persona_loader import PersonaLoader
 from .plan_validator import generate_plan_expectation, check_plan_compliance
 from .planner import Planner
@@ -216,6 +217,12 @@ async def orchestrate_agent_run(
                     print("\n--- 🧐 ADVERSARIAL CRITIQUE ---")
                     print(critique)
                     print("----------------------------")
+                    
+                # --- CRITICAL REMINDER ---
+                print(f"\n{Colors.YELLOW}{Colors.BOLD}⚠️  DISCLAIMER: Review the plan and critique carefully.{Colors.RESET}")
+                print(f"{Colors.YELLOW}   The AI can make mistakes or generate incorrect code.{Colors.RESET}")
+                print(f"{Colors.YELLOW}   You are responsible for approving this action.{Colors.RESET}")
+                    
                 confirm = await asyncio.to_thread(input, "      Proceed? [y/N]: ")
                 if confirm.lower().strip() != 'y':
                     print("    🚫 Action denied by user. Skipping step.")
