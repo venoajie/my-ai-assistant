@@ -9,6 +9,8 @@ from typing import List, Dict, Any, Tuple
 
 from ._security_guards import SHELL_COMMAND_BLOCKLIST
 from .response_handler import ResponseHandler
+from .config import ai_settings
+
 
 # --- The base Tool class MUST be defined first and be async ---
 class Tool:
@@ -108,8 +110,7 @@ class RefactorFileContentTool(Tool):
 Modified Code:"""
 
             handler = ResponseHandler()
-            # NOTE: Ensure this model is configured in your default_config.yml
-            synthesis_model = "gemini-2.5-pro-latest" 
+            synthesis_model =  ai_settings.model_selection.synthesis
             result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
             
             modified_content = result["content"].strip()
@@ -133,7 +134,14 @@ class ExecuteRefactoringWorkflowTool(Tool):
     )
     is_risky = True
 
-    async def __call__(self, branch_name: str, commit_message: str, refactoring_instructions: str, files_to_remove: List[str] = None, files_to_refactor: List[str] = None) -> Tuple[bool, str]:
+    async def __call__(
+        self, 
+        branch_name: str, 
+        commit_message: str, 
+        refactoring_instructions: str, 
+        files_to_remove: List[str] = None, 
+        files_to_refactor: List[str] = None,
+        ) -> Tuple[bool, str]:
         try:
             # Step 1: Create Branch
             success, result = _run_git_command(["git", "checkout", "-b", branch_name])
@@ -228,7 +236,11 @@ class CreateDirectoryTool(Tool):
 
 class MoveFileTool(Tool):
     name = "move_file"; description = "Moves a file or directory from a source to a destination. Usage: move_file(source: str, destination: str)"; is_risky = True
-    async def __call__(self, source: str, destination: str) -> Tuple[bool, str]:
+    async def __call__(
+        self, 
+        source: str, 
+        destination: str,
+        ) -> Tuple[bool, str]:
         source_path = Path(source)
         dest_path = Path(destination)
         if not source_path.exists():
@@ -245,7 +257,10 @@ class RunShellCommandTool(Tool):
     description = "Executes a shell command in the project's root directory. Usage: run_shell(command: str)"
     is_risky = True
     
-    async def __call__(self, command: str) -> Tuple[bool, str]:
+    async def __call__(
+        self, 
+        command: str,
+        ) -> Tuple[bool, str]:
         if not isinstance(command, str):
             return (False, "🚫 SECURITY: Command must be a string.")
         command = command.strip()
@@ -275,7 +290,10 @@ class RunShellCommandTool(Tool):
 
 class GitCreateBranchTool(Tool):
     name = "git_create_branch"; description = "Creates and checks out a new local branch. Usage: git_create_branch(branch_name: str)"; is_risky = True
-    async def __call__(self, branch_name: str) -> Tuple[bool, str]:
+    async def __call__(
+        self, 
+        branch_name: str,
+        ) -> Tuple[bool, str]:
         return _run_git_command(["git", "checkout", "-b", branch_name])
 
 class GitAddTool(Tool):
@@ -285,7 +303,10 @@ class GitAddTool(Tool):
 
 class GitCommitTool(Tool):
     name = "git_commit"; description = "Creates a commit with the given message. Usage: git_commit(commit_message: str)"; is_risky = True
-    async def __call__(self, commit_message: str) -> Tuple[bool, str]:
+    async def __call__(
+        self, 
+        commit_message: str,
+        ) -> Tuple[bool, str]:
         return _run_git_command(["git", "commit", "-m", commit_message])
 
 class GitPushTool(Tool):
@@ -314,14 +335,20 @@ class GitCheckoutTool(Tool):
     name = "git_checkout"
     description = "Switches to an existing local branch. Usage: git_checkout(branch_name: str)"
     is_risky = True
-    async def __call__(self, branch_name: str) -> Tuple[bool, str]:
+    async def __call__(
+        self,
+        branch_name: str,
+        ) -> Tuple[bool, str]:
         return _run_git_command(["git", "checkout", branch_name])
 
 class GitRemoveFileTool(Tool):
     name = "git_remove_file"
     description = "Removes a file from the working directory and stages the deletion for the next commit. Usage: git_remove_file(path: str)"
     is_risky = True
-    async def __call__(self, path: str) -> Tuple[bool, str]:
+    async def __call__(
+        self, 
+        path: str,
+        ) -> Tuple[bool, str]:
         p = Path(path)
         if not p.exists():
             # This is not an error in a workflow; the desired state is "file is gone".

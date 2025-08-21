@@ -143,78 +143,73 @@ def is_manifest_invalid(manifest_path: Path):
 
     return False, "Manifest is valid and up-to-date."
 
-
 def build_file_context(
     files: List[str],
     query: str,
     extract_symbols: Optional[List[List[str]]] = None,
-    ) -> str:
-    
-    """Reads multiple files and formats them into a single context string."""
-    
-    # Create a map for easy lookup of symbols to extract
-    symbol_map = {path: symbol for path, symbol in extract_symbols} if extract_symbols else {}
-
+) -> str:
+    """Reads multiple files, formats them into a single context string, and provides clear logging."""
     if not files:
         return ""
+
+    symbol_map = {path: symbol for path, symbol in extract_symbols} if extract_symbols else {}
+    MAX_FILE_SIZE = ai_settings.general.max_file_size_mb * 1024 * 1024
     
-    MAX_FILE_SIZE = MAX_FILE_SIZE = ai_settings.general.max_file_size_mb * 1024 * 1024
     context_str = ""
-    logger.info(
-        "Attaching files to context...", 
-        count=len(files),
-        )
+    attached_files = []
+    skipped_files = [] # Store tuples of (path, reason)
+    
+    logger.info("Attaching files to context...", requested_count=len(files))
     optimizer = ContextOptimizer()
+
     for file_path_str in files:
-        
-        symbol_to_extract = symbol_map.get(file_path_str)
-        
         path = Path(file_path_str)
         if not path.exists():
-            logger.warning(
-                "File not found, skipping.", 
-                path=file_path_str,
-                )
+            skipped_files.append((file_path_str, "File not found"))
             continue
         
+        if path.stat().st_size > MAX_FILE_SIZE:
+            skipped_files.append((file_path_str, f"Exceeds size limit of {ai_settings.general.max_file_size_mb}MB"))
+            continue
+
         content = ""
-        if symbol_to_extract:
-            logger.info("Performing surgical context pruning.", file=file_path_str, symbol=symbol_to_extract)
-            extracted_source = extract_symbol_source(path, symbol_to_extract)
-            if extracted_source:
-                content = extracted_source
-                logger.info("Symbol extracted successfully.", symbol=symbol_to_extract)
-            else:
-                logger.warning("Could not extract symbol, falling back to full file.", symbol=symbol_to_extract)
-                content = path.read_text(encoding='utf-8')
-        else:
-            # Fallback to existing logic for files without --extract-symbol
-            if path.stat().st_size > MAX_FILE_SIZE:
-                logger.warning("File exceeds size limit, skipping.", path=file_path_str)
-                continue
-            content = path.read_text(encoding='utf-8')
+        symbol_to_extract = symbol_map.get(file_path_str)
         
-        # The rest of the function uses the (potentially pruned) content
         try:
+            if symbol_to_extract:
+                logger.debug("Performing surgical context pruning.", file=file_path_str, symbol=symbol_to_extract)
+                extracted_source = extract_symbol_source(path, symbol_to_extract)
+                if extracted_source:
+                    content = extracted_source
+                    logger.debug("Symbol extracted successfully.", symbol=symbol_to_extract)
+                else:
+                    logger.warning("Could not extract symbol, falling back to full file.", symbol=symbol_to_extract)
+                    content = path.read_text(encoding='utf-8')
+            else:
+                content = path.read_text(encoding='utf-8')
+            
             compressed_content = optimizer.compress_file_context(
                 file_path=file_path_str,
-                content=content, 
+                content=content,
                 query=query,
             )
             
-            if len(compressed_content) < len(content):
-                logger.debug(
-                    "Compressed file for relevance", 
-                    path=file_path_str,
-                    )
-
             context_str += f"<AttachedFile path=\"{file_path_str}\">\n{compressed_content}\n</AttachedFile>\n\n"
-            logger.info(
-                "Attached file",
-                path=file_path_str,
-                )
+            attached_files.append(file_path_str)
+
         except Exception as e:
-            print(f"   - {Colors.RED}❌ Error reading file {file_path_str}: {e}{Colors.RESET}")
+            skipped_files.append((file_path_str, f"Error reading file: {e}"))
+
+    # --- FINAL SUMMARY LOGGING ---
+    logger.info(
+        "File context processing complete.",
+        attached=len(attached_files),
+        skipped=len(skipped_files),
+        total=len(files)
+    )
+    # Log the details of any skipped files for clarity
+    for file_path, reason in skipped_files:
+        logger.warning("Skipped file", path=file_path, reason=reason)
             
     return context_str
 

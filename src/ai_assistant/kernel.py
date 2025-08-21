@@ -5,6 +5,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
+import time 
 
 import structlog
 
@@ -15,9 +16,11 @@ from .persona_loader import PersonaLoader
 from .plan_validator import generate_plan_expectation, check_plan_compliance
 from .planner import Planner
 from .prompt_builder import PromptBuilder
-from .response_handler import ResponseHandler
+from .response_handler import ResponseHandler  # Still needed for synthesis
 from .tools import TOOL_REGISTRY
 from .data_models import ExecutionPlan
+from .data_models import ExecutionPlan, CritiqueResponse
+from .llm_client_factory import get_instructor_client 
 
 logger = structlog.get_logger(__name__)
 # src/ai_assistant/kernel.py
@@ -141,9 +144,9 @@ async def orchestrate_agent_run(
 
     # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
     critique = None
-    # --- MODIFIED: Check plan.steps instead of plan.root ---
     if plan and plan.steps and any(step.tool_name for step in plan):
         print("🕵️  Submitting plan for adversarial validation...")
+        start_time = time.monotonic()
         try:
             critic_loader = PersonaLoader()
             critic_alias = ai_settings.general.critique_persona_alias
@@ -155,17 +158,34 @@ async def orchestrate_agent_run(
                 persona_context=critic_context
             )
             
-            response_handler = ResponseHandler()
-            critique_model = ai_settings.model_selection.critique
+            # --- REFACTORED CRITIC CALL ---
+            critique_model_name = ai_settings.model_selection.critique
+            critique_client = get_instructor_client(critique_model_name)
             critique_gen_config = ai_settings.generation_params.critique.model_dump(exclude_none=True)
-            critique_result = await response_handler.call_api(
-                critique_prompt, 
-                model=critique_model,
-                generation_config=critique_gen_config
-            )
-            critique = critique_result["content"]
-            metrics["timings"]["critique"] = critique_result["duration"]
-            metrics["tokens"]["critique"] = critique_result["tokens"]     
+
+            if critique_client.provider == "gemini":
+                critique_response = await critique_client.create(
+                    response_model=CritiqueResponse,
+                    messages=[{"role": "user", "content": critique_prompt}],
+                    generation_config=critique_gen_config,
+                )
+            else: # Assumes OpenAI-compatible
+                critique_response = await critique_client.chat.completions.create(
+                    model=critique_model_name,
+                    response_model=CritiqueResponse,
+                    messages=[{"role": "user", "content": critique_prompt}],
+                    **critique_gen_config,
+                )
+
+            critique = critique_response.critique
+            # NOTE: Token calculation is now an estimation as we don't get it from instructor.
+            # This is an acceptable trade-off for architectural consistency.
+            optimizer = ContextOptimizer()
+            prompt_tokens = optimizer.estimate_tokens(critique_prompt)
+            response_tokens = optimizer.estimate_tokens(critique)
+            
+            metrics["timings"]["critique"] = time.monotonic() - start_time
+            metrics["tokens"]["critique"] = {"prompt": prompt_tokens, "response": response_tokens, "total": prompt_tokens + response_tokens}
             print("   ✅ Critique received.")
         except Exception as e:
             print(f"   - ⚠️ Warning: Could not perform plan validation. Reason: {e}")

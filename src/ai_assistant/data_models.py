@@ -34,6 +34,11 @@ class PlanStep(BaseModel):
         return self
 
 
+class CritiqueResponse(BaseModel):
+    """A structured response from the Adversarial Critic."""
+    critique: str = Field(..., description="The concise, bulleted list of findings from the critic. If the plan is sound, this will state that clearly.")
+    
+    
 class ExecutionPlan(BaseModel):
     """The root model for an execution plan, which is a list of steps."""
     steps: List[PlanStep] = Field(..., description="A list of sequential steps to execute.")
