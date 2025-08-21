@@ -45,6 +45,8 @@ class Planner:
         else:
             raise NotImplementedError(f"Planning is not implemented for provider: '{self.provider_name}'")
 
+class Planner:
+
     async def create_plan(
         self,
         query: str,
@@ -52,6 +54,7 @@ class Planner:
         persona_content: Optional[str] = None,
         use_compact_protocol: bool = False,
         is_output_mode: bool = False,
+        plan_expectation: Optional[Dict[str, Any]] = None, 
         ) -> Tuple[Optional[ExecutionPlan], Dict[str, Any]]:
         
         logger.info("Generating execution plan with structured output...", provider=self.provider_name)
@@ -62,6 +65,7 @@ class Planner:
             persona_content,
             use_compact_protocol=use_compact_protocol,
             is_output_mode=is_output_mode,
+            plan_expectation=plan_expectation, 
         )
         
         planning_model_name = ai_settings.model_selection.planning
