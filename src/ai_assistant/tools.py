@@ -33,6 +33,50 @@ def _run_git_command(command_parts: List[str]) -> Tuple[bool, str]:
         error_message = f"Error running `{command_str}`:\nSTDOUT: {e.stdout.strip()}\nSTDERR: {e.stderr.strip()}"
         return (False, error_message)
 
+# --- Simplifying the AI's job to a single, clear instruction---
+class CreateServiceFromTemplateTool(Tool):
+    name = "create_service_from_template"
+    description = (
+        "Creates configuration files (Dockerfile, pyproject.toml) for a new service by "
+        "copying and adapting them from an existing template service. "
+        "Usage: create_service_from_template(template_service_name: str, new_service_name: str, new_service_path: str)"
+    )
+    is_risky = True
+
+    async def __call__(self, template_service_name: str, new_service_name: str, new_service_path: str) -> Tuple[bool, str]:
+        template_path = Path(f"src/services/{template_service_name}")
+        new_path = Path(new_service_path)
+        
+        if not template_path.is_dir():
+            return (False, f"Error: Template service directory not found at '{template_path}'")
+
+        files_to_template = ["Dockerfile", "pyproject.toml"]
+        log_messages = []
+
+        try:
+            # Create the new directory first
+            new_path.mkdir(parents=True, exist_ok=True)
+            log_messages.append(f"Created directory '{new_path}'.")
+
+            for filename in files_to_template:
+                template_file = template_path / filename
+                if not template_file.exists():
+                    log_messages.append(f"Warning: Template file '{template_file}' not found, skipping.")
+                    continue
+
+                # Read, adapt, and write
+                content = template_file.read_text(encoding='utf-8')
+                adapted_content = content.replace(template_service_name, new_service_name)
+                
+                new_file_path = new_path / filename
+                new_file_path.write_text(adapted_content, encoding='utf-8')
+                log_messages.append(f"Created '{new_file_path}' from template.")
+            
+            return (True, "\n".join(log_messages))
+
+        except Exception as e:
+            return (False, f"An unexpected error occurred during service creation: {e}")
+        
 # --- Core Asynchronous Tools ---
 
 class RefactorFileContentTool(Tool):
@@ -303,6 +347,7 @@ class ToolRegistry:
         self.register(GitListBranchesTool())
         self.register(GitCheckoutTool())
         self.register(GitRemoveFileTool())
+        self.register(CreateServiceFromTemplateTool())
 
     def register(self, tool: Tool):
         self._tools[tool.name] = tool
