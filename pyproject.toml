@@ -8,26 +8,27 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
       "aiohttp==3.12.7",
-      "pyyaml",
-      "pydantic==2.11.5",
-      "structlog",
-      "instructor",
-      "openai",    
-      "google-generativeai", 
+      "pyyaml==6.0.2",
+      "pydantic==2.5",
+      "structlog==26.0 ",
+      "instructor==2.0",
+      "openai==1.101.0",    
+      "google-generativeai>=0.8", 
       "chromadb==1.0.20",
-      "tiktoken==0.11.0 ",
+      "tiktoken==0.5",
       "python-dotenv==1.1.1",
-      "sentence-transformers==5.1.0",
+      "sentence-transformers==4.0",
       "torch==2.8.0 ",
       ]
 
 [build-system]
-requires = ["setuptools>=65.0", "wheel"]
+requires = ["setuptools>=65.0", "wheel", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
 ai = "ai_assistant.cli:main"
 ai-execute = "ai_assistant.executor:main"
+ai-index = "scripts.indexer:main"
 
 [project.entry-points."ai_assistant.context_plugins"]
 "domains-programming" = "ai_assistant.plugins.domains.programming.context:ProgrammingContextPlugin"
