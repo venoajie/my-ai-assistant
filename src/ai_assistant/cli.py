@@ -288,23 +288,30 @@ def _run_prompt_sanity_checks(
             "Results may be generic. For best results, select a specialist."
         )
 
-    # Check 2 Explicit high-risk action tag without the safe workflow
-    if "<action>" in query_lower \
-        and not args.output_dir:
-        warnings.append(
-            "CRITICAL: You used the <ACTION> tag to declare a high-risk operation "
-            "but did not use the --output-dir flag. This is highly discouraged. "
-            "Always use the two-stage workflow for actions."
-        )
-    # Check 3 (Fallback): Inferred risky action without the safe workflow
-    elif not "<action>" in query_lower:
-        
-        if any(keyword in query_lower for keyword in RISKY_KEYWORDS) \
-            and not args.output_dir:
-            warnings.append(
-                "Your prompt seems to request a system modification. For clarity and safety, "
-                "wrap your goal in <ACTION> tags and use the --output-dir flag."
-            )
+    # --- START: P-003 IMPLEMENTATION ---
+    # This new, enhanced check replaces the previous generic risky action check.
+    
+    # Define the high-level workflow tools that represent best practices for modification.
+    WORKFLOW_TOOLS = ["execute_refactoring_workflow", "create_service_from_template"]
+    
+    contains_risky_keyword = any(keyword in query_lower for keyword in RISKY_KEYWORDS)
+    mentions_workflow_tool = any(tool_name in query_lower for tool_name in WORKFLOW_TOOLS)
+
+    # Trigger the detailed warning if the prompt is ambiguous for a live-mode modification.
+    if contains_risky_keyword and not mentions_workflow_tool and not args.output_dir:
+        print(f"\n{Colors.YELLOW}{'='*60}{Colors.RESET}")
+        print(f"{Colors.YELLOW}           - PROMPTING BEST PRACTICE ALERT -{Colors.RESET}")
+        print(f"{Colors.YELLOW}{'='*60}{Colors.RESET}")
+        print(f"{Colors.BOLD}⚠️  Your prompt requests a file modification but is ambiguous.{Colors.RESET}\n")
+        print(f"- {Colors.BOLD}REASON:{Colors.RESET} The prompt contains risky keywords (e.g., 'change', 'refactor') but does not")
+        print("  specify a high-level workflow tool. This can lead to unpredictable or unsafe plans.\n")
+        print(f"- {Colors.BOLD}RECOMMENDATION:{Colors.RESET} For maximum reliability, explicitly constrain the AI by naming the")
+        print("  tool and its required arguments.\n")
+        print(f"- {Colors.BOLD}EXAMPLE OF A MORE ROBUST PROMPT:{Colors.RESET}")
+        print(f"  {Colors.CYAN}\"Using the execute_refactoring_workflow tool, apply the necessary changes to [file1]...\"{Colors.RESET}\n")
+        print(f"{Colors.DIM}Proceeding with ambiguous prompt...{Colors.RESET}")
+        print(f"{Colors.DIM}{'-'*60}{Colors.RESET}\n")
+    # --- END: P-003 IMPLEMENTATION ---
 
     # Check 4: Large batch-processing attempt
     file_count = len(args.files) if args.files else 0

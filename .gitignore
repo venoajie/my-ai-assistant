@@ -22,6 +22,9 @@ prompt_library_local/
 ai_runs/
 PROJECT_STATE.md
 
+# AI Assistant RAG Index
+.ai_rag_index/
+
 # Ignore raw, unprocessed session logs
 /logs
 

@@ -424,25 +424,51 @@ async def _handle_output_first_mode(
             # 2. Refactor Files (as apply_file_change actions)
             instructions = args.get("refactoring_instructions")
             files_to_refactor = args.get("files_to_refactor", [])
-            for file_path in files_to_refactor:
-                target_path_in_workspace = workspace_dir / file_path
-                target_path_in_workspace.parent.mkdir(parents=True, exist_ok=True)
+            for file_info in files_to_refactor:
+                    
+                if isinstance(file_info, dict):
+                    # Case 1: AI provided a dictionary with path and content
+                    file_path_str = file_info.get("path")
+                    content_to_write = file_info.get("content", instructions) # Use specific content if provided
+                    if not file_path_str:
+                        logger.warning(
+                            "Skipping invalid file_info dict in plan: missing 'path'.", 
+                            detail=file_info,
+                            )
+                        continue
+                else:
+                    # Case 2: AI provided a simple string path
+                    file_path_str = str(file_info)
+                    content_to_write = instructions
+                
+                if not file_path_str:
+                    logger.warning(
+                        "Skipping invalid file_info dict in plan: missing 'path'.",
+                        detail=file_info,
+                        )
+                    continue                
+            else:
+                # Case 2: AI provided a simple string path
+                file_path_str = str(file_info)
+                content_to_write = instructions
                 # For now, we assume the instructions ARE the content. A more advanced
                 # version would call another LLM here, but this is correct for this persona.
-                target_path_in_workspace.write_text(instructions, encoding='utf-8')
-                
-                manifest["actions"].append({
-                    "type": "apply_file_change",
-                    "comment": f"Part of workflow: Refactor file based on instructions.",
-                    "source": f"workspace/{file_path}",
-                    "target": file_path,
-                })
-                manifest["actions"].append({
-                    "type": "git_add",
-                    "comment": f"Part of workflow: Stage refactored file.",
-                    "path": file_path,
-                })
-
+            target_path_in_workspace = workspace_dir / file_path_str
+            target_path_in_workspace.parent.mkdir(parents=True, exist_ok=True)
+            target_path_in_workspace.write_text(content_to_write, encoding='utf-8')
+            
+            manifest["actions"].append({
+                "type": "apply_file_change",
+                "comment": f"Part of workflow: Refactor or create file '{file_path_str}'.",
+                "source": f"workspace/{file_path_str}",
+                "target": file_path_str,
+            })
+            manifest["actions"].append({
+                "type": "git_add",
+                "comment": f"Part of workflow: Stage file '{file_path_str}'.",
+                "path": file_path_str,
+            })
+   
             # This step has been fully processed, so skip the rest of the loop.
             continue
         
