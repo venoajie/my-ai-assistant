@@ -1,0 +1,22 @@
+# .aiignore
+.git/
+.venv/
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+node_modules/
+build/
+dist/
+
+# .aiignore
+
+# Ignore session history files
+my_custom_sessions/
+*.session.json
+
+# Ignore temporary output packages
+rag_*_package/
+
+# Ignore Python build artifacts
+*.egg-info/
