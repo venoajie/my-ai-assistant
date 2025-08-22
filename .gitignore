@@ -4,6 +4,7 @@
 # =====================================================================
 # Ignore generated build artifacts (e.g., final prompts, temp instances)
 /build
+/.ai_pmo
 
 # Generated Documentation
 docs/prompting_guide.md

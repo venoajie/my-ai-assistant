@@ -1,7 +1,7 @@
 [project]
 name = "my-ai-assistant"
-version = "1.4.0" # Version bumped for RAG feature
-description = "AI Assistant for Software Development"
+version = "1.2.4"
+description = "A Persona-Driven AI Assistant for Development and Knowledge Work"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

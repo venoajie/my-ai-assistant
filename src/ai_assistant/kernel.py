@@ -11,6 +11,7 @@ import structlog
 
 from .config import ai_settings
 from .utils.context_optimizer import ContextOptimizer
+from .utils.result_presenter import highlight_critique
 from .utils.colors import Colors
 from .persona_loader import PersonaLoader
 from .plan_validator import generate_plan_expectation, check_plan_compliance
@@ -236,7 +237,7 @@ async def orchestrate_agent_run(
             if tool.is_risky and not is_autonomous:
                 if critique:
                     print("\n--- 🧐 ADVERSARIAL CRITIQUE ---")
-                    print(critique)
+                    print(highlight_critique(critique))
                     print("----------------------------")
                     
                 # --- CRITICAL REMINDER ---
@@ -298,6 +299,24 @@ async def orchestrate_agent_run(
 
     final_directives = persona_directives
     final_context = persona_context
+    final_synthesis_query = query
+        
+    # Heuristic: If the plan was a single, successful, risky action, the user
+    # doesn't need a complex synthesis, just a clear confirmation.
+    # We check if the last tool run was successful.
+    last_tool_run_successful = "Error:" not in observations[-1] and "Critical Error:" not in observations[-1]
+    
+    if len(plan) == 1 and plan[0].tool_name and \
+        TOOL_REGISTRY.get_tool(plan[0].tool_name).is_risky and \
+            last_tool_run_successful:
+        print("   - Action was successful. Switching to a simple confirmation prompt for synthesis.")
+        # We replace the original query with a much more direct instruction.
+        final_synthesis_query = (
+            "The requested action was completed successfully. Your task is to briefly and clearly "
+            "inform the user of this success. Use the content of the <ToolObservations> to state "
+            "what was done."
+        )
+
     if is_failure_state:
         print("   ...A failure was detected. Switching to Debugging Analyst persona...")
         loader = PersonaLoader()
@@ -314,7 +333,7 @@ async def orchestrate_agent_run(
         final_context = "You are a helpful AI assistant. Answer the user's query based on the provided context and observations."
 
     synthesis_prompt = prompt_builder.build_synthesis_prompt(
-        query=query,
+        query=final_synthesis_query     ,
         history=history,
         observations=observations,
         persona_context=final_context,
@@ -332,7 +351,7 @@ async def orchestrate_agent_run(
         "response": final_response,
         "metrics": metrics,
     }
-
+    
 async def _handle_output_first_mode(
     plan: ExecutionPlan,
     persona_alias: str,
