@@ -1,8 +1,6 @@
-# pyproject.toml
-
 [project]
 name = "my-ai-assistant"
-version = "1.2.4"
+version = "1.4.0" # Version bumped for RAG feature
 description = "AI Assistant for Software Development"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,8 +11,13 @@ dependencies = [
       "pydantic>=2.0",
       "structlog",
       "instructor",
-      "openai",    
-      "google-generativeai", 
+      "openai",
+      "google-generativeai",
+      "chromadb",
+      "tiktoken",
+      "python-dotenv",
+      "sentence-transformers",
+      "torch",
       ]
 
 [build-system]
