@@ -3,7 +3,7 @@ config_version: "1.4.0"
 model_selection:
   planning: "deepseek-chat"
   critique: "deepseek-chat"
-  synthesis: "deepseek-reasoner"
+  synthesis: "gemini-2.5-pro"
   json_corrector: "gemini-2.5-flash-lite"
 default_provider: "gemini"
 general:
