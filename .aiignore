@@ -1,0 +1,31 @@
+# .aiignore
+# .aiignore
+
+# Ignore high-level project management and architectural documents
+# to keep the RAG knowledge base focused on implementation details.
+PROJECT_BLUEPRINT.md
+PROJECT_ROADMAP.md
+AGENTS.md
+TECHNICAL_DEBT.md
+
+.git/
+.venv/
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+node_modules/
+build/
+dist/
+
+# .aiignore
+
+# Ignore session history files
+my_custom_sessions/
+*.session.json
+
+# Ignore temporary output packages
+rag_*_package/
+
+# Ignore Python build artifacts
+*.egg-info/
