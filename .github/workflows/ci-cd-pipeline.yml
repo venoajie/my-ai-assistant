@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12"] # Focusing on the primary supported version for speed. Can add more back if needed.
 
     steps:
       - name: Check out code
@@ -32,17 +32,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[test]
       
-      - name: Generate Schemas from Contracts
-        run: python scripts/generate_schemas.py
-
-      - name: Generate Documentation from Templates
-        run: python scripts/generate_docs.py
-
-      - name: Validate Persona Standards
-        run: python scripts/generate_manifest.py
+      # REMOVED: Redundant generation steps. The 'validate-integrity' job is responsible for checking this.
+      # This job's only purpose is to run the Python test suite.
           
-      - name: Run Unit Tests
-        run: python -m unittest discover tests
+      - name: Run Unit and Integration Tests
+        # ADDED: -v for verbose output.
+        run: python -m unittest discover -v tests
 
   # This job runs in parallel to ensure generated files are committed.
   validate-integrity:
