@@ -1,9 +1,10 @@
 prompt_analysis_rules:
   - name: "batch_processing_anti_pattern"
-    description: "Detects attempts to modify multiple files in one operation, which is a known anti-pattern."
+    description: "Detects attempts to modify multiple files in one explicit ACTION, which is a known anti-pattern."
     detector:
-      type: "multi_file_modification"
-      threshold: 1 # Fire if more than 1 file is present
+      # --- THIS IS THE FIX ---
+      type: "multi_file_action" 
+      threshold: 1
       keywords:
         - "refactor"
         - "fix"
@@ -19,9 +20,10 @@ prompt_analysis_rules:
         - "apply"
         - "generate"
         - "implement"
+      required_tags: ["<ACTION>", "<action>"] # This is now part of the check
     severity: "warning"
-    message: "You have attached {file_count} files and are requesting a modification. Attempting to modify multiple files in a single prompt is a known anti-pattern and is likely to fail."
-    suggestion: "Please decompose your goal into multiple, single-file steps for higher reliability. Process one file at a time."
+    message: "You have attached {file_count} files and are requesting a modification within a single <ACTION>. This is a known anti-pattern and is likely to fail."
+    suggestion: "Please decompose your goal into multiple, single-file <ACTION> steps for higher reliability."
 
   - name: "vague_instructions_detected"
     description: "Detects vague or conversational language that leads to unpredictable results."

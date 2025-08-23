@@ -23,10 +23,16 @@ class AnalysisRule:
 class PromptAnalyzer:
     """Analyzes prompts for best practice violations using configurable rules."""
 
-    def __init__(self, rules_file: Path):
+    def __init__(
+        self, 
+        rules_file: Path,
+        ):
         self.rules = self._load_rules(rules_file)
 
-    def _load_rules(self, rules_file: Path) -> List[AnalysisRule]:
+    def _load_rules(
+        self,
+        rules_file: Path,
+        ) -> List[AnalysisRule]:
         """Load analysis rules from YAML configuration."""
         with open(rules_file) as f:
             config = yaml.safe_load(f)
@@ -44,7 +50,10 @@ class PromptAnalyzer:
                 ))
         return rules
 
-    def _create_detector(self, detector_config: Dict) -> Optional[Callable]:
+    def _create_detector(
+        self, 
+        detector_config: Dict,
+        ) -> Optional[Callable]:
         """Create a detector function from configuration."""
         detector_type = detector_config.get('type')
 
@@ -52,6 +61,13 @@ class PromptAnalyzer:
             return lambda prompt, ctx: (
                 ctx.get('file_count', 0) > detector_config.get('threshold', 1) and
                 any(word in prompt.lower() for word in detector_config.get('keywords', []))
+            )
+        
+        elif detector_type == 'multi_file_action':
+            return lambda prompt, ctx: (
+                ctx.get('file_count', 0) > detector_config.get('threshold', 1) and
+                any(word in prompt.lower() for word in detector_config.get('keywords', [])) and
+                any(tag in prompt for tag in detector_config.get('required_tags', []))
             )
         
         elif detector_type == 'vague_instructions':
@@ -71,7 +87,11 @@ class PromptAnalyzer:
         
         return None
 
-    def analyze(self, prompt: str, context: Dict) -> List[PromptViolation]:
+    def analyze(
+        self, 
+        prompt: str, 
+        context: Dict,
+        ) -> List[PromptViolation]:
         """Analyze a prompt and return a list of violations."""
         violations = []
         for rule in self.rules:
