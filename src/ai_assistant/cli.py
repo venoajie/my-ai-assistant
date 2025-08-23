@@ -321,7 +321,13 @@ def _run_prompt_sanity_checks(
             logger.warning(f"[{i+1}] {warning}")
         print(f"{Colors.YELLOW}-------------------------------------------{Colors.RESET}", file=sys.stderr)
 
-# src/ai_assistant/cli.py
+def main():
+    """Synchronous entry point for the 'ai' command, required by pyproject.toml."""
+    setup_logging()
+    try:
+        asyncio.run(async_main())
+    except KeyboardInterrupt:
+        print(f"\n{Colors.CYAN}👋 Exiting.{Colors.RESET}")
 
 async def async_main():
     """The core asynchronous logic of the application."""
