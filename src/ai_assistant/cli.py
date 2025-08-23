@@ -7,16 +7,17 @@ import argparse
 import asyncio
 import importlib.util
 import inspect
+import structlog
 import sys
 import time
 import yaml
-import structlog # Add this
 
 from . import kernel 
 from .config import ai_settings
 from .context_plugin import ContextPluginBase
 from .logging_config import setup_logging 
 from .persona_loader import PersonaLoader
+from .prompt_analyzer import PromptAnalyzer 
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from .session_manager import SessionManager
 from .utils.context_optimizer import ContextOptimizer
@@ -269,6 +270,40 @@ def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBas
         print(f"   - {Colors.RED}❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}{Colors.RESET}", file=sys.stderr)
         return None
 
+def run_prompt_analyzer(
+    args: argparse.Namespace, 
+    query: str,
+    ):
+    """
+    Analyzes the user's prompt using the data-driven PromptAnalyzer
+    and prints non-halting warnings to guide the user.
+    """
+    try:
+        rules_path_traversable = resources.files('ai_assistant').joinpath('internal_data/prompt_analysis_rules.yml')
+        rules_path = Path(str(rules_path_traversable))
+        analyzer = PromptAnalyzer(rules_path)
+        
+        context = {
+            'file_count': len(args.files) if args.files else 0,
+            'file_list': str(args.files),
+            'persona': args.persona or 'N/A'
+        }
+        
+        violations = analyzer.analyze(query, context)
+        
+        if violations:
+            logger.warning("Prompting Best Practice Reminders")
+            for i, violation in enumerate(violations):
+                logger.warning(f"[{i+1}] {violation.message}", rule=violation.rule_name)
+                if violation.suggestion:
+                    print(f"{Colors.CYAN}   💡 Suggestion: {violation.suggestion}{Colors.RESET}", file=sys.stderr)
+            print(f"{Colors.YELLOW}-------------------------------------------{Colors.RESET}", file=sys.stderr)
+
+    except Exception as e:
+        # This check should never halt the main application.
+        logger.error("Prompt analyzer failed to run", error=str(e))
+
+
 def _run_prompt_sanity_checks(
     args: argparse.Namespace, 
     query: str,
@@ -280,6 +315,7 @@ def _run_prompt_sanity_checks(
     """
     warnings = []
     query_lower = query.lower()
+    file_count = len(args.files) if args.files else 0
     
     # Check 1: Missing Persona
     if not args.persona:
@@ -307,8 +343,14 @@ def _run_prompt_sanity_checks(
             )
 
     # Check 4: Large batch-processing attempt
-    file_count = len(args.files) if args.files else 0
-    if file_count > 5:
+    # Heuristic: More than 1 file attached combined with modification keywords is a strong signal of a risky batch job.
+    if file_count > 1 and any(keyword in query_lower for keyword in RISKY_KEYWORDS):
+        warnings.append(
+            f"You have attached {file_count} files and are requesting a modification. "
+            "Attempting to modify multiple files in a single prompt is a known anti-pattern and is likely to fail. "
+            "Please decompose your goal into multiple, single-file steps for higher reliability."
+        )
+    elif file_count > 5: # Fallback for general large context
         warnings.append(
             f"You have attached {file_count} files. Attempting to process many files in a "
             "single prompt can lead to incomplete runs due to context limits. "
@@ -435,7 +477,7 @@ async def async_main():
     # --- Sanity checks now run only when proceeding with a query ---
     # Don't run sanity checks if we are just showing context
     if not args.show_context:
-        _run_prompt_sanity_checks(args, user_query)
+       run_prompt_analyzer(args, user_query)
 
     session_manager = SessionManager()
     history = []

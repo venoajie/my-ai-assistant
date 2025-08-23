@@ -57,5 +57,7 @@ include = ["ai_assistant*"]
     "personas/**/*.persona.md",
     "internal_data/governance.yml",
     "internal_data/persona_config.yml",
-    "internal_data/schemas/**/*.json"
+    "internal_data/prompt_analysis_rules.yml",
+    "internal_data/schemas/**/*.json",
+    "_test_data/fixtures/*.json"
 ]

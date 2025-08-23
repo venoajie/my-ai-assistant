@@ -1,0 +1,47 @@
+prompt_analysis_rules:
+  - name: "batch_processing_anti_pattern"
+    description: "Detects attempts to modify multiple files in one operation, which is a known anti-pattern."
+    detector:
+      type: "multi_file_modification"
+      threshold: 1 # Fire if more than 1 file is present
+      keywords:
+        - "refactor"
+        - "fix"
+        - "modify"
+        - "commit"
+        - "change"
+        - "add"
+        - "create"
+        - "write"
+        - "remove"
+        - "delete"
+        - "update"
+        - "apply"
+        - "generate"
+        - "implement"
+    severity: "warning"
+    message: "You have attached {file_count} files and are requesting a modification. Attempting to modify multiple files in a single prompt is a known anti-pattern and is likely to fail."
+    suggestion: "Please decompose your goal into multiple, single-file steps for higher reliability. Process one file at a time."
+
+  - name: "vague_instructions_detected"
+    description: "Detects vague or conversational language that leads to unpredictable results."
+    detector:
+      type: "vague_instructions"
+      patterns:
+        - "make it better"
+        - "clean this up"
+        - "I think maybe"
+        - "could you please"
+    severity: "warning"
+    message: "Your prompt contains vague, conversational language. The AI works best with specific, imperative commands."
+    suggestion: "Replace vague phrases with direct actions. For example, instead of 'make it better,' try 'Refactor the function X to use a connection pool.'"
+
+  - name: "missing_action_tag_for_modification"
+    description: "Detects modification requests that are not properly wrapped in <ACTION> tags."
+    detector:
+      type: "missing_structure"
+      trigger_keywords: ["refactor", "modify", "commit", "delete", "write", "apply", "implement"]
+      required_tags: ["<ACTION>", "<action>"]
+    severity: "warning"
+    message: "Your prompt appears to request a system modification but is missing the <ACTION> tag."
+    suggestion: "For clarity and safety, please wrap your primary goal in <ACTION>...</ACTION> tags."
