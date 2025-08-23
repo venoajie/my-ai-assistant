@@ -29,8 +29,10 @@ build-backend = "setuptools.build_meta"
 ai = "ai_assistant.cli:main"
 ai-execute = "ai_assistant.executor:main"
 ai-index = "scripts.indexer:main"
+# pyproject.toml
 
 [project.entry-points."ai_assistant.context_plugins"]
+"rag" = "ai_assistant.plugins.rag_plugin:RAGContextPlugin"
 "domains-programming" = "ai_assistant.plugins.domains.programming.context:ProgrammingContextPlugin"
 "domains-finance" = "ai_assistant.plugins.domains.finance.context:FinanceContextPlugin"
 "domains-writing" = "ai_assistant.plugins.domains.writing.context:WritingContextPlugin"

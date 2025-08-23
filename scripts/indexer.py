@@ -1,15 +1,8 @@
 # scripts/indexer.py
 
-# --- START: SQLite Hotfix ---
-#__import__('pysqlite3')
-#import sys
-#sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-# --- END: SQLite Hotfix ---
-
 import argparse
 import hashlib
 import json
-import logging
 import os
 import re
 from pathlib import Path
@@ -17,11 +10,15 @@ from typing import List, Dict, Any, Optional, Generator
 import fnmatch
 
 import chromadb
+import structlog
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from ai_assistant.config import load_ai_settings
+from ai_assistant.logging_config import setup_logging
+
 load_dotenv()
+logger = structlog.get_logger()
 
 INDEX_DIR = Path(".ai_rag_index")
 STATE_FILE = INDEX_DIR / "state.json"
@@ -36,10 +33,11 @@ DEFAULT_IGNORE_PATTERNS = [
 
 class EmbeddingProvider:
     def __init__(self):
-        self.model_name = 'all-MiniLM-L6-v2'
-        logging.info(f"Loading local embedding model: {self.model_name}...")
+        ai_settings = load_ai_settings()
+        self.model_name = ai_settings.rag.embedding_model_name
+        logger.info("Loading local embedding model", model_name=self.model_name)
         self.model = SentenceTransformer(self.model_name)
-        logging.info("Local model loaded successfully.")
+        logger.info("Local model loaded successfully.")
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         if not texts: return []
@@ -47,7 +45,7 @@ class EmbeddingProvider:
             embeddings = self.model.encode(texts, show_progress_bar=True)
             return [emb.tolist() for emb in embeddings]
         except Exception as e:
-            logging.error(f"Failed to get local embeddings: {e}")
+            logger.error("Failed to get local embeddings", error=str(e))
             return []
 
 class Indexer:
@@ -77,7 +75,7 @@ class Indexer:
         if ignore_file.exists():
             with open(ignore_file, 'r') as f:
                 patterns.extend([line.strip() for line in f if line.strip() and not line.startswith('#')])
-        logging.info(f"Loaded {len(patterns)} ignore patterns.")
+        logger.info("Loaded ignore patterns", count=len(patterns))
         return patterns
 
     def _is_ignored(self, path: Path) -> bool:
@@ -141,9 +139,9 @@ class Indexer:
         return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size - overlap)]
 
     def run(self, force_reindex: bool = False):
-        logging.info(f"Starting indexer for project: {self.project_root}")
+        logger.info("Starting indexer for project", project_root=self.project_root)
         if force_reindex:
-            logging.warning("Forcing re-index of all files and clearing collection.")
+            logger.warning("Forcing re-index of all files and clearing collection.")
             self.state = {}
             self.db_client.delete_collection(name=DEFAULT_COLLECTION_NAME)
             self.collection = self.db_client.get_or_create_collection(DEFAULT_COLLECTION_NAME)
@@ -156,13 +154,13 @@ class Indexer:
                 if self.state.get(rel_path_str) != new_hash:
                     files_to_index.append((file_path, new_hash))
             except Exception as e:
-                logging.error(f"Could not process file {rel_path_str}: {e}")
+                logger.error("Could not process file", file=rel_path_str, error=str(e))
         
         if not files_to_index:
-            logging.info("No new or modified files to index. Project is up to date.")
+            logger.info("No new or modified files to index. Project is up to date.")
             return
 
-        logging.info(f"Found {len(files_to_index)} new or modified files to index.")
+        logger.info("Found new or modified files to index", count=len(files_to_index))
         
         total_chunks_to_embed = []
         file_hashes_to_update = {}
@@ -184,19 +182,19 @@ class Indexer:
                     total_chunks_to_embed.extend(valid_chunks)
                     file_hashes_to_update[rel_path_str] = new_hash
             except Exception as e:
-                logging.error(f"Error chunking file {rel_path_str}: {e}")
+                logger.error("Error chunking file", file=rel_path_str, error=str(e))
 
         if not total_chunks_to_embed:
-            logging.info("No valid new chunks to embed.")
+            logger.info("No valid new chunks to embed.")
             return
 
-        logging.info(f"Total valid chunks to process: {len(total_chunks_to_embed)}")
+        logger.info("Total valid chunks to process", count=len(total_chunks_to_embed))
 
         for i in range(0, len(total_chunks_to_embed), EMBEDDING_BATCH_SIZE):
             batch = total_chunks_to_embed[i:i+EMBEDDING_BATCH_SIZE]
             batch_texts = [item['document'] for item in batch]
             
-            logging.info(f"Processing batch {i//EMBEDDING_BATCH_SIZE + 1}/{(len(total_chunks_to_embed) + EMBEDDING_BATCH_SIZE - 1)//EMBEDDING_BATCH_SIZE}...")
+            logger.info("Processing batch", current=i//EMBEDDING_BATCH_SIZE + 1, total=(len(total_chunks_to_embed) + EMBEDDING_BATCH_SIZE - 1)//EMBEDDING_BATCH_SIZE)
             
             embeddings = self.embed_provider.get_embeddings(batch_texts)
             
@@ -209,19 +207,20 @@ class Indexer:
                 )
                 self.state.update(file_hashes_to_update)
             else:
-                logging.error(f"Failed to get embeddings for batch starting with chunk: {batch[0]['id']}")
+                logger.error("Failed to get embeddings for batch", first_chunk_id=batch[0]['id'])
 
         self._save_state()
-        logging.info("Indexing process complete.")
+        logger.info("Indexing process complete.")
 
 def main():
+    setup_logging()
     parser = argparse.ArgumentParser(description="AI Assistant RAG Indexer")
     parser.add_argument("directory", nargs="?", default=".", help="The project directory to index.")
     parser.add_argument("--force-reindex", action="store_true", help="Force re-indexing of all files.")
     args = parser.parse_args()
     project_path = Path(args.directory).resolve()
     if not project_path.is_dir():
-        logging.error(f"Error: Path '{project_path}' is not a valid directory.")
+        logger.error("Path is not a valid directory", path=project_path)
         return
     indexer = Indexer(project_path)
     indexer.run(force_reindex=args.force_reindex)

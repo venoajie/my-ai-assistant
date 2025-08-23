@@ -63,6 +63,10 @@ class GenerationConfig(BaseModel):
     synthesis: GenerationParams
     critique: GenerationParams
 
+class RAGConfig(BaseModel):
+    """Configuration for the RAG subsystem."""
+    embedding_model_name: str = 'all-MiniLM-L6-v2'
+
 class ProviderConfig(BaseModel):
     api_key_env: str
     models: List[str]
@@ -78,6 +82,7 @@ class AIConfig(BaseModel):
     tools: ToolsConfig
     deepseek_discount: DeepSeekDiscountConfig
     generation_params: GenerationConfig
+    rag: RAGConfig = Field(default_factory=RAGConfig)
     providers: Dict[str, ProviderConfig]
     paths: PathsConfig
 

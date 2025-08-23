@@ -1,13 +1,14 @@
-from typing import List, Dict
+from typing import List
 from pathlib import Path
-import logging
+import structlog
 
 import chromadb
 from sentence_transformers import SentenceTransformer
 
 from ..context_plugin import ContextPluginBase
+from ..config import ai_settings
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = structlog.get_logger(__name__)
 
 class RAGContextPlugin(ContextPluginBase):
     """Retrieval-Augmented Generation context plugin for AI Assistant."""
@@ -22,11 +23,11 @@ class RAGContextPlugin(ContextPluginBase):
         self.db_client = chromadb.PersistentClient(path=str(self.index_path))
         self.collection_name = "codebase_collection"
         
-        # Load embedding model
-        self.model_name = 'all-MiniLM-L6-v2'
-        logging.info(f"Loading local embedding model: {self.model_name}...")
+        # Load embedding model from config
+        self.model_name = ai_settings.rag.embedding_model_name
+        logger.info("Loading local embedding model", model_name=self.model_name)
         self.embedding_model = SentenceTransformer(self.model_name)
-        logging.info("Local model loaded successfully.")
+        logger.info("Local model loaded successfully.")
         
     def _embed_query(self, query: str) -> List[float]:
         """Embed the user query using the sentence-transformers model."""
@@ -34,7 +35,7 @@ class RAGContextPlugin(ContextPluginBase):
             embedding = self.embedding_model.encode([query])
             return embedding[0].tolist()
         except Exception as e:
-            logging.error(f"Failed to embed query: {e}")
+            logger.error("Failed to embed query", error=str(e))
             return []
     
     def get_context(self, query: str, files: List[str]) -> str:
@@ -51,7 +52,7 @@ class RAGContextPlugin(ContextPluginBase):
         # Embed the query
         query_embedding = self._embed_query(query)
         if not query_embedding:
-            logging.warning("Failed to generate query embedding, returning empty context")
+            logger.warning("Failed to generate query embedding, returning empty context")
             return ""
         
         try:
@@ -66,7 +67,7 @@ class RAGContextPlugin(ContextPluginBase):
             )
             
             if not results['documents'] or not results['documents'][0]:
-                logging.info("No relevant documents found for query")
+                logger.info("No relevant documents found for query")
                 return ""
             
             # Format the results with source citations
@@ -82,7 +83,7 @@ class RAGContextPlugin(ContextPluginBase):
             return "".join(context_parts)
             
         except Exception as e:
-            logging.error(f"Error querying ChromaDB: {e}")
+            logger.error("Error querying ChromaDB", error=str(e))
             return ""
 
     def __del__(self):
@@ -92,4 +93,4 @@ class RAGContextPlugin(ContextPluginBase):
                 # SentenceTransformer models don't typically need explicit cleanup
                 pass
         except Exception as e:
-            logging.warning(f"Error during plugin cleanup: {e}")
+            logger.warning("Error during plugin cleanup", error=str(e))
