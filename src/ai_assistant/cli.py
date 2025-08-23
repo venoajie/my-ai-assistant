@@ -321,13 +321,7 @@ def _run_prompt_sanity_checks(
             logger.warning(f"[{i+1}] {warning}")
         print(f"{Colors.YELLOW}-------------------------------------------{Colors.RESET}", file=sys.stderr)
 
-def main():
-    """Synchronous entry point for the 'ai' command, required by pyproject.toml."""
-    setup_logging()
-    try:
-        asyncio.run(async_main())
-    except KeyboardInterrupt:
-        print(f"\n{Colors.CYAN}👋 Exiting.{Colors.RESET}")
+# src/ai_assistant/cli.py
 
 async def async_main():
     """The core asynchronous logic of the application."""
@@ -366,20 +360,22 @@ async def async_main():
     
     user_query = ' '.join(args.query)
     
-    # Initialize args.files as a list if it's None
+    # Initialize args.files as a list if it's None. This must be done first.
     if args.files is None:
         args.files = []
 
-    # Prepend auto-injected files from config, ensuring no duplicates
-    auto_injected_files = ai_settings.general.auto_inject_files or []
-    # Use a set for efficient duplicate checking of already present files
-    seen_files = set(args.files)
-    
-    # We prepend in reverse order so the final list has the config order correct
-    for f_path in reversed(auto_injected_files):
-        if f_path not in seen_files:
-            args.files.insert(0, f_path)
-            seen_files.add(f_path)
+    # Only perform auto-injection if a specific context plugin is NOT requested.
+    if not args.context:
+        # Prepend auto-injected files from config, ensuring no duplicates
+        auto_injected_files = ai_settings.general.auto_inject_files or []
+        # Use a set for efficient duplicate checking of already present files
+        seen_files = set(args.files)
+        
+        # We prepend in reverse order so the final list has the config order correct
+        for f_path in reversed(auto_injected_files):
+            if f_path not in seen_files:
+                args.files.insert(0, f_path)
+                seen_files.add(f_path)
             
     if args.persona:
         try:
