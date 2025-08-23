@@ -6,6 +6,10 @@ PROJECT_BLUEPRINT.md
 PROJECT_ROADMAP.md
 AGENTS.md
 TECHNICAL_DEBT.md
+README.md
+
+# Ignore the AI's own project management office directory.
+.ai_pmo/
 
 # Ignore session history files
 my_custom_sessions/
