@@ -14,7 +14,6 @@ import structlog
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
-# --- CORRECTED IMPORTS ---
 from .config import load_ai_settings
 from .logging_config import setup_logging
 
@@ -30,7 +29,6 @@ DEFAULT_IGNORE_PATTERNS = [
     ".git/", ".venv/", "venv/", "__pycache__/", "*.pyc", "*.log",
     ".DS_Store", "node_modules/", "build/", "dist/", ".idea/",
     ".vscode/", "*.egg-info/",
-    # --- THIS IS THE FIX ---
     # Exclude all persona directories to prevent knowledge base pollution.
     "src/ai_assistant/personas/",
     ".ai/personas/",
@@ -41,7 +39,7 @@ class EmbeddingProvider:
         ai_settings = load_ai_settings()
         self.model_name = ai_settings.rag.embedding_model_name
         logger.info("Loading local embedding model", model_name=self.model_name)
-        self.model = Transformer(self.model_name)
+        self.model = SentenceTransformer(self.model_name)
         logger.info("Local model loaded successfully.")
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
