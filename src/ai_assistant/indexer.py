@@ -1,4 +1,4 @@
-# scripts/indexer.py
+# src/ai_assistant/indexer.py
 
 import argparse
 import hashlib
@@ -14,8 +14,9 @@ import structlog
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
-from ai_assistant.config import load_ai_settings
-from ai_assistant.logging_config import setup_logging
+# --- CORRECTED IMPORTS ---
+from .config import load_ai_settings
+from .logging_config import setup_logging
 
 load_dotenv()
 logger = structlog.get_logger()
