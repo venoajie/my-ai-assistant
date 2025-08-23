@@ -29,7 +29,11 @@ EMBEDDING_BATCH_SIZE = 16
 DEFAULT_IGNORE_PATTERNS = [
     ".git/", ".venv/", "venv/", "__pycache__/", "*.pyc", "*.log",
     ".DS_Store", "node_modules/", "build/", "dist/", ".idea/",
-    ".vscode/", "*.egg-info/"
+    ".vscode/", "*.egg-info/",
+    # --- THIS IS THE FIX ---
+    # Exclude all persona directories to prevent knowledge base pollution.
+    "src/ai_assistant/personas/",
+    ".ai/personas/",
 ]
 
 class EmbeddingProvider:
@@ -37,7 +41,7 @@ class EmbeddingProvider:
         ai_settings = load_ai_settings()
         self.model_name = ai_settings.rag.embedding_model_name
         logger.info("Loading local embedding model", model_name=self.model_name)
-        self.model = SentenceTransformer(self.model_name)
+        self.model = Transformer(self.model_name)
         logger.info("Local model loaded successfully.")
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
@@ -80,17 +84,22 @@ class Indexer:
         return patterns
 
     def _is_ignored(self, path: Path) -> bool:
-        rel_path_str = str(path.relative_to(self.project_root))
+        # Use os.path.normpath to handle path separators consistently
+        rel_path_str = os.path.normpath(str(path.relative_to(self.project_root)))
         for pattern in self.ignore_patterns:
-            if pattern.endswith('/'):
-                if (rel_path_str + '/').startswith(pattern): return True
-            elif fnmatch.fnmatch(rel_path_str, pattern): return True
+            norm_pattern = os.path.normpath(pattern)
+            if norm_pattern.endswith(os.sep):
+                if (rel_path_str + os.sep).startswith(norm_pattern): return True
+            elif fnmatch.fnmatch(rel_path_str, norm_pattern): return True
         return False
 
     def _walk_project(self) -> Generator[Path, None, None]:
         for root, dirs, files in os.walk(self.project_root, topdown=True):
             root_path = Path(root)
-            dirs[:] = [d for d in dirs if not self._is_ignored(root_path / d)]
+            # Filter directories in place
+            original_dirs = list(dirs)
+            dirs[:] = [d for d in original_dirs if not self._is_ignored(root_path / d)]
+            
             for name in files:
                 file_path = root_path / name
                 if not self._is_ignored(file_path): yield file_path
