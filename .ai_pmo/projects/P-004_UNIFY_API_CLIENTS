@@ -1,1 +1,0 @@
-Goal: Refactor the application to use the OpenAI-compatible Gemini endpoint, unifying the client factory and removing the google-generativeai dependency.

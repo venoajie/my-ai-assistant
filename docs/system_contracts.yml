@@ -1,5 +1,5 @@
 # docs/system_contracts.yml
-# Version: 1.4
+# Version: 1.5
 # Description: This file is the canonical, machine-readable data dictionary for the AI Assistant.
 # It defines the schema and purpose of all major internal data contracts and transient process artifacts.
 
@@ -31,6 +31,18 @@ persistent_contracts:
       - field: content
         type: string
         description: "The textual content of the message."
+
+  - name: RAG Index
+    path: ".ai_rag_index/"
+    type: ChromaDB Vector Store
+    description: "The project-specific knowledge base for the Retrieval-Augmented Generation (RAG) pipeline. It stores embeddings of source code and documentation, allowing the assistant to retrieve relevant context automatically."
+    schema:
+      - field: state.json
+        type: JSON
+        description: "Maintains a cache of file hashes to avoid re-indexing unchanged files."
+      - field: chromadb/
+        type: Directory
+        description: "The underlying vector database files managed by ChromaDB."
 
   - name: Execution Plan
     source: Planner

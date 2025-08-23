@@ -1,12 +1,13 @@
 # PROJECT BLUEPRINT: AI Assistant
 
-<!-- Version: 2.5 -->
+<!-- Version: 2.6 -->
+<!-- Change Summary (v2.6): Formally incorporated the Retrieval-Augmented Generation (RAG) pipeline as a core component of the system's knowledge architecture. -->
 
 ## 1. System Overview and Core Purpose
 
 This document is the canonical source of truth for the architectural principles and governance of the AI Assistant project. It serves as a "constitution" for human developers and a "README for the AI," ensuring that all development and AI-driven actions are aligned with the core design philosophy.
 
-The system is a command-line-native, persona-driven agent designed to assist with software development and other knowledge-work tasks. Its primary purpose is to provide a safe, reliable, and extensible framework for leveraging Large Language Models to perform complex, multi-step operations.
+The system is a command-line-native, persona-driven agent designed to assist with software development and other knowledge-work tasks. Its primary purpose is to provide a safe, reliable, and extensible framework for leveraging Large Language Models to perform complex, multi-step operations, **now enhanced with a codebase-aware RAG pipeline for deep project analysis.**
 
 ---
 
@@ -75,26 +76,34 @@ Instead of asking the AI to generate a complex sequence of granular tools (e.g.,
 
 ---
 
-## 5. Extensibility: The Context Plugin Architecture
+## 5. Extensibility: The Knowledge and Context Architecture
 
-To enhance the AI's domain-specific knowledge, the system uses a modular **Context Plugin Architecture**.
+To enhance the AI's domain-specific knowledge, the system uses a modular, two-tiered architecture for context injection.
 
-### 5.1. Core Contract
-All plugins MUST inherit from the `ContextPluginBase` class and implement its `get_context` method.
+### 5.1. The Context Plugin System (Static Knowledge)
+This system is for injecting pre-defined, static knowledge based on simple triggers.
 
-### 5.2. Discovery and Loading
--   **Built-in Plugins:** Registered via `entry_points` in `pyproject.toml`.
--   **Local Project Plugins:** Discovered at runtime from the `.ai/plugins/` directory within the user's project.
+-   **Core Contract:** All plugins MUST inherit from the `ContextPluginBase` class and implement its `get_context` method.
+-   **Discovery and Loading:**
+    -   **Built-in Plugins:** Registered via `entry_points` in `pyproject.toml`.
+    -   **Local Project Plugins:** Discovered at runtime from the `.ai/plugins/` directory within the user's project.
+-   **Activation Logic:**
+    -   **Automatic Loading:** A persona from `domains/<name>/...` automatically triggers loading of a plugin named `domains-<name>`.
+    -   **Manual Override:** The `--context` CLI flag overrides any automatically selected plugin.
 
-### 5.3. Activation Logic
--   **Automatic Loading:** A persona from `domains/<name>/...` automatically triggers loading of a plugin named `domains-<name>`.
--   **Manual Override:** The `--context` CLI flag overrides any automatically selected plugin.
+### 5.2. The RAG Pipeline (Dynamic Knowledge)
+This system provides the assistant with deep, codebase-aware knowledge by dynamically retrieving the most relevant information from a project-specific knowledge base.
+
+-   **Indexing:** The `ai-index` command scans the project, chunks source code and documentation, and stores their embeddings in a local vector database (`.ai_rag_index/`). This creates the project's knowledge base.
+-   **Retrieval:** The built-in `RAGContextPlugin` is activated with the `--context rag` flag. It embeds the user's query and searches the vector database to find the most semantically similar chunks of code or documentation.
+-   **Injection:** The retrieved chunks are automatically injected into the prompt, providing the AI with highly relevant, on-the-fly context without requiring manual file attachments.
+-   **Curation:** The knowledge base can be precisely controlled by adding file and directory patterns to a project-local `.aiignore` file, ensuring only relevant information is indexed.
 
 ---
 
 ## 6. Workflows
 
-The system supports three primary workflows:
+The system supports four primary workflows:
 
 ### 6.1. Live System Check Workflow
 For read-only diagnostics on a live system with real-time user confirmation.
@@ -104,6 +113,11 @@ For making changes to the local file system via a sandboxed "Output Package" and
 
 ### 6.3. Handoff Workflow (Brain-to-Hands)
 For preparing changes to be executed by a powerful, external agent.
+
+### 6.4. Codebase-Aware Analysis Workflow (RAG)
+For performing complex analysis and answering questions about a large codebase without manual file attachment. The standard flow is:
+1.  **Index:** Run `ai-index` to create or update the knowledge base.
+2.  **Query:** Run `ai --context rag "..."` to ask a question.
 
 ---
 

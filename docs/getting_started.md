@@ -92,10 +92,11 @@ This process ensures you always have the final say before any file is modified.
 
 You have now mastered the basic workflows. The true power of the AI Assistant comes from transforming it from a generic tool into a **specialized co-pilot for your specific project.**
 
-This is the best-practice workflow used by advanced teams. By creating project-local experts and knowledge bases, you can automate complex, domain-specific tasks with much higher reliability.
-
 -   **First, learn how to create project-specific experts that are shared with your team:**
     **[➡️ Guide: The Persona System](./personas.md)**
 
--   **Then, learn how to automatically provide these experts with the knowledge they need to succeed:**
+-   **Then, learn how to automatically provide them with critical context:**
     **[➡️ Guide: Project-Specific Configuration](./project_configuration.md)**
+
+-   **Finally, make the assistant aware of your entire codebase for complex tasks:**
+    **[➡️ Guide: Codebase-Aware Context (RAG)](./rag_workflow.md)**
