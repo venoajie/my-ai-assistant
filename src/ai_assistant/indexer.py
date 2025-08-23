@@ -32,6 +32,8 @@ DEFAULT_IGNORE_PATTERNS = [
     # Exclude all persona directories to prevent knowledge base pollution.
     "src/ai_assistant/personas/",
     ".ai/personas/",
+    # Exclude internal machine-generated artifacts.
+    "src/ai_assistant/internal_data/",
 ]
 
 class EmbeddingProvider:
@@ -82,7 +84,6 @@ class Indexer:
         return patterns
 
     def _is_ignored(self, path: Path) -> bool:
-        # Use os.path.normpath to handle path separators consistently
         rel_path_str = os.path.normpath(str(path.relative_to(self.project_root)))
         for pattern in self.ignore_patterns:
             norm_pattern = os.path.normpath(pattern)
@@ -94,7 +95,6 @@ class Indexer:
     def _walk_project(self) -> Generator[Path, None, None]:
         for root, dirs, files in os.walk(self.project_root, topdown=True):
             root_path = Path(root)
-            # Filter directories in place
             original_dirs = list(dirs)
             dirs[:] = [d for d in original_dirs if not self._is_ignored(root_path / d)]
             
@@ -109,40 +109,27 @@ class Indexer:
             while buf := f.read(65536): hasher.update(buf)
         return hasher.hexdigest()
 
-    # --- Data Validation ---
     @staticmethod
     def _is_chunk_valid(chunk: str, min_length: int = 20) -> bool:
-        """Validate chunk quality before indexing."""
         if len(chunk.strip()) < min_length: return False
         if len(chunk.strip()) / len(chunk) < 0.5: return False
         if chunk.count('\x00') > 0 or chunk.count('\ufffd') > 0: return False
         return True
 
-    # --- Smart Chunking Logic ---
     def _chunk_text(self, text: str, file_path: Path) -> List[str]:
-        """
-        Chunks text based on file type for better semantic meaning.
-        """
         file_ext = file_path.suffix.lower()
-        
-        # Simple Python chunking by class/function. A more advanced
-        # solution would use an Abstract Syntax Tree (AST) parser.
         if file_ext == '.py':
             chunks = re.split(r'(^\s*class\s|^\s*def\s)', text, flags=re.MULTILINE)
             combined_chunks = []
             for i in range(1, len(chunks), 2):
                 combined_chunks.append(chunks[i] + chunks[i+1])
             return combined_chunks if combined_chunks else [text]
-
-        # Simple Markdown chunking by headers
         if file_ext == '.md':
             chunks = re.split(r'(^#+\s)', text, flags=re.MULTILINE)
             combined_chunks = []
             for i in range(1, len(chunks), 2):
                 combined_chunks.append(chunks[i] + chunks[i+1])
             return combined_chunks if combined_chunks else [text]
-
-        # Default fallback: fixed-size chunking
         chunk_size, overlap = 1000, 200
         return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size - overlap)]
 
