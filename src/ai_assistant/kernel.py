@@ -373,7 +373,6 @@ async def orchestrate_agent_run(
         "metrics": metrics,
     }
     
-# ### --- FIX: Make function async to support awaiting LLM calls --- ###
 async def _handle_output_first_mode(
     plan: ExecutionPlan,
     persona_alias: str,
