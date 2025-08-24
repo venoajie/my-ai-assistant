@@ -4,15 +4,12 @@ The `ai-assistant` becomes most powerful when it is deeply integrated with your 
 
 This file acts as your project's **Configuration Manifest**, telling the assistant how to behave whenever it's run from within that directory.
 
-## Core Use Case: Automating Context
+## Core Use Cases
 
-The most common and powerful feature of this file is the `auto_inject_files` directive. It allows you to specify a list of "canonical documents" that will be automatically attached to **every single prompt** run within the project.
+### 1. Automating Context with `auto_inject_files`
+The most common feature is `auto_inject_files`. It allows you to specify a list of "canonical documents" that will be automatically attached to **every single prompt** run within the project.
 
-This is the best practice for ensuring the AI always has the most critical context, such as your project's architectural blueprint or a list of operational commands.
-
-### Example: The "My Trading App" Best Practice
-
-A well-configured project might have a `.ai_config.yml` file that looks like this:
+This is the best practice for ensuring the AI always has critical context, such as your project's architectural blueprint.
 
 ```yaml
 # .ai_config.yml
@@ -21,39 +18,26 @@ general:
   # These files will be automatically attached to every prompt.
   auto_inject_files:
     - "PROJECT_BLUEPRINT.md"
-    - "AMBIGUITY_REPORT.md"
     - "AGENTS.md"
-    - "etc"
 ```
 
-**What this achieves:**
+### 2. Configuring the RAG Client
+For teams using the [Codebase-Aware RAG Workflow](./rag_workflow.md), this file is used to configure the connection to the central indexing server.
 
--   When a developer runs any `ai` command, the contents of these three critical files are automatically loaded into the AI's context.
--   This eliminates the need to manually attach them with `-f` flags for every command, saving time and preventing errors.
--   It guarantees that all AI agents (and all team members) are operating from the same, consistent source of truth.
+```yaml
+# .ai_config.yml
+
+rag:
+  # The IP address or hostname of the machine running the ChromaDB server
+  chroma_server_host: "192.168.1.100"
+  # The port the server is running on
+  chroma_server_port: 8000
+```
 
 ## How to Create Your Configuration File
 
 1.  **Create the File:** In the root directory of your project, create a new file named `.ai_config.yml`.
-
-2.  **Add the `auto_inject_files` Section:** Start by adding the `general` and `auto_inject_files` keys.
-
-3.  **List Your Canonical Files:** Add the paths to the files you want to be automatically included. These paths should be relative to your project's root directory.
+2.  **Add Configuration Sections:** Add the relevant sections (`general`, `rag`, etc.) as needed.
+3.  **Commit the File:** Commit `.ai_config.yml` to your repository so that the entire team shares the same configuration.
 
 This simple configuration is the single most effective step you can take to create a powerful, project-aware AI workflow.
-
-## Putting It All Together: A Complete Example
-
-The true power of the AI Assistant is unlocked when you combine project configuration, local personas, and local plugins. Here is what a best-practice setup looks like in a project's `.ai/` directory:
-
-```
-.ai/
-├── plugins/
-│   └── my_project_plugin.py  # Provides project-specific knowledge
-└── personas/
-    └── domains/
-        └── my_project/
-            └── data_analyst-1.persona.md # A project-specific expert
-```
-
-With this structure, you can create a `.ai_config.yml` that automatically injects your project's most important documents. This creates a powerful foundation where any developer on your team can easily call the right expert (`--persona`) with the right knowledge (`--context`) and the right architectural context (`auto_inject_files`) for any given task.

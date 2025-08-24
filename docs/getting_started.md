@@ -4,14 +4,20 @@ This guide will walk you through installing the AI Assistant and performing your
 
 ## Installation
 
-First, install the tool using pip.
+The assistant is designed for different environments. Choose the installation method that matches your role.
 
+### For Client Use (Developer Laptops, Dev Environments)
+This is the **recommended installation for most users**. It's lightweight and connects to a central, remote knowledge base.
 ```bash
-# For stable use
-pip install my-ai-assistant
+# From a cloned repository
+pip install -e .[client]
+```
 
-# For development (from a cloned repository)
-pip install -e .
+### For Indexing Use (Production Server, Designated Machine)
+This installation includes the heavy libraries needed to build the project's knowledge base. Only one machine on a team needs this.
+```bash
+# From a cloned repository
+pip install -e .[indexing]
 ```
 
 ## A Critical Note on API Keys, Costs, and Security

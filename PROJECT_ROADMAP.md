@@ -1,25 +1,43 @@
 # PROJECT ROADMAP: AI Assistant
 
-This document outlines the planned epics and major features for future versions of the AI Assistant. It serves as a strategic guide for the project's evolution.
+<!-- Status: As of 2024-05-24 -->
+
+This document outlines the strategic development roadmap for the AI Assistant project.
 
 ---
 
-## Planned Epics & Features
+## ✅ Done (Key Milestones Achieved)
 
-### [EPIC-001]: Implement a "Tool-Aware" Adversarial Critic
--   **Problem:** The current Adversarial Critic is "stateless" and can produce "false alarm" critiques for powerful tools whose internal logic already mitigates the risks it identifies.
--   **Proposed Solution:** Evolve the critic into a "Tool-Aware" agent by providing it with machine-readable manifests of each tool's capabilities and safety features.
--   **Desired Outcome:** The critic will produce more intelligent, trustworthy analysis, reducing alarm fatigue and increasing user confidence.
--   **Status:** Proposed.
+| Feature ID | Description | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| **CORE-001** | Establish Core Kernel & Planner | ✅ Done | The foundational agent loop is stable. |
+| **CORE-002** | Implement Persona System | ✅ Done | `PersonaLoader` supports inheritance and local overrides. |
+| **CORE-003** | Two-Stage Workflow & Executor | ✅ Done | `ai-execute` provides a robust safety layer. |
+| **GOV-001** | Documentation-as-Code Pipeline | ✅ Done | `generate_docs.py` and `generate_manifest.py` are in CI. |
+| **GOV-002** | Deterministic Plan Validation | ✅ Done | `plan_validator.py` enforces `governance.yml` rules. |
+| **EXT-001** | Context Plugin System | ✅ Done | Supports built-in and local project plugins. |
+| **ROB-001** | Enhance System Robustness | ✅ Done | Fixed critical bugs in output package generation and planner failure modes. |
+| **RAG-001** | Formalize RAG Pipeline | ✅ Done | RAG is a first-class citizen via `RAGContextPlugin`. |
+| **SCALE-001** | Improve Portability & Scalability | ✅ Done | Implemented hybrid client-server RAG architecture and optional dependencies for lightweight client installs. |
 
 ---
 
-## Completed Epics
+## 🚀 Next Up (In Progress or Actively Planned)
 
-### [EPIC-003]: Implement Retrieval-Augmented Generation (RAG) Pipeline
--   **Status:** Completed.
--   **Summary:** The Context Plugin Architecture was successfully evolved into a full-fledged RAG pipeline. A new `ai-index` command was created to scan a project, generate embeddings, and build a local vector database. A corresponding `RAGContextPlugin` was integrated into the core application, activated by the `--context rag` flag. This allows the assistant to automatically retrieve relevant, codebase-aware context for complex queries, dramatically increasing its autonomy and analytical power on large projects. The system was hardened through iterative testing and the implementation of a `.aiignore` file for precise knowledge base curation.
+| Feature ID | Description | Priority | Status |
+| :--- | :--- | :--- | :--- |
+| **GOV-003** | Unify All Governance Files | 🔴 High | **Planning.** Consolidate `prompt_analysis_rules.yml` into `governance.yml` to create a single source of truth for all prompt and plan validation. |
+| **MET-001** | Centralized Token Management | 🟡 Medium | **Backlog.** Implement a `TokenManager` class to provide consistent tracking and budgeting of token usage across all agent phases. |
+| **UI-001** | Enhance CLI User Experience | 🟡 Medium | **Backlog.** Improve argument parsing, help messages, and interactive prompts. |
+| **ROB-002** | Implement Circuit Breakers | 🟢 Low | **Backlog.** Add circuit breakers to tools and API calls to prevent repeated failures on transient issues. |
 
-### [EPIC-002]: Implement Plan Conformance Validation Layer
--   **Status:** Completed.
--   **Summary:** A multi-layered validation system was successfully implemented. The system now uses a combination of `governance.yml` rules, Pydantic data models, the `instructor` library, and a unified validation gate in the kernel to deterministically enforce architectural and safety constraints on all AI-generated plans. This has dramatically increased the reliability and safety of the system.
+---
+
+## 🔭 Future Vision (Under Consideration)
+
+| Feature ID | Description |
+| :--- | :--- |
+| **STATE-001** | Advanced Session State Management |
+| **OBS-001** | Structured Observability & Tracing |
+| **TOOL-001** | Dynamic Tool Generation |
+| **UI-002** | Interactive GUI/Web Interface |

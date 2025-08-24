@@ -2,6 +2,8 @@
 
 The AI Assistant's Retrieval-Augmented Generation (RAG) pipeline is its most powerful feature for working with large, complex projects. It transforms the assistant from a tool that knows about a few files into an expert that is aware of your entire codebase.
 
+This guide explains the recommended **client-server workflow**, which allows a single powerful machine to manage the knowledge base while the rest of the team uses lightweight clients.
+
 ## The Problem RAG Solves
 
 Manually attaching files with the `-f` flag is great for targeted tasks, but it doesn't scale. If you want to ask a broad question like, "How does our authentication system work?" you would need to find and attach every relevant file.
@@ -10,59 +12,73 @@ RAG solves this by creating a searchable **knowledge base** of your project. Whe
 
 ---
 
-## The RAG Workflow
+## The RAG Workflow: A Distributed Model
 
-Using RAG is a simple, three-step process.
+### Step 1: Set Up the Indexing Environment
 
-### Step 1: Build Your Knowledge Base
+One machine on your team should be designated as the "indexer." This machine will build and serve the knowledge base.
 
-First, you need to tell the assistant to scan your project and build its knowledge base. This is done with the `ai-index` command.
+1.  **Install with Indexing Dependencies:**
+    ```bash
+    pip install -e .[indexing]
+    ```
+2.  **Build the Knowledge Base:** Run the `ai-index` command from your project's root directory.
+    ```bash
+    ai-index
+    ```
+    This creates the `.ai_rag_index/` directory containing the vector database. You only need to re-run this command when your codebase changes significantly.
+
+3.  **Serve the Knowledge Base:** Start the ChromaDB server to make the index available to your team.
+    ```bash
+    # This will serve the index from the specified path on port 8000
+    chroma run --host 0.0.0.0 --port 8000 --path .ai_rag_index
+    ```
+
+### Step 2: Set Up the Client Environment
+
+All other team members (e.g., on developer laptops) should set up as clients.
+
+1.  **Install the Lightweight Client:**
+    ```bash
+    pip install -e .[client]
+    ```
+2.  **Configure the Connection:** In your project's root, create or edit the `.ai_config.yml` file to point to the indexing server.
+    ```yaml
+    # .ai_config.yml
+    rag:
+      # Replace with the IP address or hostname of your indexing machine
+      chroma_server_host: "192.168.1.100"
+      chroma_server_port: 8000
+    ```
+
+### Step 3: Use the RAG-Powered Assistant
+
+Now, any time you run an `ai` command from within the project, the assistant will automatically:
+1.  Detect the server configuration.
+2.  Connect to the remote knowledge base.
+3.  Retrieve relevant context for your query.
+4.  Inject that context into the prompt for the AI.
 
 ```bash
-# Run this from your project's root directory
-ai-index
-```
-This command will:
-1.  Scan all non-ignored files in your project.
-2.  Split them into small, meaningful chunks.
-3.  Convert those chunks into vector embeddings.
-4.  Store the embeddings in a local vector database in the `.ai_rag_index/` directory.
-
-You only need to run `ai-index` again when you've made significant changes to your codebase. It's smart enough to only re-index files that have been modified.
-
-### Step 2: Activate RAG Context
-
-To use the knowledge base, simply add the `--context rag` flag to your prompt.
-
-```bash
-ai --context rag --persona domains/programming/csa-1 \
+# No special flags needed; the context is injected automatically!
+ai --persona domains/programming/csa-1 \
   "Based on the project's codebase, what are the potential performance bottlenecks in the data ingestion pipeline?"
 ```
-Instead of you finding the files, the RAG plugin will search the index for chunks related to "performance bottlenecks" and "ingestion pipeline" and provide them to the AI.
 
-### Step 3: Control the Knowledge Base with `.aiignore`
+### Step 4: Control the Knowledge Base with `.aiignore`
 
-Sometimes you want to prevent certain files or directories from being included in the knowledge base. For example, you might want to exclude high-level project management documents, test fixtures, or build artifacts.
-
-You can do this by creating a `.aiignore` file in your project root. It works just like a `.gitignore` file.
+On the **indexing machine**, you can prevent certain files from being included in the knowledge base by creating a `.aiignore` file in the project root.
 
 **Example `.aiignore`:**
 ```
 # .aiignore
-
 # Ignore high-level project management documents
 PROJECT_BLUEPRINT.md
-PROJECT_ROADMAP.md
-
 # Ignore all project management office artifacts
 .ai_pmo/
-
 # Ignore test data
 tests/fixtures/
 ```
-After creating or modifying your `.aiignore` file, you should rebuild the index to ensure the changes take effect:
+After creating or modifying `.aiignore`, rebuild the index on the server machine:
 ```bash
 ai-index --force-reindex
-```
-
-This workflow gives you complete control over the AI's knowledge, allowing you to create a highly-focused, project-aware expert.

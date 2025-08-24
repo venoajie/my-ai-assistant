@@ -1,7 +1,7 @@
 # PROJECT BLUEPRINT: AI Assistant
 
-<!-- Version: 2.6 -->
-<!-- Change Summary (v2.6): Formally incorporated the Retrieval-Augmented Generation (RAG) pipeline as a core component of the system's knowledge architecture. -->
+<!-- Version: 2.7 -->
+<!-- Change Summary (v2.7): Documented the hybrid client-server RAG architecture and the use of optional dependencies for flexible, environment-specific installations. -->
 
 ## 1. System Overview and Core Purpose
 
@@ -54,7 +54,7 @@ The project mandates a "Documentation-as-Code" pattern to prevent drift between 
 
 The persona ecosystem is a team of specialists with a clear, hierarchical structure.
 
--   **`_mixins/` & `_base/` (Foundations):** These are the architectural foundations. `_mixins` provide shared directives (like coding standards), while `_base` personas define the core archetypes for agent behavior.
+-   **`_mixins/` & ``_base/` (Foundations):** These are the architectural foundations. `_mixins` provide shared directives (like coding standards), while `_base` personas define the core archetypes for agent behavior.
     -   `_base/bcaa-1` (Base Collaborative Agent): The archetype for interactive, conversational agents that propose plans and seek confirmation.
     -   `_base/btaa-1` (Base Technical Analysis Agent): The archetype for non-interactive, "one-shot" analytical agents.
     -   `_base/developer-agent-1` (Base Professional Developer Agent): A crucial archetype that inherits from `bcaa-1` and adds a non-negotiable protocol for safe software development. All specialist personas that modify code MUST inherit from this base.
@@ -92,12 +92,13 @@ This system is for injecting pre-defined, static knowledge based on simple trigg
     -   **Manual Override:** The `--context` CLI flag overrides any automatically selected plugin.
 
 ### 5.2. The RAG Pipeline (Dynamic Knowledge)
-This system provides the assistant with deep, codebase-aware knowledge by dynamically retrieving the most relevant information from a project-specific knowledge base.
+This system provides the assistant with deep, codebase-aware knowledge by dynamically retrieving the most relevant information from a project-specific knowledge base. It is designed for flexibility in multi-environment teams.
 
--   **Indexing:** The `ai-index` command scans the project, chunks source code and documentation, and stores their embeddings in a local vector database (`.ai_rag_index/`). This creates the project's knowledge base.
--   **Retrieval:** The built-in `RAGContextPlugin` is activated with the `--context rag` flag. It embeds the user's query and searches the vector database to find the most semantically similar chunks of code or documentation.
--   **Injection:** The retrieved chunks are automatically injected into the prompt, providing the AI with highly relevant, on-the-fly context without requiring manual file attachments.
--   **Curation:** The knowledge base can be precisely controlled by adding file and directory patterns to a project-local `.aiignore` file, ensuring only relevant information is indexed.
+-   **Architecture:** The system supports both a local, file-based vector database and a client-server model. This allows a single, powerful machine to perform indexing while lightweight clients (e.g., developer laptops) can query the central index remotely. Configuration is managed via `config.py` and `.ai_config.yml`.
+-   **Indexing (Server/Indexer Role):** The `ai-index` command scans the project, chunks source code, and stores embeddings in a local vector database (`.ai_rag_index/`). This machine can then run the ChromaDB server to expose the index to clients.
+-   **Retrieval (Client Role):** The built-in `RAGContextPlugin` is activated automatically when a RAG index is available (either locally or via server configuration). It embeds the user's query, searches the vector database, and retrieves the most semantically similar chunks of code or documentation.
+-   **Injection:** The retrieved chunks are automatically injected into the prompt, providing the AI with highly relevant, on-the-fly context.
+-   **Curation:** The knowledge base can be precisely controlled by adding file and directory patterns to a project-local `.aiignore` file.
 
 ---
 
@@ -115,9 +116,10 @@ For making changes to the local file system via a sandboxed "Output Package" and
 For preparing changes to be executed by a powerful, external agent.
 
 ### 6.4. Codebase-Aware Analysis Workflow (RAG)
-For performing complex analysis and answering questions about a large codebase without manual file attachment. The standard flow is:
-1.  **Index:** Run `ai-index` to create or update the knowledge base.
-2.  **Query:** Run `ai --context rag "..."` to ask a question.
+For performing complex analysis on a large codebase. The standard flow is:
+1.  **Index (Indexer Machine):** Run `ai-index` to create or update the knowledge base. Optionally, run `chroma run` to serve it.
+2.  **Configure (Client Machine):** Set the `chroma_server_host` in `.ai_config.yml` to point to the indexer machine.
+3.  **Query (Any Machine):** Run `ai "..."`. The RAG context is injected automatically if available.
 
 ---
 
@@ -141,6 +143,14 @@ The project adheres to modern Python packaging standards using `pyproject.toml`.
 To ensure absolute build and installation reliability for non-Python data files (e.g., personas, schemas), this project uses the `[tool.setuptools.package-data]` directive within `pyproject.toml`. This is a deliberate engineering choice to use modern, standardized packaging practices for explicit and deterministic control over packaged data.
 
 **Canonical Rule:** Any new non-Python data files that must be accessible by the installed package **MUST** be added to the `[tool.setuptools.package-data]` configuration in `pyproject.toml` to guarantee their inclusion.
+
+### 8.2. Optional Dependencies for Flexibility
+To support different operational environments (e.g., a powerful indexing server vs. a lightweight developer laptop), the project uses **optional dependencies**.
+
+-   **`[project.optional-dependencies].indexing`:** This group includes heavy libraries required for creating the RAG index (e.g., `torch`, `sentence-transformers`). It should only be installed on the machine responsible for indexing.
+-   **`[project.optional-dependencies].client`:** This group includes lightweight client libraries for querying a remote RAG index. This is the recommended installation for most users.
+
+This approach minimizes installation footprint and resource consumption on client machines, adhering to the principle of least privilege for dependencies.
 
 ---
 
