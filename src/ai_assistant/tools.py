@@ -1,4 +1,4 @@
-# ai_assistant/tools.py
+# src\ai_assistant\tools.py
 import asyncio
 import os
 import re
@@ -46,7 +46,9 @@ class CreateServiceFromTemplateTool(Tool):
     is_risky = True
 
     async def __call__(self, template_service_name: str, new_service_name: str, new_service_path: str) -> Tuple[bool, str]:
-        template_path = Path(f"src/services/{template_service_name}")
+        # ### --- FIX: Use configurable path instead of hard-coded string --- ###
+        template_base_path = Path(ai_settings.general.services_template_directory)
+        template_path = template_base_path / template_service_name
         new_path = Path(new_service_path)
         
         if not template_path.is_dir():

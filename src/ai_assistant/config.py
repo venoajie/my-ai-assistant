@@ -31,6 +31,10 @@ class GeneralConfig(BaseModel):
     failure_persona_alias: str
     local_plugins_directory: str = ".ai/plugins"
     enable_llm_json_corrector: bool = Field(default=True) # Let's default to True
+    services_template_directory: str = Field(
+        default="src/services", 
+        description="Default path for service templates.",
+        )
 
 class ContextOptimizerConfig(BaseModel):
     max_tokens: int
@@ -66,6 +70,10 @@ class GenerationConfig(BaseModel):
 class RAGConfig(BaseModel):
     """Configuration for the RAG subsystem."""
     embedding_model_name: str = 'all-MiniLM-L6-v2'
+    collection_name: str = Field("codebase_collection", description="Default collection name for ChromaDB.")
+    chroma_server_host: Optional[str] = Field(None, description="Hostname of the ChromaDB server.")
+    chroma_server_port: Optional[int] = Field(None, description="Port of the ChromaDB server.")
+    chroma_server_ssl: bool = Field(False, description="Use SSL to connect to the ChromaDB server.")
 
 class ProviderConfig(BaseModel):
     api_key_env: str
@@ -120,10 +128,7 @@ def load_ai_settings() -> AIConfig:
                 project_config,
                 )
     
-    # --- THIS IS THE FIX ---
-    # 4. Create and inject the resolved paths into the config data before validation.
-    # This new logic is more explicit and correctly constructs paths.
-    
+    # 4. Create and inject the resolved paths into the config data before validation.    
     # Define base directories for clarity and correctness
     project_root = Path.cwd()
     user_config_dir = Path.home() / ".config" / "ai_assistant"

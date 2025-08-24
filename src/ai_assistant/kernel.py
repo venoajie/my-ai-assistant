@@ -22,9 +22,10 @@ from .tools import TOOL_REGISTRY
 from .data_models import ExecutionPlan
 from .data_models import ExecutionPlan, CritiqueResponse
 from .llm_client_factory import get_instructor_client 
+# ### --- FIX: Import RAG plugin for automatic context injection --- ###
+from .plugins.rag_plugin import RAGContextPlugin
 
 logger = structlog.get_logger(__name__)
-# src/ai_assistant/kernel.py
 
 async def orchestrate_agent_run(
     query: str,
@@ -50,6 +51,25 @@ async def orchestrate_agent_run(
             error_msg = f"🛑 HALTING: Could not load persona '{persona_alias}'. Reason: {e}"
             logger.error("Persona loading failed", persona=persona_alias, error=str(e))
             return {"response": error_msg, "metrics": metrics}
+
+    # ### --- FIX: RAG-enhanced planning context injection --- ###
+    # Check if a RAG index exists and inject relevant context for the planner.
+    rag_index_path = Path.cwd() / ".ai_rag_index"
+    if rag_index_path.exists():
+        logger.info("RAG index found. Retrieving context to enhance planning.")
+        try:
+            rag_plugin = RAGContextPlugin(project_root=Path.cwd())
+            # Use the plugin's get_context method which is designed for this
+            relevant_context = rag_plugin.get_context(query, [])
+            if relevant_context:
+                logger.info("Injecting RAG context into planning history.")
+                history.append({
+                    "role": "system",
+                    "content": f"<SystemNote>The following context was retrieved from the project's knowledge base to aid in your planning:\n{relevant_context}</SystemNote>"
+                })
+        except Exception as e:
+            logger.warning("Failed to retrieve or inject RAG context", error=str(e))
+    # ### --- END FIX --- ###
 
     # --- PRE-PROCESSING LOGIC ---
     optimizer = ContextOptimizer()
@@ -82,7 +102,7 @@ async def orchestrate_agent_run(
              plan_expectation=plan_expectation, 
          )
         
-     # --- Explicit check for planner failure ---
+     # ### --- FIX: Handle critical planner failure inside the loop --- ###
         if plan is None:
             # The planner itself failed critically. No point in retrying.
             halt_message = "HALTED: The AI planner failed to generate a plan due to a critical internal error. Check the logs for details."
@@ -195,6 +215,7 @@ async def orchestrate_agent_run(
 
     # --- OUTPUT-FIRST MODE (GENERATE PACKAGE) ---
     if output_dir:
+        # ### --- FIX: Await the now-async handler function --- ###
         return await _handle_output_first_mode(
             plan, 
             persona_alias,
@@ -352,6 +373,7 @@ async def orchestrate_agent_run(
         "metrics": metrics,
     }
     
+# ### --- FIX: Make function async to support awaiting LLM calls --- ###
 async def _handle_output_first_mode(
     plan: ExecutionPlan,
     persona_alias: str,
@@ -398,10 +420,70 @@ async def _handle_output_first_mode(
         args = step.args
         thought = step.thought
         
-        # Handle the high-level workflow tool by unpacking it into granular actions.
+        # ### --- FIX: Correctly handle workflow by generating refactored content --- ###
         if tool_name == "execute_refactoring_workflow":
             logger.debug("Unpacking execute_refactoring_workflow for manifest.")
             
+            # 1. Create Branch Action
+            branch_name = args.get("branch_name")
+            if branch_name:
+                manifest["actions"].append({
+                    "type": "create_branch",
+                    "comment": f"Part of workflow: Create branch for '{args.get('commit_message')}'",
+                    "branch_name": branch_name,
+                })
+
+            # 2. Refactor Files (as apply_file_change actions)
+            instructions = args.get("refactoring_instructions")
+            files_to_refactor = args.get("files_to_refactor", [])
+            
+            # This is the critical fix: actually generate the refactored content
+            for file_path_str in files_to_refactor:
+                file_path = Path(file_path_str)
+                if not file_path.exists():
+                    logger.warning("File to refactor not found, skipping.", file=file_path_str)
+                    continue
+                
+                logger.info("Generating refactored content for package...", file=file_path_str)
+                original_content = file_path.read_text(encoding='utf-8')
+                
+                # Re-use the prompt logic from the refactoring tool for consistency
+                prompt = f"""You are an expert code refactoring agent. Your sole task is to modify the provided source code based on the user's instructions. You must return only the complete, final, modified code file. Do not add any commentary, explanations, or markdown formatting.
+
+<Instructions>
+{instructions}
+</Instructions>
+
+<OriginalCode path="{file_path_str}">
+{original_content}
+</OriginalCode>
+
+Modified Code:"""
+                
+                handler = ResponseHandler()
+                synthesis_model = ai_settings.model_selection.synthesis
+                result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
+                refactored_content = result["content"].strip()
+
+                if not refactored_content:
+                    logger.error("Refactoring agent returned empty content. Skipping file.", file=file_path_str)
+                    continue
+
+                target_path_in_workspace = workspace_dir / file_path_str
+                target_path_in_workspace.parent.mkdir(parents=True, exist_ok=True)
+                target_path_in_workspace.write_text(refactored_content, encoding='utf-8')
+                
+                manifest["actions"].append({
+                    "type": "apply_file_change",
+                    "comment": f"Part of workflow: Refactor file '{file_path_str}'.",
+                    "source": f"workspace/{file_path_str}",
+                    "target": file_path_str,
+                })
+                manifest["actions"].append({
+                    "type": "git_add",
+                    "comment": f"Part of workflow: Stage refactored file.",
+                    "path": file_path_str,
+                })
 
             # 3. Commit Action
             commit_message = args.get("commit_message")
@@ -410,37 +492,6 @@ async def _handle_output_first_mode(
                     "type": "git_commit",
                     "comment": "Part of workflow: Commit all staged changes.",
                     "message": commit_message,
-                })
-            
-            # 1. Create Branch Action
-            branch_name = args.get("branch_name")
-            if branch_name:
-                manifest["actions"].append({
-                    "type": "create_branch",
-                    "comment": f"Part of workflow: Create branch for '{commit_message}'",
-                    "branch_name": branch_name,
-                })
-
-            # 2. Refactor Files (as apply_file_change actions)
-            instructions = args.get("refactoring_instructions")
-            files_to_refactor = args.get("files_to_refactor", [])
-            for file_path in files_to_refactor:
-                target_path_in_workspace = workspace_dir / file_path
-                target_path_in_workspace.parent.mkdir(parents=True, exist_ok=True)
-                # For now, we assume the instructions ARE the content. A more advanced
-                # version would call another LLM here, but this is correct for this persona.
-                target_path_in_workspace.write_text(instructions, encoding='utf-8')
-                
-                manifest["actions"].append({
-                    "type": "apply_file_change",
-                    "comment": f"Part of workflow: Refactor file based on instructions.",
-                    "source": f"workspace/{file_path}",
-                    "target": file_path,
-                })
-                manifest["actions"].append({
-                    "type": "git_add",
-                    "comment": f"Part of workflow: Stage refactored file.",
-                    "path": file_path,
                 })
 
             # This step has been fully processed, so skip the rest of the loop.

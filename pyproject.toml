@@ -14,11 +14,8 @@ dependencies = [
       "instructor==1.10.0",
       "openai==1.101.0",    
       "google-generativeai>=0.8", 
-      "chromadb==1.0.20",
       "tiktoken==0.11.0",
       "python-dotenv==1.1.1",
-      "sentence-transformers==5.1.0",
-      "torch==2.8.0 ",
       ]
 
 [build-system]
@@ -31,7 +28,6 @@ ai-execute = "ai_assistant.executor:main"
 ai-index = "ai_assistant.indexer:main"
 
 [project.entry-points."ai_assistant.context_plugins"]
-"rag" = "ai_assistant.plugins.rag_plugin:RAGContextPlugin"
 "domains-programming" = "ai_assistant.plugins.domains.programming.context:ProgrammingContextPlugin"
 "domains-finance" = "ai_assistant.plugins.domains.finance.context:FinanceContextPlugin"
 "domains-writing" = "ai_assistant.plugins.domains.writing.context:WritingContextPlugin"
@@ -43,6 +39,18 @@ test = [
     "pytest",
     "jsonschema",
 ]
+
+# For the production/indexing environment
+indexing = [
+    "chromadb==1.0.20",
+    "sentence-transformers==5.1.0",
+    "torch==2.8.0 ",
+]
+# For developer/laptop environments that only need to query the index
+client = [
+    "chromadb-client==0.5.0", # Use the official lightweight client
+]
+
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -57,7 +65,5 @@ include = ["ai_assistant*"]
     "personas/**/*.persona.md",
     "internal_data/governance.yml",
     "internal_data/persona_config.yml",
-    "internal_data/prompt_analysis_rules.yml",
-    "internal_data/schemas/**/*.json",
-    "_test_data/fixtures/*.json"
+    "internal_data/schemas/**/*.json"
 ]

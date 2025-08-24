@@ -2,7 +2,6 @@ prompt_analysis_rules:
   - name: "batch_processing_anti_pattern"
     description: "Detects attempts to modify multiple files in one explicit ACTION, which is a known anti-pattern."
     detector:
-      # --- THIS IS THE FIX ---
       type: "multi_file_action" 
       threshold: 1
       keywords:

@@ -9,7 +9,12 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Generator
 import fnmatch
 
-import chromadb
+# ### --- FIX: Use conditional imports and the new client factory --- ###
+try:
+    import chromadb
+except ImportError:
+    chromadb = None
+
 import structlog
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
@@ -22,7 +27,7 @@ logger = structlog.get_logger()
 
 INDEX_DIR = Path(".ai_rag_index")
 STATE_FILE = INDEX_DIR / "state.json"
-DEFAULT_COLLECTION_NAME = "codebase_collection"
+DEFAULT_COLLECTION_NAME = "ai_settings.rag.collection_name"
 EMBEDDING_BATCH_SIZE = 16
 
 DEFAULT_IGNORE_PATTERNS = [
@@ -59,6 +64,15 @@ class Indexer:
         self.index_path = project_root / INDEX_DIR
         self.state_path = project_root / STATE_FILE
         self.index_path.mkdir(exist_ok=True)
+        
+        if not chromadb:
+            raise ImportError("ChromaDB is not installed. Please install with 'pip install -e .[indexing]' to run the indexer.")
+        
+        ai_settings = load_ai_settings()
+        if ai_settings.rag.chroma_server_host:
+            logger.error("Indexer cannot be run in client-server mode. Unset chroma_server_host in your config to run the indexer.")
+            raise ConnectionError("Indexer is configured to connect to a remote server, which is not allowed.")
+
         self.db_client = chromadb.PersistentClient(path=str(self.index_path))
         self.collection = self.db_client.get_or_create_collection(DEFAULT_COLLECTION_NAME)
         self.embed_provider = EmbeddingProvider()
@@ -70,8 +84,19 @@ class Indexer:
             with open(self.state_path, 'r') as f: return json.load(f)
         return {}
 
+    # ### --- FIX: Implement atomic state saving --- ###
     def _save_state(self):
-        with open(self.state_path, 'w') as f: json.dump(self.state, f, indent=2)
+        """Atomically saves the state to prevent corruption on crash."""
+        temp_path = self.state_path.with_suffix('.tmp')
+        try:
+            with open(temp_path, 'w', encoding='utf-8') as f:
+                json.dump(self.state, f, indent=2)
+            # Atomic rename/replace operation
+            temp_path.replace(self.state_path)
+        except IOError as e:
+            logger.error("Failed to save state atomically", error=str(e))
+            if temp_path.exists():
+                temp_path.unlink()
 
     def _load_ignore_patterns(self) -> List[str]:
         patterns = DEFAULT_IGNORE_PATTERNS
@@ -117,6 +142,8 @@ class Indexer:
         return True
 
     def _chunk_text(self, text: str, file_path: Path) -> List[str]:
+        # NOTE: This naive chunking is still a weakness. The AI's suggestion to use
+        # an AST-based chunker for Python is the correct next step for improving quality.
         file_ext = file_path.suffix.lower()
         if file_ext == '.py':
             chunks = re.split(r'(^\s*class\s|^\s*def\s)', text, flags=re.MULTILINE)
@@ -141,9 +168,29 @@ class Indexer:
             self.db_client.delete_collection(name=DEFAULT_COLLECTION_NAME)
             self.collection = self.db_client.get_or_create_collection(DEFAULT_COLLECTION_NAME)
 
+        # ### --- FIX: Implement full project scan for change detection --- ###
+        current_files = {str(p.relative_to(self.project_root)): p for p in self._walk_project()}
+        
+        # 1. Detect deleted files (orphans)
+        indexed_files = set(self.state.keys())
+        deleted_files = indexed_files - set(current_files.keys())
+        
+        if deleted_files:
+            logger.info("Found orphaned files to remove from index", count=len(deleted_files))
+            ids_to_delete = []
+            for file_path_str in deleted_files:
+                # A file can have multiple chunks, so we need to find all IDs for that source.
+                results = self.collection.get(where={"source": file_path_str}, include=[])
+                ids_to_delete.extend(results['ids'])
+                self.state.pop(file_path_str, None)
+            
+            if ids_to_delete:
+                self.collection.delete(ids=ids_to_delete)
+                logger.info("Removed orphaned chunks from ChromaDB.", count=len(ids_to_delete))
+
+        # 2. Detect new or modified files
         files_to_index = []
-        for file_path in self._walk_project():
-            rel_path_str = str(file_path.relative_to(self.project_root))
+        for rel_path_str, file_path in current_files.items():
             try:
                 new_hash = self._calculate_hash(file_path)
                 if self.state.get(rel_path_str) != new_hash:
@@ -153,6 +200,7 @@ class Indexer:
         
         if not files_to_index:
             logger.info("No new or modified files to index. Project is up to date.")
+            self._save_state() # Save state in case orphans were removed
             return
 
         logger.info("Found new or modified files to index", count=len(files_to_index))
@@ -181,6 +229,7 @@ class Indexer:
 
         if not total_chunks_to_embed:
             logger.info("No valid new chunks to embed.")
+            self._save_state() # Save state in case orphans were removed
             return
 
         logger.info("Total valid chunks to process", count=len(total_chunks_to_embed))
@@ -200,7 +249,11 @@ class Indexer:
                     documents=[item['document'] for item in batch],
                     metadatas=[item['metadata'] for item in batch]
                 )
-                self.state.update(file_hashes_to_update)
+                # Update state for the files processed in this batch
+                for item in batch:
+                    source_file = item['metadata']['source']
+                    if source_file in file_hashes_to_update:
+                        self.state[source_file] = file_hashes_to_update[source_file]
             else:
                 logger.error("Failed to get embeddings for batch", first_chunk_id=batch[0]['id'])
 
@@ -217,8 +270,12 @@ def main():
     if not project_path.is_dir():
         logger.error("Path is not a valid directory", path=project_path)
         return
-    indexer = Indexer(project_path)
-    indexer.run(force_reindex=args.force_reindex)
+    try:
+        indexer = Indexer(project_path)
+        indexer.run(force_reindex=args.force_reindex)
+    except (ImportError, ConnectionError) as e:
+        logger.critical("Failed to initialize indexer", error=str(e))
+        
 
 if __name__ == "__main__":
     main()
