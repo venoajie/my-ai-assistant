@@ -1,0 +1,237 @@
+name: Smart RAG Indexing
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'release/**'
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
+      - '.github/workflows/**'
+      - '!.github/workflows/smart-indexing.yml'
+  workflow_dispatch:
+    inputs:
+      force_reindex:
+        description: 'Force complete reindexing'
+        required: false
+        type: boolean
+        default: false
+
+# Ensure only one indexing job runs per branch at a time
+concurrency:
+  group: indexing-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+env:
+  OCI_NAMESPACE: ${{ vars.OCI_NAMESPACE }}
+  OCI_BUCKET: ${{ vars.OCI_BUCKET }}
+  OCI_REGION: ${{ vars.OCI_REGION }}
+  BRANCH_NAME: ${{ github.ref_name }}
+  INDEX_VERSION: v1
+
+jobs:
+  index-codebase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need previous commit for delta calculation
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install Dependencies
+        run: |
+          pip install -e .[indexing]
+          pip install oci-cli
+      
+      - name: Configure Oracle Cloud OIDC
+        uses: oracle-actions/configure-oci-credentials@v1
+        with:
+          user: ${{ vars.OCI_USER_OCID }}
+          fingerprint: ${{ vars.OCI_FINGERPRINT }}
+          tenancy: ${{ vars.OCI_TENANCY_OCID }}
+          region: ${{ env.OCI_REGION }}
+          
+      - name: Determine Indexing Mode
+        id: mode
+        run: |
+          if [[ "${{ github.event.inputs.force_reindex }}" == "true" ]]; then
+            echo "mode=full" >> $GITHUB_OUTPUT
+            echo "::notice::Running FULL reindexing (forced)"
+          elif [[ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]; then
+            echo "mode=full" >> $GITHUB_OUTPUT
+            echo "::notice::Running FULL reindexing (new branch)"
+          else
+            # Check if index exists for this branch
+            if oci os object head \
+              --namespace "${OCI_NAMESPACE}" \
+              --bucket-name "${OCI_BUCKET}" \
+              --name "indexes/${BRANCH_NAME}/latest/manifest.json" \
+              2>/dev/null; then
+              echo "mode=delta" >> $GITHUB_OUTPUT
+              echo "::notice::Running DELTA indexing"
+            else
+              echo "mode=full" >> $GITHUB_OUTPUT
+              echo "::notice::Running FULL reindexing (no existing index)"
+            fi
+          fi
+      
+      - name: Calculate Changed Files (Delta Mode)
+        if: steps.mode.outputs.mode == 'delta'
+        id: changes
+        run: |
+          # Get list of changed files since last commit
+          git diff --name-only --diff-filter=ACMRT ${{ github.event.before }} ${{ github.sha }} > changed_files.txt
+          
+          # Also get deleted files
+          git diff --name-only --diff-filter=D ${{ github.event.before }} ${{ github.sha }} > deleted_files.txt
+          
+          echo "Changed files:"
+          cat changed_files.txt
+          echo "Deleted files:"
+          cat deleted_files.txt
+          
+          # Create environment file for indexer
+          echo "DELTA_MODE=true" > indexing.env
+          echo "CHANGED_FILES_PATH=changed_files.txt" >> indexing.env
+          echo "DELETED_FILES_PATH=deleted_files.txt" >> indexing.env
+      
+      - name: Run Indexer
+        id: indexing
+        run: |
+          # Set up environment
+          if [[ -f indexing.env ]]; then
+            export $(cat indexing.env | xargs)
+          fi
+          
+          # Create temporary directory for index
+          INDEX_DIR=$(mktemp -d)
+          export INDEX_OUTPUT_DIR="${INDEX_DIR}"
+          
+          # Run indexer with branch awareness
+          python -m ai_assistant.indexer \
+            --branch "${BRANCH_NAME}" \
+            --output-dir "${INDEX_DIR}" \
+            ${{ steps.mode.outputs.mode == 'full' && '--force-reindex' || '' }}
+          
+          # Calculate checksum of the index
+          cd "${INDEX_DIR}"
+          find . -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1 > checksum.txt
+          CHECKSUM=$(cat checksum.txt)
+          echo "checksum=${CHECKSUM}" >> $GITHUB_OUTPUT
+          echo "index_dir=${INDEX_DIR}" >> $GITHUB_OUTPUT
+          
+          # Create manifest
+          cat > manifest.json <<EOF
+          {
+            "version": "${INDEX_VERSION}",
+            "branch": "${BRANCH_NAME}",
+            "commit": "${{ github.sha }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "checksum": "${CHECKSUM}",
+            "mode": "${{ steps.mode.outputs.mode }}",
+            "github_run_id": "${{ github.run_id }}"
+          }
+          EOF
+      
+      - name: Upload Index to Object Storage
+        id: upload
+        run: |
+          INDEX_DIR="${{ steps.indexing.outputs.index_dir }}"
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          PENDING_PATH="indexes/${BRANCH_NAME}/pending/${TIMESTAMP}_${{ github.sha }}"
+          LATEST_PATH="indexes/${BRANCH_NAME}/latest"
+          
+          # Create tar archive of the index
+          cd "${INDEX_DIR}"
+          tar -czf ../index.tar.gz .
+          cd ..
+          
+          # Upload to pending location
+          oci os object put \
+            --namespace "${OCI_NAMESPACE}" \
+            --bucket-name "${OCI_BUCKET}" \
+            --name "${PENDING_PATH}/index.tar.gz" \
+            --file index.tar.gz \
+            --metadata '{"checksum":"${{ steps.indexing.outputs.checksum }}"}'
+          
+          # Upload manifest
+          oci os object put \
+            --namespace "${OCI_NAMESPACE}" \
+            --bucket-name "${OCI_BUCKET}" \
+            --name "${PENDING_PATH}/manifest.json" \
+            --file "${INDEX_DIR}/manifest.json"
+          
+          # Atomic move to latest (by copying and deleting old)
+          # First, copy pending to latest
+          oci os object copy \
+            --namespace "${OCI_NAMESPACE}" \
+            --bucket-name "${OCI_BUCKET}" \
+            --source-object-name "${PENDING_PATH}/index.tar.gz" \
+            --destination-namespace "${OCI_NAMESPACE}" \
+            --destination-bucket "${OCI_BUCKET}" \
+            --destination-object-name "${LATEST_PATH}/index.tar.gz"
+          
+          oci os object copy \
+            --namespace "${OCI_NAMESPACE}" \
+            --bucket-name "${OCI_BUCKET}" \
+            --source-object-name "${PENDING_PATH}/manifest.json" \
+            --destination-namespace "${OCI_NAMESPACE}" \
+            --destination-bucket "${OCI_BUCKET}" \
+            --destination-object-name "${LATEST_PATH}/manifest.json"
+          
+          # Archive the pending version
+          ARCHIVE_PATH="indexes/${BRANCH_NAME}/archive/${TIMESTAMP}_${{ github.sha }}"
+          oci os object copy \
+            --namespace "${OCI_NAMESPACE}" \
+            --bucket-name "${OCI_BUCKET}" \
+            --source-object-name "${PENDING_PATH}/index.tar.gz" \
+            --destination-namespace "${OCI_NAMESPACE}" \
+            --destination-bucket "${OCI_BUCKET}" \
+            --destination-object-name "${ARCHIVE_PATH}/index.tar.gz"
+          
+          oci os object copy \
+            --namespace "${OCI_NAMESPACE}" \
+            --bucket-name "${OCI_BUCKET}" \
+            --source-object-name "${PENDING_PATH}/manifest.json" \
+            --destination-namespace "${OCI_NAMESPACE}" \
+            --destination-bucket "${OCI_BUCKET}" \
+            --destination-object-name "${ARCHIVE_PATH}/manifest.json"
+          
+          # Clean up pending
+          oci os object delete \
+            --namespace "${OCI_NAMESPACE}" \
+            --bucket-name "${OCI_BUCKET}" \
+            --name "${PENDING_PATH}/index.tar.gz" \
+            --force
+          
+          oci os object delete \
+            --namespace "${OCI_NAMESPACE}" \
+            --bucket-name "${OCI_BUCKET}" \
+            --name "${PENDING_PATH}/manifest.json" \
+            --force
+          
+          echo "::notice::Successfully uploaded index to ${LATEST_PATH}"
+      
+      - name: Create Failure Issue
+        if: failure()
+        run: |
+          gh issue create \
+            --title "RAG Indexing Failed for ${{ github.ref_name }}" \
+            --body "The RAG indexing workflow failed for branch \`${{ github.ref_name }}\` at commit $

@@ -1,4 +1,3 @@
-# src/ai_assistant/config.py
 import yaml
 from pathlib import Path
 from typing import Dict, Optional, List
@@ -67,6 +66,16 @@ class GenerationConfig(BaseModel):
     synthesis: GenerationParams
     critique: GenerationParams
 
+# --- NEW: Oracle Cloud Storage Configuration ---
+class OracleCloudConfig(BaseModel):
+    """Configuration for Oracle Cloud Object Storage."""
+    namespace: Optional[str] = Field(None, description="OCI namespace")
+    bucket: Optional[str] = Field(None, description="OCI bucket name")
+    region: Optional[str] = Field(None, description="OCI region")
+    enable_caching: bool = Field(True, description="Enable local caching of downloaded indexes")
+    cache_ttl_hours: int = Field(24, description="Cache TTL in hours")
+
+# --- UPDATED: RAG Configuration with Branch Awareness ---
 class RAGConfig(BaseModel):
     """Configuration for the RAG subsystem."""
     embedding_model_name: str = 'all-MiniLM-L6-v2'
@@ -74,6 +83,23 @@ class RAGConfig(BaseModel):
     chroma_server_host: Optional[str] = Field(None, description="Hostname of the ChromaDB server.")
     chroma_server_port: Optional[int] = Field(None, description="Port of the ChromaDB server.")
     chroma_server_ssl: bool = Field(False, description="Use SSL to connect to the ChromaDB server.")
+    
+    # NEW: Branch-aware and delta indexing configuration
+    default_branch: str = Field("main", description="Default branch for RAG indexing")
+    enable_branch_awareness: bool = Field(True, description="Enable branch-specific indexes")
+    enable_delta_indexing: bool = Field(True, description="Enable delta indexing for faster updates")
+    
+    # NEW: Embedding provider configuration
+    fallback_embedding_providers: List[str] = Field(
+        default_factory=lambda: ["openai", "cohere"], 
+        description="Fallback embedding providers if local model fails"
+    )
+    
+    # NEW: Oracle Cloud configuration
+    oracle_cloud: Optional[OracleCloudConfig] = Field(
+        default_factory=OracleCloudConfig,
+        description="Oracle Cloud Object Storage configuration"
+    )
 
 class ProviderConfig(BaseModel):
     api_key_env: str

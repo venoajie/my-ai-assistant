@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Generator
 import fnmatch
+import subprocess
 
 # ### --- FIX: Use conditional imports and the new client factory --- ###
 try:
@@ -58,6 +59,39 @@ class EmbeddingProvider:
             logger.error("Failed to get local embeddings", error=str(e))
             return []
 
+class HybridEmbeddingProvider:
+    def __init__(self):
+        ai_settings = load_ai_settings()
+        self.model_name = ai_settings.rag.embedding_model_name
+        self.fallback_chain = [
+            self._try_local_model,
+            self._try_remote_service
+        ]
+        self.cache = {}
+
+    def _try_local_model(self, texts: List[str]) -> Optional[List[List[float]]]:
+        try:
+            model = SentenceTransformer(self.model_name)
+            embeddings = model.encode(texts, show_progress_bar=True)
+            return [emb.tolist() for emb in embeddings]
+        except Exception:
+            return None
+
+    def _try_remote_service(self, texts: List[str]) -> Optional[List[List[float]]]:
+        # Implementation for remote embedding service would go here
+        return None
+
+    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        cache_key = hashlib.md5("".join(texts).encode()).hexdigest()
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        
+        for provider in self.fallback_chain:
+            if embeddings := provider(texts):
+                self.cache[cache_key] = embeddings
+                return embeddings
+        return []
+
 class Indexer:
     def __init__(self, project_root: Path):
         self.project_root = project_root
@@ -69,6 +103,8 @@ class Indexer:
             raise ImportError("ChromaDB is not installed. Please install with 'pip install -e .[indexing]' to run the indexer.")
         
         ai_settings = load_ai_settings()
+        self.branch = ai_settings.rag.github_actions_indexing.branch
+        self.collection_name = f"{DEFAULT_COLLECTION_NAME}_{self.branch}"
         if ai_settings.rag.chroma_server_host:
             logger.error("Indexer cannot be run in client-server mode. Unset chroma_server_host in your config to run the indexer.")
             raise ConnectionError("Indexer is configured to connect to a remote server, which is not allowed.")
@@ -84,7 +120,17 @@ class Indexer:
             with open(self.state_path, 'r') as f: return json.load(f)
         return {}
 
-    # ### --- FIX: Implement atomic state saving --- ###
+    def get_changed_files(self) -> List[Path]:
+        """Get list of changed files using git diff for delta indexing"""
+        try:
+            result = subprocess.run(['git', 'diff', '--name-only', 'HEAD~1'], 
+                                  capture_output=True, text=True, cwd=self.project_root)
+            changed = [self.project_root / f.strip() for f in result.stdout.split('\n') if f.strip()]
+            return [f for f in changed if f.exists() and not self._is_ignored(f)]
+        except Exception:
+            return []
+        
+    # ### --- Implement atomic state saving --- ###
     def _save_state(self):
         """Atomically saves the state to prevent corruption on crash."""
         temp_path = self.state_path.with_suffix('.tmp')
