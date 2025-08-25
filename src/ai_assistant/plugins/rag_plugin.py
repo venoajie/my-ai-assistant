@@ -38,12 +38,12 @@ from ..context_plugin import ContextPluginBase
 from ..config import ai_settings
 
 logger = structlog.get_logger(__name__)
-
 def _get_chroma_client(rag_config: ai_settings.rag, index_path: Path) -> Optional[Client]:
     if not CHROMADB_AVAILABLE:
         logger.warning("ChromaDB not installed. RAG features disabled.")
         return None
 
+    # Client-server mode (no changes here)
     if rag_config.chroma_server_host and rag_config.chroma_server_port:
         logger.info("Connecting to remote ChromaDB server", host=rag_config.chroma_server_host, port=rag_config.chroma_server_port)
         try:
@@ -56,27 +56,31 @@ def _get_chroma_client(rag_config: ai_settings.rag, index_path: Path) -> Optiona
             logger.error("Failed to connect to ChromaDB server", error=str(e))
             return None
     
-    logger.info("Using local persistent ChromaDB index", path=str(index_path))
+    # --- THE DEFINITIVE FIX for Local Persistent Mode ---
+    logger.info("Attempting to load local persistent ChromaDB index", path=str(index_path))
     try:
         if not index_path.exists() or not (index_path / "chroma.sqlite3").exists():
              logger.warning("Local index path does not appear to be a valid ChromaDB directory.", path=str(index_path))
              return None
         
+        # 1. Create explicit local settings.
         settings = Settings(
             is_persistent=True,
             persist_directory=str(index_path),
-            anonymized_telemetry=False, # Good practice to disable telemetry in automated environments
+            anonymized_telemetry=False,
         )
         
-        client = chromadb.Client(settings)
+        # 2. Use the specific PersistentClient class WITH the settings object.
+        # This is the most direct and unambiguous method, leaving no room for auto-detection errors.
+        client = PersistentClient(path=str(index_path), settings=settings)
         
         client.heartbeat() 
-        logger.info("Successfully loaded persistent ChromaDB client using settings factory.")
+        logger.info("Successfully loaded persistent ChromaDB client in local mode.")
         return client
     except Exception as e:
-        logger.error("Failed to create ChromaDB client with settings", error=str(e), path=str(index_path))
+        logger.error("Failed to create persistent ChromaDB client", error=str(e), path=str(index_path))
         return None
-
+    
 class RAGContextPlugin(ContextPluginBase):
     name = "RAG Plugin"
     
