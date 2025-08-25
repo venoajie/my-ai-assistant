@@ -92,13 +92,13 @@ This system is for injecting pre-defined, static knowledge based on simple trigg
     -   **Manual Override:** The `--context` CLI flag overrides any automatically selected plugin.
 
 ### 5.2. The RAG Pipeline (Dynamic Knowledge)
-This system provides the assistant with deep, codebase-aware knowledge by dynamically retrieving the most relevant information from a project-specific knowledge base. It is designed for flexibility in multi-environment teams.
+This system provides the assistant with deep, codebase-aware knowledge by dynamically retrieving the most relevant information from a project-specific knowledge base. It is designed for a robust, automated, and scalable team environment.
 
--   **Architecture:** The system supports both a local, file-based vector database and a client-server model. This allows a single, powerful machine to perform indexing while lightweight clients (e.g., developer laptops) can query the central index remotely. Configuration is managed via `config.py` and `.ai_config.yml`.
--   **Indexing (Server/Indexer Role):** The `ai-index` command scans the project, chunks source code, and stores embeddings in a local vector database (`.ai_rag_index/`). This machine can then run the ChromaDB server to expose the index to clients.
--   **Retrieval (Client Role):** The built-in `RAGContextPlugin` is activated automatically when a RAG index is available (either locally or via server configuration). It embeds the user's query, searches the vector database, and retrieves the most semantically similar chunks of code or documentation.
--   **Injection:** The retrieved chunks are automatically injected into the prompt, providing the AI with highly relevant, on-the-fly context.
--   **Curation:** The knowledge base can be precisely controlled by adding file and directory patterns to a project-local `.aiignore` file.
+-   **Architecture:** The system uses a **CI/CD-driven, cloud-cached model**. A central, automated process builds the knowledge base, which is then distributed to lightweight clients via cloud object storage. This decouples the resource-intensive indexing process from the day-to-day client usage.
+-   **Indexing (CI/CD via GitHub Actions):** The `ai-index` command is executed within a CI/CD pipeline (e.g., GitHub Actions) upon every code push. It scans the project, chunks source code, and creates a branch-specific vector database. This index is then packaged and uploaded to a shared cloud object store (e.g., OCI Object Storage).
+-   **Retrieval (Client-Side Smart Caching):** The built-in `RAGContextPlugin` is activated automatically. On first run, or when its local cache is expired, it automatically downloads the latest index for the current branch from the cloud. Subsequent runs use the local cache for speed.
+-   **Injection:** The retrieved code chunks are automatically injected into the prompt, providing the AI with highly relevant, on-the-fly context.
+-   **Curation:** The knowledge base can be precisely controlled by adding file and directory patterns to a project-local `.aiignore` file, which is respected by the CI/CD indexing process.
 
 ---
 
@@ -116,10 +116,10 @@ For making changes to the local file system via a sandboxed "Output Package" and
 For preparing changes to be executed by a powerful, external agent.
 
 ### 6.4. Codebase-Aware Analysis Workflow (RAG)
-For performing complex analysis on a large codebase. The standard flow is:
-1.  **Index (Indexer Machine):** Run `ai-index` to create or update the knowledge base. Optionally, run `chroma run` to serve it.
-2.  **Configure (Client Machine):** Set the `chroma_server_host` in `.ai_config.yml` to point to the indexer machine.
-3.  **Query (Any Machine):** Run `ai "..."`. The RAG context is injected automatically if available.
+For performing complex analysis on a large codebase. The standard flow is now fully automated:
+1.  **Index (Automated):** A developer pushes a commit. The CI/CD pipeline automatically runs `ai-index` and uploads the branch-specific knowledge base to cloud storage.
+2.  **Configure (One-Time Setup):** A developer configures their local `.ai_config.yml` to point to the shared cloud storage bucket.
+3.  **Query (Any Machine):** A developer runs an `ai "..."` command. The `RAGContextPlugin` automatically ensures a fresh, local copy of the index is present (downloading it if necessary) and injects the relevant context into the prompt.
 
 ---
 
