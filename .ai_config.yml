@@ -3,8 +3,8 @@
 general:
   # We want to store session files in a custom directory for this project.
   sessions_directory: "my_custom_sessions"
+  auto_inject_files: []
 
-  # .ai_config.yml (project root)
 rag:
   enable_branch_awareness: true
   oracle_cloud:
