@@ -32,7 +32,8 @@ except ImportError as e:
 
 try:
     from sentence_transformers import SentenceTransformer
-    SENTENTENCE_TRANSFORMERS_AVAILABLE = True
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+    
 except ImportError:
     SentenceTransformer = None
     SENTENCE_TRANSFORMERS_AVAILABLE = False
