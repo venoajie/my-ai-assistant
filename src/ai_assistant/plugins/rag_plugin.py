@@ -11,6 +11,9 @@ import structlog
 import subprocess
 import sys 
 
+import oci
+from oci.object_storage import ObjectStorageClient
+
 os.environ.pop('CHROMA_API_IMPL', None)
 
 try:
@@ -18,7 +21,7 @@ try:
     from chromadb.api.client import Client
     from chromadb.config import Settings
     from chromadb import HttpClient
-    from chromadb import EphemeralClient # <-- FIX: Corrected import path
+    from chromadb import EphemeralClient
     CHROMADB_AVAILABLE = True
 except ImportError as e:
     # This error message will now work correctly
@@ -43,6 +46,7 @@ from ..config import ai_settings
 from ..utils.git_utils import get_normalized_branch_name
 
 logger = structlog.get_logger(__name__)
+
 def _get_chroma_client(
     rag_config: ai_settings.rag,
     index_path: Path,
@@ -179,7 +183,6 @@ class RAGContextPlugin(ContextPluginBase):
                     logger.info("Successfully downloaded index archive. Extracting...")
                     self.index_path.mkdir(exist_ok=True)
                     with tarfile.open(archive_path, "r:gz") as tar:
-                        # --- FIX: Add security filter to resolve RuntimeWarning ---
                         tar.extractall(path=self.index_path, filter='data')
                     logger.info("Index extracted successfully.", destination=str(self.index_path))
                     metadata = {"last_checked_utc": datetime.utcnow().isoformat()}
@@ -201,7 +204,12 @@ class RAGContextPlugin(ContextPluginBase):
     def get_context(self, query: str, files: List[str]) -> Tuple[bool, str]:
         if not self.db_client or not self.embedding_model: return True, ""
         try:
-            collection = self.db_client.get_or_create_collection(self.collection_name)
+            try:
+                # This will fail explicitly if the collection is missing.
+                collection = self.db_client.get_collection(self.collection_name)
+            except ValueError as e: # Or the specific exception ChromaDB throws
+                logger.error("RAG collection not found.", collection_name=self.collection_name)
+                return False, f"Error: RAG index '{self.collection_name}' not found on client."
         except Exception as e:
             logger.error(
                 "Failed to get or create RAG collection from ChromaDB.",

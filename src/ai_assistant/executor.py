@@ -159,14 +159,14 @@ class ManifestExecutor:
             raise ValueError("Action 'create_directory' is missing 'path'.")
         
         target_path = (self.project_root / path_rel).resolve()
-        print(f"   - Directory to create: {target_path}")
+        self.logger.info("Creating directory", path=str(target_path))
 
         if self.dry_run:
-            print("     (Skipped directory creation due to dry-run mode)")
+            self.logger.info("Skipped directory creation due to dry-run mode", path=str(target_path))
             return
         
         target_path.mkdir(parents=True, exist_ok=True)
-        print(f"   - ✅ Created directory.")
+        self.logger.info("Created directory successfully.", path=str(target_path))
 
     def _handle_move_file(self, action: dict):
         source_rel = action.get("source")

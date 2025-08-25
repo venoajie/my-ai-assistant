@@ -35,6 +35,27 @@ def _run_git_command(command_parts: List[str]) -> Tuple[bool, str]:
         error_message = f"Error running `{command_str}`:\nSTDOUT: {e.stdout.strip()}\nSTDERR: {e.stderr.strip()}"
         return (False, error_message)
 
+async def _run_git_command_async(command_parts: List[str]) -> Tuple[bool, str]:
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *command_parts,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await proc.communicate() # This is non-blocking
+
+        if proc.returncode != 0:
+            error_message = f"Error running `{' '.join(command_parts)}`:\nSTDOUT: {stdout.decode().strip()}\nSTDERR: {stderr.decode().strip()}"
+            return (False, error_message)
+
+        output = f"Success: `{' '.join(command_parts)}`"
+        if stdout: output += f"\nSTDOUT: {stdout.decode().strip()}"
+        if stderr: output += f"\nSTDERR: {stderr.decode().strip()}"
+        return (True, output)
+
+    except Exception as e:
+        return (False, f"Failed to execute command: {e}")
+
 # --- Simplifying the AI's job to a single, clear instruction---
 class CreateServiceFromTemplateTool(Tool):
     name = "create_service_from_template"
@@ -270,8 +291,15 @@ class RunShellCommandTool(Tool):
             return (False, "🚫 ERROR: Empty command provided.")
         
         for pattern in SHELL_COMMAND_BLOCKLIST:
-            if re.search(pattern, command, re.IGNORECASE):
-                return (False, f"🚫 SECURITY BLOCK: Command '{command}' matches a dangerous pattern.")
+            if re.search(
+                pattern, 
+                command, 
+                re.IGNORECASE,
+                ):
+                return (
+                    False, 
+                    f"🚫 SECURITY BLOCK: Command '{command}' matches a dangerous pattern.",
+                    )
         
         try:
             result = subprocess.run(
@@ -296,12 +324,21 @@ class GitCreateBranchTool(Tool):
         self, 
         branch_name: str,
         ) -> Tuple[bool, str]:
-        return _run_git_command(["git", "checkout", "-b", branch_name])
+        return await _run_git_command_async(
+            ["git", 
+             "checkout", 
+             "-b", 
+             branch_name],
+            )
 
 class GitAddTool(Tool):
     name = "git_add"; description = "Stages a specific file or directory. Usage: git_add(path: str)"; is_risky = True
     async def __call__(self, path: str) -> Tuple[bool, str]:
-        return _run_git_command(["git", "add", path])
+        return await _run_git_command_async(
+            ["git", 
+             "add",
+             path],
+            )
 
 class GitCommitTool(Tool):
     name = "git_commit"; description = "Creates a commit with the given message. Usage: git_commit(commit_message: str)"; is_risky = True
@@ -309,7 +346,11 @@ class GitCommitTool(Tool):
         self, 
         commit_message: str,
         ) -> Tuple[bool, str]:
-        return _run_git_command(["git", "commit", "-m", commit_message])
+        return await _run_git_command_async(
+            ["git", 
+             "commit", 
+             "-m", commit_message],
+            )
 
 class GitPushTool(Tool):
     name = "git_push"; description = "Pushes the current local branch to the remote 'origin'. Usage: git_push()"; is_risky = True

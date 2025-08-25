@@ -55,7 +55,6 @@ def list_available_plugins() -> List[str]:
     local_plugins_path = ai_settings.paths.local_plugins_dir
     if local_plugins_path.is_dir():
         for file_path in local_plugins_path.glob("*.py"):
-            # --- THIS IS THE FIX ---
             # Explicitly ignore __init__.py files
             if file_path.name == "__init__.py":
                 continue
