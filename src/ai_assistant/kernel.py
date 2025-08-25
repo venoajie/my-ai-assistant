@@ -17,7 +17,7 @@ from .persona_loader import PersonaLoader
 from .plan_validator import generate_plan_expectation, check_plan_compliance
 from .planner import Planner
 from .prompt_builder import PromptBuilder
-from .response_handler import ResponseHandler  # Still needed for synthesis
+from .response_handler import ResponseHandler
 from .plugins.rag_plugin import RAGContextPlugin
 from .tools import TOOL_REGISTRY
 from .utils.context_optimizer import ContextOptimizer
@@ -37,7 +37,6 @@ async def orchestrate_agent_run(
     metrics = {"timings": {}, "tokens": {"planning": {}, "critique": {}, "synthesis": {}}}
     timings = metrics["timings"]
 
-    # --- PERSONA LOADING ---
     persona_directives: Optional[str] = None
     persona_context: Optional[str] = None
     allowed_tools: Optional[List[str]] = None
@@ -52,16 +51,16 @@ async def orchestrate_agent_run(
             return {"response": error_msg, "metrics": metrics}
 
     # --- RAG CONTEXT INJECTION ---
+    rag_content = "" # Initialize rag_content to ensure it's always defined
     logger.info("Attempting to retrieve RAG context to enhance planning.")
     try:
         rag_plugin = RAGContextPlugin(project_root=Path.cwd())
-        success, rag_content = rag_plugin.get_context(query, [])
+        success, rag_content_result = rag_plugin.get_context(query, [])
                 
         if not success:
-            # The plugin itself reported a failure.
-            print(f"{Colors.YELLOW}⚠️  RAG Warning: {rag_content}{Colors.RESET}", file=sys.stderr)
-        elif rag_content:
-            # The plugin succeeded and returned context.
+            print(f"{Colors.YELLOW}⚠️  RAG Warning: {rag_content_result}{Colors.RESET}", file=sys.stderr)
+        elif rag_content_result:
+            rag_content = rag_content_result # Store the content for later use
             logger.info("Injecting RAG context into planning history.")
             system_note = f"<SystemNote>The following context was retrieved from the RAG system to aid in planning:\n{rag_content}</SystemNote>"
             history.append({
@@ -70,19 +69,12 @@ async def orchestrate_agent_run(
             })
             
     except Exception as e:
-        # A more fundamental error occurred during plugin instantiation or execution.
         logger.warning("Could not retrieve RAG context due to an unexpected error", error=str(e))
         print(f"{Colors.YELLOW}⚠️  RAG Warning: Could not retrieve context due to an unexpected error. Check logs for details.{Colors.RESET}", file=sys.stderr)
             
-    # ... (PRE-PROCESSING, PLANNING, CRITIQUE, EXECUTION, SYNTHESIS) ...
-    # --- PRE-PROCESSING LOGIC ---
     optimizer = ContextOptimizer()
-    
     threshold = ai_settings.context_optimizer.prompt_compression_threshold
-
-    # --- THIS LOGIC NOW RUNS *AFTER* POTENTIAL DISTILLATION ---
     use_compact_protocol = False
-    # Re-estimate with the potentially shorter query
     current_history_str = " ".join(turn['content'] for turn in history)
     current_input = query + current_history_str
     current_tokens = optimizer.estimate_tokens(current_input)
@@ -90,8 +82,7 @@ async def orchestrate_agent_run(
         logger.info("Context still large after distillation. Using compact prompt format.", tokens=current_tokens)
         use_compact_protocol = True
 
-    # --- PLANNING & UNIFIED VALIDATION LOOP ---
-    plan_expectation = generate_plan_expectation(query) # Always validate against the ORIGINAL user intent
+    plan_expectation = generate_plan_expectation(query)
     
     planner = Planner()
     max_retries = 2
@@ -106,20 +97,17 @@ async def orchestrate_agent_run(
              plan_expectation=plan_expectation, 
          )
         
-     # ### --- Handle critical planner failure inside the loop --- ###
         if plan is None:
-            # The planner itself failed critically. No point in retrying.
             halt_message = "HALTED: The AI planner failed to generate a plan due to a critical internal error. Check the logs for details."
             logger.critical(halt_message)
             return {"response": halt_message, "metrics": metrics}        
         
-        # This is the single, unified validation gate.
-        is_compliant, compliance_reason = check_plan_compliance(plan, plan_expectation) # Pass the object
+        is_compliant, compliance_reason = check_plan_compliance(plan, plan_expectation)
         
         persona_tools_valid = True
         persona_reason = ""
         if allowed_tools:
-            for step in plan: # This correctly iterates over plan.steps due to __iter__
+            for step in plan:
                 if step.tool_name not in allowed_tools:
                     persona_tools_valid = False
                     persona_reason = (
@@ -149,13 +137,20 @@ async def orchestrate_agent_run(
     prompt_builder = PromptBuilder()
 
     # --- DIRECT RESPONSE (NO TOOLS) ---
-    # --- MODIFIED: Check plan.steps instead of plan.root ---
     if not plan or not plan.steps or all(not step.tool_name for step in plan):
         print("📝 No tool execution required. Generating direct response...")
+        
+        # *** START OF KEY CHANGE FOR DIRECT RESPONSE ***
+        # If we have RAG content, it becomes the primary observation.
+        direct_observations = ["<Observation>No tool execution was required for this query.</Observation>"]
+        if rag_content:
+            direct_observations = [f"<Observation step='0' tool='RAG_retrieval'>\n{rag_content}\n</Observation>"]
+        # *** END OF KEY CHANGE FOR DIRECT RESPONSE ***
+
         direct_prompt = prompt_builder.build_synthesis_prompt(
             query=query,
             history=history,
-            observations=["<Observation>No tool execution was required for this query.</Observation>"],
+            observations=direct_observations, # Use the potentially updated observations
             persona_context=persona_context or "You are a helpful AI assistant.",
             directives=persona_directives
         )
@@ -182,7 +177,6 @@ async def orchestrate_agent_run(
                 persona_context=critic_context
             )
             
-            # --- REFACTORED CRITIC CALL ---
             critique_model_name = ai_settings.model_selection.critique
             critique_client = get_instructor_client(critique_model_name)
             critique_gen_config = ai_settings.generation_params.critique.model_dump(exclude_none=True)
@@ -194,7 +188,7 @@ async def orchestrate_agent_run(
                     messages=[{"role": "user", "content": critique_prompt}],
                     generation_config=critique_gen_config,
                 )
-            else: # Assumes OpenAI-compatible
+            else:
                 critique_response = await critique_client.chat.completions.create(
                     model=critique_model_name,
                     response_model=CritiqueResponse,
@@ -203,8 +197,6 @@ async def orchestrate_agent_run(
                 )
 
             critique = critique_response.critique
-            # NOTE: Token calculation is now an estimation as we don't get it from instructor.
-            # This is an acceptable trade-off for architectural consistency.
             optimizer = ContextOptimizer()
             prompt_tokens = optimizer.estimate_tokens(critique_prompt)
             response_tokens = optimizer.estimate_tokens(critique)
@@ -216,9 +208,7 @@ async def orchestrate_agent_run(
             print(f"   - ⚠️ Warning: Could not perform plan validation. Reason: {e}")
             critique = "Plan validation step failed due to an internal error."
 
-    # --- OUTPUT-FIRST MODE (GENERATE PACKAGE) ---
     if output_dir:
-        # ### --- Await the now-async handler function --- ###
         return await _handle_output_first_mode(
             plan, 
             persona_alias,
@@ -228,15 +218,18 @@ async def orchestrate_agent_run(
 
     # --- LIVE MODE (TOOL EXECUTION) ---
     print("🚀 Executing adaptive plan...")
+    
+    # *** START OF KEY CHANGE FOR LIVE MODE ***
+    # Initialize observations and pre-populate with any RAG context.
     observations = []
     if rag_content:
-        # The RAG content is a pre-execution observation.
         observations.append(f"<Observation step='0' tool='RAG_retrieval'>\n{rag_content}\n</Observation>")
+    # *** END OF KEY CHANGE FOR LIVE MODE ***
+
     step_results: Dict[int, str] = {}
     any_risky_action_denied = False
 
-
-    for i, step in enumerate(plan): # This correctly iterates over plan.steps due to __iter__
+    for i, step in enumerate(plan):
         step_num = i + 1
         if step.condition:
             cond = step.condition
@@ -267,7 +260,6 @@ async def orchestrate_agent_run(
                     print(highlight_critique(critique))
                     print("----------------------------")
                     
-                # --- CRITICAL REMINDER ---
                 print(f"\n{Colors.YELLOW}{Colors.BOLD}⚠️  DISCLAIMER: Review the plan and critique carefully.{Colors.RESET}")
                 print(f"{Colors.YELLOW}   The AI can make mistakes or generate incorrect code.{Colors.RESET}")
                 print(f"{Colors.YELLOW}   You are responsible for approving this action.{Colors.RESET}")
@@ -296,7 +288,6 @@ async def orchestrate_agent_run(
             observations.append(f"<Observation step='{step_num}' tool='{tool_name}'>Error: Tool not found.</Observation>")
             print(f"    ❌ Failure: Tool '{tool_name}' not found.")
 
-    # --- SYNTHESIS ---
     if any_risky_action_denied:
         error_msg = "Task aborted by user. No actions were performed."
         print(f"\n🛑 {error_msg}")
@@ -306,7 +297,6 @@ async def orchestrate_agent_run(
             }
             
     observation_text = "\n".join(observations)
-
     is_failure_state = False
     for obs in observations:
         if obs.startswith("<Observation") and ("Error:" in obs or "Critical Error:" in obs):
@@ -328,16 +318,12 @@ async def orchestrate_agent_run(
     final_context = persona_context
     final_synthesis_query = query
         
-    # Heuristic: If the plan was a single, successful, risky action, the user
-    # doesn't need a complex synthesis, just a clear confirmation.
-    # We check if the last tool run was successful.
     last_tool_run_successful = "Error:" not in observations[-1] and "Critical Error:" not in observations[-1]
     
     if len(plan) == 1 and plan[0].tool_name and \
         TOOL_REGISTRY.get_tool(plan[0].tool_name).is_risky and \
             last_tool_run_successful:
         print("   - Action was successful. Switching to a simple confirmation prompt for synthesis.")
-        # We replace the original query with a much more direct instruction.
         final_synthesis_query = (
             "The requested action was completed successfully. Your task is to briefly and clearly "
             "inform the user of this success. Use the content of the <ToolObservations> to state "
@@ -360,7 +346,7 @@ async def orchestrate_agent_run(
         final_context = "You are a helpful AI assistant. Answer the user's query based on the provided context and observations."
 
     synthesis_prompt = prompt_builder.build_synthesis_prompt(
-        query=final_synthesis_query     ,
+        query=final_synthesis_query,
         history=history,
         observations=observations,
         persona_context=final_context,
@@ -428,7 +414,6 @@ async def _handle_output_first_mode(
         if tool_name == "execute_refactoring_workflow":
             logger.debug("Unpacking execute_refactoring_workflow for manifest.")
             
-            # 1. Create Branch Action
             branch_name = args.get("branch_name")
             if branch_name:
                 manifest["actions"].append({
@@ -449,7 +434,6 @@ async def _handle_output_first_mode(
                 logger.info("Generating refactored content for package...", file=file_path_str)
                 original_content = file_path.read_text(encoding='utf-8')
                 
-                # Re-use the prompt logic from the refactoring tool for consistency
                 prompt = f"""You are an expert code refactoring agent. Your sole task is to modify the provided source code based on the user's instructions. You must return only the complete, final, modified code file. Do not add any commentary, explanations, or markdown formatting.
 
 <Instructions>
@@ -487,7 +471,6 @@ Modified Code:"""
                     "path": file_path_str,
                 })
 
-            # 3. Commit Action
             commit_message = args.get("commit_message")
             if commit_message:
                 manifest["actions"].append({
@@ -496,7 +479,6 @@ Modified Code:"""
                     "message": commit_message,
                 })
 
-            # This step has been fully processed, so skip the rest of the loop.
             continue
         
         action_type = tool_map.get(tool_name)
