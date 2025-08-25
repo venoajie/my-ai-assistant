@@ -51,15 +51,15 @@ async def orchestrate_agent_run(
             logger.error("Persona loading failed", persona=persona_alias, error=str(e))
             return {"response": error_msg, "metrics": metrics}
 
-    # Check if a RAG index exists and inject relevant context for the planner.
+    # --- RAG CONTEXT INJECTION ---
     logger.info("Attempting to retrieve RAG context to enhance planning.")
     try:
         rag_plugin = RAGContextPlugin(project_root=Path.cwd())
         success, rag_content = rag_plugin.get_context(query, [])
                 
         if not success:
-            print(f"{Colors.YELLOW}⚠️  RAG Warning: {rag_content}{Colors.RESET}")
-            
+            # The plugin itself reported a failure.
+            print(f"{Colors.YELLOW}⚠️  RAG Warning: {rag_content}{Colors.RESET}", file=sys.stderr)
         elif rag_content:
             # The plugin succeeded and returned context.
             logger.info("Injecting RAG context into planning history.")
@@ -68,26 +68,13 @@ async def orchestrate_agent_run(
                 "role": "system",
                 "content": system_note
             })
-        else:
-            relevant_context = rag_plugin.get_context(query, [])
-            if relevant_context:            
-                        
-                if relevant_context.startswith("Error:"):
-                    # RAG plugin itself reported an error.
-                    print(f"{Colors.YELLOW}⚠️  RAG Warning: {relevant_context}{Colors.RESET}", file=sys.stderr)
-                else:
-                    logger.info("Injecting RAG context into planning history.")
-                    history.append({
-                        "role": "system",
-                        "content": f"<SystemNote>...</SystemNote>"
-                    })
             
     except Exception as e:
-
         # A more fundamental error occurred during plugin instantiation or execution.
-        logger.warning("Could not retrieve RAG context", error=str(e))
+        logger.warning("Could not retrieve RAG context due to an unexpected error", error=str(e))
         print(f"{Colors.YELLOW}⚠️  RAG Warning: Could not retrieve context due to an unexpected error. Check logs for details.{Colors.RESET}", file=sys.stderr)
             
+    # ... (PRE-PROCESSING, PLANNING, CRITIQUE, EXECUTION, SYNTHESIS) ...
     # --- PRE-PROCESSING LOGIC ---
     optimizer = ContextOptimizer()
     

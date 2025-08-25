@@ -2,8 +2,12 @@
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Callable
 import re
+from importlib import resources
 import yaml
-from pathlib import Path
+
+# --- Load the single source of truth once at module level ---
+governance_text = resources.files('ai_assistant').joinpath('internal_data/governance.yml').read_text(encoding='utf-8')
+GOVERNANCE_RULES = yaml.safe_load(governance_text)
 
 @dataclass
 class PromptViolation:
@@ -23,22 +27,18 @@ class AnalysisRule:
 class PromptAnalyzer:
     """Analyzes prompts for best practice violations using configurable rules."""
 
-    def __init__(
-        self, 
-        rules_file: Path,
-        ):
-        self.rules = self._load_rules(rules_file)
+    def __init__(self):
+        # Read rules from the globally loaded governance object
+        rules_config = GOVERNANCE_RULES.get('prompt_analysis_rules', [])
+        self.rules = self._load_rules(rules_config)
 
     def _load_rules(
-        self,
-        rules_file: Path,
+        self, 
+        rules_config: List[Dict],
         ) -> List[AnalysisRule]:
-        """Load analysis rules from YAML configuration."""
-        with open(rules_file) as f:
-            config = yaml.safe_load(f)
-        
+        """Load analysis rules from the provided configuration list."""
         rules = []
-        for rule_config in config.get('prompt_analysis_rules', []):
+        for rule_config in rules_config:
             detector = self._create_detector(rule_config['detector'])
             if detector:
                 rules.append(AnalysisRule(
@@ -54,16 +54,10 @@ class PromptAnalyzer:
         self, 
         detector_config: Dict,
         ) -> Optional[Callable]:
-        """Create a detector function from configuration."""
+
         detector_type = detector_config.get('type')
 
-        if detector_type == 'multi_file_modification':
-            return lambda prompt, ctx: (
-                ctx.get('file_count', 0) > detector_config.get('threshold', 1) and
-                any(word in prompt.lower() for word in detector_config.get('keywords', []))
-            )
-        
-        elif detector_type == 'multi_file_action':
+        if detector_type == 'multi_file_action':
             return lambda prompt, ctx: (
                 ctx.get('file_count', 0) > detector_config.get('threshold', 1) and
                 any(word in prompt.lower() for word in detector_config.get('keywords', [])) and
