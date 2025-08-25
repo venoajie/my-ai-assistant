@@ -44,20 +44,19 @@ from ..utils.git_utils import get_normalized_branch_name
 
 logger = structlog.get_logger(__name__)
 def _get_chroma_client(
-    rag_config: ai_settings.rag, 
+    rag_config: ai_settings.rag,
     index_path: Path,
-    ) -> Optional[Client]:
+) -> Optional[Client]:
     if not CHROMADB_AVAILABLE:
         logger.warning("ChromaDB not installed. RAG features disabled.")
         return None
 
-    # Client-server mode (no changes here)
     if rag_config.chroma_server_host and rag_config.chroma_server_port:
         logger.info(
-            "Connecting to remote ChromaDB server", 
+            "Connecting to remote ChromaDB server",
             host=rag_config.chroma_server_host,
             port=rag_config.chroma_server_port,
-            )
+        )
         try:
             return HttpClient(
                 host=rag_config.chroma_server_host,
@@ -67,6 +66,13 @@ def _get_chroma_client(
         except Exception as e:
             logger.error("Failed to connect to ChromaDB server", error=str(e))
             return None
+
+    logger.info("Using local persistent ChromaDB client", path=str(index_path))
+    try:
+        return chromadb.PersistentClient(path=str(index_path))
+    except Exception as e:
+        logger.error("Failed to create persistent ChromaDB client", error=str(e), path=str(index_path))
+        return None
     
     logger.info("Using local ephemeral ChromaDB client with persistent storage", path=str(index_path))
     try:
