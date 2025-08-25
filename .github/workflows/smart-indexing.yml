@@ -51,9 +51,6 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
       
-      - name: Install Dependencies
-        run: pip install -e .[indexing] oci-cli
-      
       - name: Verify Environment Variables
         run: |
           echo "OCI_NAMESPACE is: ${OCI_NAMESPACE}"
@@ -70,6 +67,9 @@ jobs:
             exit 1
           fi
 
+      - name: Install Dependencies
+        run: pip install -e .[indexing] oci-cli
+      
       - name: Configure Oracle Cloud CLI
         env:
           OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: true
