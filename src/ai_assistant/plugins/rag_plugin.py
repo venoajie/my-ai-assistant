@@ -20,15 +20,18 @@ try:
     from chromadb.config import Settings
     from chromadb import HttpClient
     from chromadb.ephemeral_client import EphemeralClient
+    # Note: PersistentClient is part of the main chromadb import, not a separate one.
+    # We access it via chromadb.PersistentClient if needed.
     CHROMADB_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    print(f"FATAL: A critical component of ChromaDB failed to import. This is not a simple installation issue. Error: {e}", file=sys.stderr)
     chromadb = None
     Client = None
     Settings = None
-    PersistentClient = None # Define as None on failure
-    HttpClient = None       # Define as None on failure
-    CHROMADB_AVAILABLE = False
+    HttpClient = None
     EphemeralClient = None
+    CHROMADB_AVAILABLE = False
+# --- REPLACEMENT BLOCK END ---
 
 try:
     from sentence_transformers import SentenceTransformer
