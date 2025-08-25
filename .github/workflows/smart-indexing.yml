@@ -54,7 +54,25 @@ jobs:
       - name: Install Dependencies
         run: pip install -e .[indexing] oci-cli
       
+      - name: Verify Environment Variables
+        run: |
+          echo "OCI_NAMESPACE is: ${OCI_NAMESPACE}"
+          echo "OCI_BUCKET is: ${OCI_BUCKET}"
+          echo "OCI_REGION is: ${OCI_REGION}"
+          
+          if [ -z "${OCI_NAMESPACE}" ]; then
+            echo "ERROR: OCI_NAMESPACE is not set!"
+            exit 1
+          fi
+          
+          if [ -z "${OCI_BUCKET}" ]; then
+            echo "ERROR: OCI_BUCKET is not set!"
+            exit 1
+          fi
+
       - name: Configure Oracle Cloud CLI
+        env:
+          OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: true
         run: |
           mkdir -p ~/.oci
           cat > ~/.oci/config << EOF
@@ -68,6 +86,10 @@ jobs:
           
           echo "${{ secrets.OCI_API_KEY }}" > ~/.oci/api_key.pem
           chmod 600 ~/.oci/api_key.pem
+          chmod 600 ~/.oci/config
+          
+          # Verify authentication
+          oci os ns get
         
       - name: Determine Indexing Mode
         id: mode
