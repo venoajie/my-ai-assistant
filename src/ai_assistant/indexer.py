@@ -19,13 +19,13 @@ import structlog
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
-from .config import ai_settings, load_ai_settings
+from .config import ai_settings
 from .logging_config import setup_logging
+from .utils.git_utils import get_normalized_branch_name
 
 load_dotenv()
 logger = structlog.get_logger()
 
-INDEX_DIR = Path(".ai_rag_index")
 EMBEDDING_BATCH_SIZE = 16
 
 DEFAULT_IGNORE_PATTERNS = [
@@ -56,7 +56,7 @@ class EmbeddingProvider:
 class Indexer:
     def __init__(self, project_root: Path, branch_override: Optional[str] = None):
         self.project_root = project_root
-        self.index_path = project_root / INDEX_DIR
+        self.index_path = project_root / ai_settings.rag.local_index_path
         self.state_path = self.index_path / "state.json"
         self.index_path.mkdir(exist_ok=True)
         
@@ -67,14 +67,10 @@ class Indexer:
             logger.error("Indexer cannot be run in client-server mode. Unset chroma_server_host in your config to run the indexer.")
             raise ConnectionError("Indexer is configured to connect to a remote server, which is not allowed.")
 
-        if branch_override:
-            self.branch = branch_override.replace('/', '_')
-        else:
-            try:
-                result = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], capture_output=True, text=True, check=True, cwd=self.project_root)
-                self.branch = result.stdout.strip().replace('/', '_')
-            except Exception:
-                self.branch = ai_settings.rag.default_branch
+        self.branch = branch_override or get_normalized_branch_name(
+            self.project_root, 
+            ai_settings.rag.default_branch
+        )
         
         base_collection_name = ai_settings.rag.collection_name
         self.collection_name = f"{base_collection_name}_{self.branch}"

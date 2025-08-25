@@ -32,6 +32,10 @@ class GeneralConfig(BaseModel):
     failure_persona_alias: str
     local_plugins_directory: str = ".ai/plugins"
     enable_llm_json_corrector: bool = Field(default=True)
+    log_level: str = Field(
+        default="INFO", 
+        description="Default application log level.",
+        )
     services_template_directory: str = Field(
         default="src/services", 
         description="Default path for service templates.",
@@ -91,13 +95,17 @@ class RAGConfig(BaseModel):
     
     fallback_embedding_providers: List[str] = Field(
         default_factory=lambda: ["openai"], 
-        description="Fallback embedding providers if local model fails"
+        description="Fallback embedding providers if local model fails",
     )
     
     oracle_cloud: Optional[OracleCloudConfig] = Field(
         default_factory=OracleCloudConfig,
-        description="Oracle Cloud Object Storage configuration"
+        description="Oracle Cloud Object Storage configuration",
     )
+    local_index_path: str = Field(
+        ".ai_rag_index", 
+        description="Path for the local ChromaDB index, relative to project root.",
+        )
 
 class ProviderConfig(BaseModel):
     api_key_env: str

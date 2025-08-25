@@ -29,13 +29,9 @@ from .utils.symbol_extractor import extract_symbol_source
 
 logger = structlog.get_logger()
 
-try:
-    governance_text = resources.files('ai_assistant').joinpath('internal_data/governance.yml').read_text(encoding='utf-8')
-    GOVERNANCE_RULES = yaml.safe_load(governance_text)
-    RISKY_KEYWORDS = GOVERNANCE_RULES.get("prompting_best_practices", {}).get("risky_modification_keywords", [])
-except Exception as e:
-    print(f"⚠️  Warning: Could not load governance rules for sanity checks. Reason: {e}", file=sys.stderr)
-    RISKY_KEYWORDS = []
+governance_text = resources.files('ai_assistant').joinpath('internal_data/governance.yml').read_text(encoding='utf-8')
+GOVERNANCE_RULES = yaml.safe_load(governance_text)
+RISKY_KEYWORDS = GOVERNANCE_RULES.get("prompting_best_practices", {}).get("risky_modification_keywords", [])
 
 def list_available_plugins() -> List[str]:
     """Dynamically discovers available plugins from both entry points and the local project directory."""
@@ -303,66 +299,6 @@ def run_prompt_analyzer(
         # This check should never halt the main application.
         logger.error("Prompt analyzer failed to run", error=str(e))
 
-
-def _run_prompt_sanity_checks(
-    args: argparse.Namespace, 
-    query: str,
-    ):
-    
-    """
-    Analyzes the user's prompt and flags for common anti-patterns and
-    prints non-halting warnings to guide the user.
-    """
-    warnings = []
-    query_lower = query.lower()
-    file_count = len(args.files) if args.files else 0
-    
-    # Check 1: Missing Persona
-    if not args.persona:
-        warnings.append(
-            "You are running without a specific persona (--persona). "
-            "Results may be generic. For best results, select a specialist."
-        )
-
-    # Check 2 Explicit high-risk action tag without the safe workflow
-    if "<action>" in query_lower \
-        and not args.output_dir:
-        warnings.append(
-            "CRITICAL: You used the <ACTION> tag to declare a high-risk operation "
-            "but did not use the --output-dir flag. This is highly discouraged. "
-            "Always use the two-stage workflow for actions."
-        )
-    # Check 3 (Fallback): Inferred risky action without the safe workflow
-    elif not "<action>" in query_lower:
-        
-        if any(keyword in query_lower for keyword in RISKY_KEYWORDS) \
-            and not args.output_dir:
-            warnings.append(
-                "Your prompt seems to request a system modification. For clarity and safety, "
-                "wrap your goal in <ACTION> tags and use the --output-dir flag."
-            )
-
-    # Check 4: Large batch-processing attempt
-    # Heuristic: More than 1 file attached combined with modification keywords is a strong signal of a risky batch job.
-    if file_count > 1 and any(keyword in query_lower for keyword in RISKY_KEYWORDS):
-        warnings.append(
-            f"You have attached {file_count} files and are requesting a modification. "
-            "Attempting to modify multiple files in a single prompt is a known anti-pattern and is likely to fail. "
-            "Please decompose your goal into multiple, single-file steps for higher reliability."
-        )
-    elif file_count > 5: # Fallback for general large context
-        warnings.append(
-            f"You have attached {file_count} files. Attempting to process many files in a "
-            "single prompt can lead to incomplete runs due to context limits. "
-            "Consider using a shell script to process files in a loop."
-        )
-
-    if warnings:
-        logger.warning("Prompting Best Practice Reminders")
-        for i, warning in enumerate(warnings):
-            logger.warning(f"[{i+1}] {warning}")
-        print(f"{Colors.YELLOW}-------------------------------------------{Colors.RESET}", file=sys.stderr)
-
 def main():
     """Synchronous entry point for the 'ai' command, required by pyproject.toml."""
     setup_logging()
@@ -391,6 +327,7 @@ async def async_main():
         metavar=('FILE_PATH', 'SYMBOL_NAME'),
         help="Extract only a specific class or function from a file for context. Use multiple times for multiple files."
     )
+    parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], help='Override the log level.')
     parser.add_argument('-f', '--file', dest='files', action='append', help='Attach a file to the context. Can be used multiple times.')
     parser.add_argument('--persona', help='The alias of the persona to use (e.g., core/SA-1).')
     parser.add_argument('--autonomous', action='store_true', help='Run in autonomous mode.')
@@ -404,7 +341,9 @@ async def async_main():
     parser.add_argument('--list-plugins', action='store_true', help='List available context plugins')
     parser.add_argument('query', nargs='*', help="Your request for the agent. For tasks that modify files, wrap your goal in <ACTION> tags.")
 
-    args = parser.parse_args()
+    args = parser.parse_args()   
+    
+    setup_logging(log_level=args.log_level)
     
     user_query = ' '.join(args.query)
     

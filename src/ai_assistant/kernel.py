@@ -10,19 +10,19 @@ import time
 import structlog
 
 from .config import ai_settings
-from .utils.context_optimizer import ContextOptimizer
-from .utils.result_presenter import highlight_critique
-from .utils.colors import Colors
+from .data_models import ExecutionPlan
+from .data_models import ExecutionPlan, CritiqueResponse
+from .llm_client_factory import get_instructor_client 
 from .persona_loader import PersonaLoader
 from .plan_validator import generate_plan_expectation, check_plan_compliance
 from .planner import Planner
 from .prompt_builder import PromptBuilder
 from .response_handler import ResponseHandler  # Still needed for synthesis
-from .tools import TOOL_REGISTRY
-from .data_models import ExecutionPlan
-from .data_models import ExecutionPlan, CritiqueResponse
-from .llm_client_factory import get_instructor_client 
 from .plugins.rag_plugin import RAGContextPlugin
+from .tools import TOOL_REGISTRY
+from .utils.context_optimizer import ContextOptimizer
+from .utils.result_presenter import highlight_critique
+from .utils.colors import Colors
 
 logger = structlog.get_logger(__name__)
 
@@ -55,17 +55,30 @@ async def orchestrate_agent_run(
     logger.info("Attempting to retrieve RAG context to enhance planning.")
     try:
         rag_plugin = RAGContextPlugin(project_root=Path.cwd())
-        relevant_context = rag_plugin.get_context(query, [])
-        if relevant_context:            
-                logger.info("Injecting RAG context into planning history.")
-                history.append({
-                    "role": "system",
-                    "content": f"<SystemNote>The following context was retrieved from the project's knowledge base to aid in your planning:\n{relevant_context}</SystemNote>"
-                })
+        success, rag_content = rag_plugin.get_context(query, [])
+                
+        if not success:
+            print(f"{Colors.YELLOW}⚠️  RAG Warning: {rag_content}{Colors.RESET}")
+        else:
+            relevant_context = rag_plugin.get_context(query, [])
+            if relevant_context:            
+                        
+                if relevant_context.startswith("Error:"):
+                    # RAG plugin itself reported an error.
+                    print(f"{Colors.YELLOW}⚠️  RAG Warning: {relevant_context}{Colors.RESET}", file=sys.stderr)
+                else:
+                    logger.info("Injecting RAG context into planning history.")
+                    history.append({
+                        "role": "system",
+                        "content": f"<SystemNote>...</SystemNote>"
+                    })
             
     except Exception as e:
+
+        # A more fundamental error occurred during plugin instantiation or execution.
         logger.warning("Could not retrieve RAG context", error=str(e))
-    
+        print(f"{Colors.YELLOW}⚠️  RAG Warning: Could not retrieve context due to an unexpected error. Check logs for details.{Colors.RESET}", file=sys.stderr)
+            
     # --- PRE-PROCESSING LOGIC ---
     optimizer = ContextOptimizer()
     

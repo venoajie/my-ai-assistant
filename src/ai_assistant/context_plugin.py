@@ -1,5 +1,5 @@
-# ai_assistant/context_plugin.py
-from typing import List, Dict
+# src/ai_assistant/context_plugin.py
+from typing import List, Tuple
 from pathlib import Path
 
 class ContextPluginBase:
@@ -10,9 +10,9 @@ class ContextPluginBase:
         """Initializes the plugin with the project's root directory."""
         self.project_root = project_root
 
-    def get_context(self, query: str, files: List[str]) -> str:
+    def get_context(self, query: str, files: List[str]) -> Tuple[bool, str]:
         """
         Analyzes the query and files to provide domain-specific context.
-        Returns a string to be prepended to the AI's prompt.
+        Returns a tuple of (success, content_or_error_message).
         """
-        return "" # Default is to provide no extra context.
+        return (True, "") # Default is to provide no extra context.

@@ -1,8 +1,16 @@
 # src/ai_assistant/plugins/rag_plugin.py
-from typing import List, Optional
+import os
+import json
+import tarfile
+import tempfile
+import fcntl
+from datetime import datetime, timedelta
+from typing import List, Optional, Tuple
 from pathlib import Path
 import structlog
 import subprocess
+
+from ..utils.git_utils import get_normalized_branch_name
 
 try:
     import chromadb
@@ -40,8 +48,6 @@ def _get_chroma_client(rag_config: ai_settings.rag, index_path: Path) -> Optiona
             logger.error("Failed to connect to ChromaDB server", error=str(e))
             return None
     
-    # Local persistent mode (requires full chromadb)
-    # Check for the specific class before trying to use it
     if hasattr(chromadb, 'PersistentClient'):
         logger.info("Using local persistent ChromaDB index", path=str(index_path))
         return chromadb.PersistentClient(path=str(index_path))
@@ -55,28 +61,28 @@ class RAGContextPlugin(ContextPluginBase):
     def __init__(self, project_root: Path):
         super().__init__(project_root)
         
-        self.index_path = project_root / ".ai_rag_index"
-        self.db_client = _get_chroma_client(ai_settings.rag, self.index_path)
+        self.index_path = project_root / ai_settings.rag.local_index_path
+        self.cache_path = project_root / ".ai_rag_cache"
+        self.cache_path.mkdir(exist_ok=True)
         
-        # --- FIX: Correctly determine branch and collection name ---
-        if ai_settings.rag.enable_branch_awareness:
-            try:
-                result = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], capture_output=True, text=True, check=True, cwd=project_root)
-                current_branch = result.stdout.strip().replace('/', '_')
-            except Exception:
-                logger.warning("Could not detect git branch, falling back to default.", default=ai_settings.rag.default_branch)
-                current_branch = ai_settings.rag.default_branch
+        self.branch = get_normalized_branch_name(
+            self.project_root,
+            ai_settings.rag.default_branch
+        ) if ai_settings.rag.enable_branch_awareness else "main"
+        
+        self._init_oracle_cloud()
+        
+        if self._should_download_index():
+            self._download_latest_index()
+        
+        self.db_client = _get_chroma_client(ai_settings.rag, self.index_path)
             
-            base_collection_name = ai_settings.rag.collection_name
-            self.collection_name = f"{base_collection_name}_{current_branch}"
-        else:
-            self.collection_name = ai_settings.rag.collection_name
+        base_collection_name = ai_settings.rag.collection_name
+        self.collection_name = f"{base_collection_name}_{self.branch}"
         
         logger.info("RAG plugin targeting collection", collection_name=self.collection_name)
 
-        # Embedding model is only needed for querying, which happens on the client.
         if SENTENCE_TRANSFORMERS_AVAILABLE:
-                
             try:
                 self.model_name = ai_settings.rag.embedding_model_name
                 logger.info("Loading local embedding model", model_name=self.model_name)
@@ -88,7 +94,89 @@ class RAGContextPlugin(ContextPluginBase):
         else:
             logger.warning("sentence-transformers is not installed. RAG queries disabled. Install with 'pip install -e .[client]'")
             self.embedding_model = None
+
+    def _init_oracle_cloud(self):
+        self.oci_config = ai_settings.rag.oracle_cloud
+        self.oci_enabled = (
+            self.oci_config and
+            self.oci_config.enable_caching and
+            self.oci_config.namespace and
+            self.oci_config.bucket
+        )
+
+    def _should_download_index(self) -> bool:
+        if not self.oci_enabled:
+            return False
+        
+        metadata_path = self.cache_path / f"{self.branch}_metadata.json"
+        if not metadata_path.exists():
+            logger.info("No local cache metadata found. Will attempt to download index.")
+            return True
             
+        try:
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            last_checked = datetime.fromisoformat(metadata.get("last_checked_utc"))
+            ttl = timedelta(hours=self.oci_config.cache_ttl_hours)
+            
+            if datetime.utcnow() - last_checked > ttl:
+                logger.info("Cache TTL expired. Will check for a new index.")
+                return True
+            else:
+                logger.info("Cache is up-to-date. Skipping download.")
+                return False
+        except (json.JSONDecodeError, KeyError, IOError) as e:
+            logger.warning("Could not read cache metadata. Will attempt to download.", error=str(e))
+            return True
+
+    def _download_latest_index(self):
+        logger.info("Attempting to download latest RAG index from OCI", branch=self.branch)
+        lock_file_path = self.cache_path / f"{self.branch}.lock"
+        
+        with open(lock_file_path, "w") as lock_file:
+            try:
+                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    temp_path = Path(temp_dir)
+                    archive_path = temp_path / "index.tar.gz"
+                    object_name = f"indexes/{self.branch}/latest/index.tar.gz"
+                    
+                    command = [
+                        "oci", "os", "object", "get",
+                        "--namespace", self.oci_config.namespace,
+                        "-bn", self.oci_config.bucket,
+                        "--name", object_name,
+                        "--file", str(archive_path)
+                    ]
+                    
+                    logger.debug("Executing OCI command", command=" ".join(command))
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    
+                    if result.returncode != 0:
+                        logger.error("Failed to download index from OCI", stderr=result.stderr)
+                        return
+
+                    logger.info("Successfully downloaded index archive. Extracting...")
+                    self.index_path.mkdir(exist_ok=True)
+                    with tarfile.open(archive_path, "r:gz") as tar:
+                        tar.extractall(path=self.index_path)
+                    
+                    logger.info("Index extracted successfully.", destination=str(self.index_path))
+                    
+                    # Update metadata on success
+                    metadata = {"last_checked_utc": datetime.utcnow().isoformat()}
+                    metadata_path = self.cache_path / f"{self.branch}_metadata.json"
+                    with open(metadata_path, 'w') as f:
+                        json.dump(metadata, f)
+
+            except BlockingIOError:
+                logger.warning("Another process is already downloading the index. Skipping.")
+            except Exception as e:
+                logger.error("An unexpected error occurred during index download.", error=str(e))
+            finally:
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
+
     def _embed_query(self, query: str) -> List[float]:
         if not self.embedding_model: return []
         try:
@@ -97,20 +185,29 @@ class RAGContextPlugin(ContextPluginBase):
             logger.error("Failed to embed query", error=str(e))
             return []
     
-    def get_context(self, query: str, files: List[str]) -> str:
+    def get_context(self, query: str, files: List[str]) -> Tuple[bool, str]:
         if not self.db_client or not self.embedding_model:
-            return "" # Logged during init, no need to be noisy here.
+            return True, ""
 
         try:
             collection = self.db_client.get_collection(self.collection_name)
         except Exception:
-            logger.warning(f"RAG collection '{self.collection_name}' not found. Run 'ai-index'.")
-            return ""
+            msg = f"RAG collection '{self.collection_name}' not found. Run 'ai-index' or check CI pipeline."
+            logger.warning(msg)
+            return True, "" # Not a fatal error, just no context
 
+        enhanced_query = query
+        if files:
+            try:
+                file_content = Path(files[0]).read_text(encoding='utf-8', errors='ignore')[:1000]
+                enhanced_query = f"Based on this file content:\n{file_content}\n\nAnswer this query: {query}"
+            except Exception as e:
+                logger.warning("Could not read attached file for RAG enhancement", file=files[0], error=str(e))
+                    
         try:
-            query_embedding = self._embed_query(query)
+            query_embedding = self._embed_query(enhanced_query)
             if not query_embedding:
-                return ""
+                return True, ""
             
             results = collection.query(
                 query_embeddings=[query_embedding],
@@ -119,15 +216,16 @@ class RAGContextPlugin(ContextPluginBase):
             )
             
             if not results.get('documents') or not results['documents'][0]:
-                return ""
+                return True, ""
             
             context_parts = ["# RAG-Retrieved Context\n"]
             for doc, meta in zip(results['documents'][0], results['metadatas'][0]):
                 source = meta.get('source', 'unknown')
                 context_parts.append(f"## Source: {source}\n```\n{doc}\n```\n")
             
-            return "\n".join(context_parts)
-            
+            return True, "\n".join(context_parts)
+        
         except Exception as e:
+            error_msg = f"Error: Could not retrieve context from RAG system. Reason: {e}"
             logger.error("Error querying ChromaDB", error=str(e))
-            return f"Error: Could not retrieve context from RAG system. Reason: {e}"
+            return False, error_msg
