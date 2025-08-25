@@ -38,6 +38,7 @@ test = [
     "unittest-xml-reporting",
     "pytest",
     "jsonschema",
+    "my-ai-assistant[client]", 
 ]
 
 # For the production/indexing environment
