@@ -48,7 +48,7 @@ indexing = [
 ]
 # For developer/laptop environments that only need to query the index
 client = [
-    "sentence-transformers==3.1.0",
+    "sentence-transformers==5.1.0",
     "chromadb==1.0.20",
     "oci-cli",
 ]
