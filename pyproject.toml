@@ -16,6 +16,8 @@ dependencies = [
       "google-generativeai>=0.8", 
       "tiktoken==0.11.0",
       "python-dotenv==1.1.1",
+      "protobuf<6.0",
+      "click==8.0.4",
       ]
 
 [build-system]
