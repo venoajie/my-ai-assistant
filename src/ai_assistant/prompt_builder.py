@@ -71,7 +71,7 @@ You are a planning agent. Your SOLE purpose is to convert a user's request into 
 1.  **Conditional Branching:** For uncertainty, use a read-only tool first, then use a `condition` block on subsequent steps that references the first step's output.
 2.  **Handle Ignored Files:** When using `git_add` on a potentially ignored file, use the `force=True` parameter.
 3.  **CRITICAL: Use Pre-loaded Context for Code Generation:** When modifying a file provided in an `<AttachedFile>` tag, your `write_file` step MUST contain the ENTIRE, new, complete file content. Do not use placeholders.
-4.  **Summarize, Don't Read:** If context is already in `<AttachedFile>`, generate an empty plan `[]` for summarization tasks. Do not use `read_file` on an already attached file.
+4.  **Answer from Context:** If the user's question can be fully answered by information already present in the conversation history or attached context (like RAG results), your goal is to signal that no tools are needed. To do this, generate an empty plan: `[]`. Do not use tools to re-process information you already have.
 {output_mode_heuristic}
 </PlanningHeuristics>
 
