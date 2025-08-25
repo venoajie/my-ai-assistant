@@ -11,7 +11,12 @@ except ImportError:
     chromadb = None
     Client = None
 
-from sentence_transformers import SentenceTransformer
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SentenceTransformer = None
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 from ..context_plugin import ContextPluginBase
 from ..config import ai_settings
@@ -69,13 +74,21 @@ class RAGContextPlugin(ContextPluginBase):
         
         logger.info("RAG plugin targeting collection", collection_name=self.collection_name)
 
-        try:
-            self.model_name = ai_settings.rag.embedding_model_name
-            self.embedding_model = SentenceTransformer(self.model_name)
-        except Exception as e:
-            logger.error("Failed to load embedding model, RAG will be disabled.", error=str(e))
+        # Embedding model is only needed for querying, which happens on the client.
+        if SENTENCE_TRANSFORMERS_AVAILABLE:
+                
+            try:
+                self.model_name = ai_settings.rag.embedding_model_name
+                logger.info("Loading local embedding model", model_name=self.model_name)
+                self.embedding_model = SentenceTransformer(self.model_name)
+                logger.info("Local model loaded successfully.")
+            except Exception as e:
+                logger.error("Failed to load embedding model, RAG will be disabled.", error=str(e))
+                self.embedding_model = None
+        else:
+            logger.warning("sentence-transformers is not installed. RAG queries disabled. Install with 'pip install -e .[client]'")
             self.embedding_model = None
-        
+            
     def _embed_query(self, query: str) -> List[float]:
         if not self.embedding_model: return []
         try:
