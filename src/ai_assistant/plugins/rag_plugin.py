@@ -9,33 +9,30 @@ from typing import List, Optional, Tuple
 from pathlib import Path
 import structlog
 import subprocess
+import sys 
 
 os.environ.pop('CHROMA_API_IMPL', None)
-
-from ..utils.git_utils import get_normalized_branch_name
 
 try:
     import chromadb
     from chromadb.api.client import Client
     from chromadb.config import Settings
     from chromadb import HttpClient
-    from chromadb.ephemeral_client import EphemeralClient
-    # Note: PersistentClient is part of the main chromadb import, not a separate one.
-    # We access it via chromadb.PersistentClient if needed.
+    from chromadb import EphemeralClient # <-- FIX: Corrected import path
     CHROMADB_AVAILABLE = True
 except ImportError as e:
-    print(f"FATAL: A critical component of ChromaDB failed to import. This is not a simple installation issue. Error: {e}", file=sys.stderr)
+    # This error message will now work correctly
+    print(f"WARNING: ChromaDB components failed to import. RAG features will be disabled. Error: {e}", file=sys.stderr)
     chromadb = None
     Client = None
     Settings = None
     HttpClient = None
     EphemeralClient = None
     CHROMADB_AVAILABLE = False
-# --- REPLACEMENT BLOCK END ---
 
 try:
     from sentence_transformers import SentenceTransformer
-    SENTENCE_TRANSFORMERS_AVAILABLE = True
+    SENTENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     SentenceTransformer = None
     SENTENCE_TRANSFORMERS_AVAILABLE = False
