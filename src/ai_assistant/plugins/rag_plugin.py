@@ -195,8 +195,13 @@ class RAGContextPlugin(ContextPluginBase):
     def get_context(self, query: str, files: List[str]) -> Tuple[bool, str]:
         if not self.db_client or not self.embedding_model: return True, ""
         try:
-            collection = self.db_client.get_collection(self.collection_name)
-        except Exception:
+            collection = self.db_client.get_or_create_collection(self.collection_name)
+        except Exception as e:
+            logger.error(
+                "Failed to get or create RAG collection from ChromaDB.",
+                collection_name=self.collection_name,
+                error=str(e)
+            )
             return True, ""
         enhanced_query = query
         if files:
