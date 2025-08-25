@@ -111,8 +111,8 @@ class ResponseHandler:
                     
                     if not is_retriable or attempt >= max_retries - 1:
                         print("\n   ...API call failed. No more retries.")
-                        return _create_error_response(f"❌ ERROR: {error_msg}", provider_name) # <-- COMPREHENSIVE FIX
-                    
+                        return _create_error_response(error_msg, provider_name)
+                                        
                     wait_time = 2 ** (attempt + 1)
                     print(f"   ...Waiting {wait_time}s before retrying.")
                     await asyncio.sleep(wait_time)
