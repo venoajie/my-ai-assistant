@@ -18,13 +18,14 @@ try:
     import chromadb
     from chromadb.api.client import Client
     from chromadb.config import Settings
-    from chromadb import HttpClient
+    from chromadb import PersistentClient, HttpClient
     CHROMADB_AVAILABLE = True
 except ImportError:
     chromadb = None
     Client = None
     Settings = None
-    HttpClient = None
+    PersistentClient = None # Define as None on failure
+    HttpClient = None       # Define as None on failure
     CHROMADB_AVAILABLE = False
 
 try:
@@ -38,14 +39,21 @@ from ..context_plugin import ContextPluginBase
 from ..config import ai_settings
 
 logger = structlog.get_logger(__name__)
-def _get_chroma_client(rag_config: ai_settings.rag, index_path: Path) -> Optional[Client]:
+def _get_chroma_client(
+    rag_config: ai_settings.rag, 
+    index_path: Path,
+    ) -> Optional[Client]:
     if not CHROMADB_AVAILABLE:
         logger.warning("ChromaDB not installed. RAG features disabled.")
         return None
 
     # Client-server mode (no changes here)
     if rag_config.chroma_server_host and rag_config.chroma_server_port:
-        logger.info("Connecting to remote ChromaDB server", host=rag_config.chroma_server_host, port=rag_config.chroma_server_port)
+        logger.info(
+            "Connecting to remote ChromaDB server", 
+            host=rag_config.chroma_server_host,
+            port=rag_config.chroma_server_port,
+            )
         try:
             return HttpClient(
                 host=rag_config.chroma_server_host,
@@ -56,11 +64,16 @@ def _get_chroma_client(rag_config: ai_settings.rag, index_path: Path) -> Optiona
             logger.error("Failed to connect to ChromaDB server", error=str(e))
             return None
     
-    # --- THE DEFINITIVE FIX for Local Persistent Mode ---
-    logger.info("Attempting to load local persistent ChromaDB index", path=str(index_path))
+    logger.info(
+        "Attempting to load local persistent ChromaDB index",
+        path=str(index_path),
+        )
     try:
         if not index_path.exists() or not (index_path / "chroma.sqlite3").exists():
-             logger.warning("Local index path does not appear to be a valid ChromaDB directory.", path=str(index_path))
+             logger.warning(
+                 "Local index path does not appear to be a valid ChromaDB directory.", 
+                 path=str(index_path),
+                 )
              return None
         
         # 1. Create explicit local settings.
