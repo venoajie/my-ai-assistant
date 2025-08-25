@@ -229,6 +229,9 @@ async def orchestrate_agent_run(
     # --- LIVE MODE (TOOL EXECUTION) ---
     print("🚀 Executing adaptive plan...")
     observations = []
+    if rag_content:
+        # The RAG content is a pre-execution observation.
+        observations.append(f"<Observation step='0' tool='RAG_retrieval'>\n{rag_content}\n</Observation>")
     step_results: Dict[int, str] = {}
     any_risky_action_denied = False
 
