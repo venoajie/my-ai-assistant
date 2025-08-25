@@ -10,14 +10,23 @@ from pathlib import Path
 import structlog
 import subprocess
 
+# --- FIX: Proactively remove environment variable that can confuse ChromaDB ---
+os.environ.pop('CHROMA_API_IMPL', None)
+
 from ..utils.git_utils import get_normalized_branch_name
 
+# --- FIX: Explicitly import the client classes we intend to use ---
 try:
     import chromadb
     from chromadb.api.client import Client
+    from chromadb import PersistentClient, HttpClient
+    CHROMADB_AVAILABLE = True
 except ImportError:
     chromadb = None
     Client = None
+    PersistentClient = None
+    HttpClient = None
+    CHROMADB_AVAILABLE = False
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -32,14 +41,15 @@ from ..config import ai_settings
 logger = structlog.get_logger(__name__)
 
 def _get_chroma_client(rag_config: ai_settings.rag, index_path: Path) -> Optional[Client]:
-    if not chromadb:
-        logger.warning("ChromaDB not installed. RAG features disabled. Install with 'pip install -e .[client]' or 'pip install -e .[indexing]'")
+    if not CHROMADB_AVAILABLE:
+        logger.warning("ChromaDB not installed. RAG features disabled.")
         return None
 
+    # Client-server mode
     if rag_config.chroma_server_host and rag_config.chroma_server_port:
         logger.info("Connecting to remote ChromaDB server", host=rag_config.chroma_server_host, port=rag_config.chroma_server_port)
         try:
-            return chromadb.HttpClient(
+            return HttpClient(
                 host=rag_config.chroma_server_host,
                 port=rag_config.chroma_server_port,
                 ssl=rag_config.chroma_server_ssl,
@@ -48,11 +58,21 @@ def _get_chroma_client(rag_config: ai_settings.rag, index_path: Path) -> Optiona
             logger.error("Failed to connect to ChromaDB server", error=str(e))
             return None
     
-    if hasattr(chromadb, 'PersistentClient'):
-        logger.info("Using local persistent ChromaDB index", path=str(index_path))
-        return chromadb.PersistentClient(path=str(index_path))
-    else:
-        logger.error("Local RAG index detected, but full 'chromadb' package is not installed. Please install with '-e .[indexing]' or configure a remote server.")
+    # --- FIX: In local mode, ALWAYS instantiate PersistentClient directly ---
+    # This bypasses any faulty auto-detection logic.
+    logger.info("Using local persistent ChromaDB index", path=str(index_path))
+    try:
+        if not index_path.exists() or not (index_path / "chroma.sqlite3").exists():
+             logger.warning("Local index path does not appear to be a valid ChromaDB directory.", path=str(index_path))
+             return None
+        
+        client = PersistentClient(path=str(index_path))
+        # Verification step to ensure the client is alive and working
+        client.heartbeat() 
+        logger.info("Successfully loaded persistent ChromaDB client.")
+        return client
+    except Exception as e:
+        logger.error("Failed to create persistent ChromaDB client", error=str(e), path=str(index_path))
         return None
 
 class RAGContextPlugin(ContextPluginBase):
@@ -164,7 +184,6 @@ class RAGContextPlugin(ContextPluginBase):
                     
                     logger.info("Index extracted successfully.", destination=str(self.index_path))
                     
-                    # Update metadata on success
                     metadata = {"last_checked_utc": datetime.utcnow().isoformat()}
                     metadata_path = self.cache_path / f"{self.branch}_metadata.json"
                     with open(metadata_path, 'w') as f:
@@ -194,7 +213,7 @@ class RAGContextPlugin(ContextPluginBase):
         except Exception:
             msg = f"RAG collection '{self.collection_name}' not found. Run 'ai-index' or check CI pipeline."
             logger.warning(msg)
-            return True, "" # Not a fatal error, just no context
+            return True, ""
 
         enhanced_query = query
         if files:
