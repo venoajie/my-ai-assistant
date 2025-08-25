@@ -39,6 +39,7 @@ except ImportError:
 
 from ..context_plugin import ContextPluginBase
 from ..config import ai_settings
+from ..utils.git_utils import get_normalized_branch_name
 
 logger = structlog.get_logger(__name__)
 def _get_chroma_client(
