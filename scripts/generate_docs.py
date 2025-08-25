@@ -10,8 +10,6 @@ def main():
     project_root = Path(__file__).parent.parent.resolve()
     governance_file = project_root / "src" / "ai_assistant" / "internal_data" / "governance.yml"
     config_file = project_root / "src" / "ai_assistant" / "default_config.yml"
-    # --- Add path to the analyzer rules ---
-    analyzer_rules_file = project_root / "src" / "ai_assistant" / "internal_data" / "prompt_analysis_rules.yml"
     template_dir = project_root / "docs" / "templates"
     output_dir = project_root / "docs"
 
@@ -19,17 +17,14 @@ def main():
 
     # 1. Load the sources of truth
     with open(governance_file, 'r', encoding='utf-8') as f:
-        rules = yaml.safe_load(f)
+        governance_data = yaml.safe_load(f)
     with open(config_file, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
-    # --- Load the analyzer rules ---
-    with open(analyzer_rules_file, 'r', encoding='utf-8') as f:
-        analyzer_rules = yaml.safe_load(f)
 
     # 2. Format data for insertion into Markdown
     
-    # Process risky keywords
-    risky_keywords = rules.get("prompting_best_practices", {}).get("risky_modification_keywords", [])
+    # Process risky keywords from the unified governance file
+    risky_keywords = governance_data.get("prompting_best_practices", {}).get("risky_modification_keywords", [])
     keyword_list_str = ", ".join(f"`{word}`" for word in risky_keywords)
 
     # Process model configuration
@@ -44,8 +39,8 @@ def main():
     ]
     models_info_str = "\n".join(models_info_parts)
 
-    # --- Process analyzer rules into a Markdown list ---
-    analyzer_rules_list = analyzer_rules.get("prompt_analysis_rules", [])
+    # Process analyzer rules from the unified governance file
+    analyzer_rules_list = governance_data.get("prompt_analysis_rules", [])
     analyzer_rules_parts = []
     for rule in analyzer_rules_list:
         analyzer_rules_parts.append(f"-   **{rule['name']}:** {rule['description']}")

@@ -22,16 +22,25 @@ general:
 ```
 
 ### 2. Configuring the RAG Client
-For teams using the [Codebase-Aware RAG Workflow](./rag_workflow.md), this file is used to configure the connection to the central indexing server.
+For teams using the [Codebase-Aware RAG Workflow](./rag_workflow.md),  this file is used to configure the connection to the central OCI Object Storage bucket where indexes are stored.
 
 ```yaml
 # .ai_config.yml
 
 rag:
-  # The IP address or hostname of the machine running the ChromaDB server
-  chroma_server_host: "192.168.1.100"
-  # The port the server is running on
-  chroma_server_port: 8000
+  # Enable branch-specific indexes (highly recommended)
+  enable_branch_awareness: true
+  
+  # Configure the connection to your shared OCI bucket
+  oracle_cloud:
+    # The OCI namespace where your bucket resides
+    namespace: "your-oci-namespace"
+    # The name of the bucket storing the index archives
+    bucket: "your-oci-bucket-name"
+    # The OCI region for the bucket (e.g., eu-frankfurt-1)
+    region: "your-oci-region"
+    # (Optional) How long to cache the index locally, in hours. Default is 24.
+    cache_ttl_hours: 24
 ```
 
 ## How to Create Your Configuration File

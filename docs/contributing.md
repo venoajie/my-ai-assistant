@@ -4,23 +4,23 @@ We welcome contributions to the AI Assistant! This guide provides the informatio
 
 ## Core Requirements
 
--   **Python Version:** Python 3.10 or higher is **required**.
--   **Reason:** The project relies on modern dependencies (e.g., `instructor`) that use typing syntax (`|` for unions) introduced in Python 3.10. The application will not run on older versions.
+-   **Python Version:** Python 3.12 or higher is **required**.
+-   **Reason:** The project relies on modern dependencies and packaging standards. The application will not run on older versions.
 -   **API Client Architecture:** This project uses a unified client factory (llm_client_factory.py) that leverages the openai Python library as a standard interface for all supported LLM providers (including DeepSeek and Google Gemini). This simplifies the architecture and makes adding new OpenAI-compatible providers straightforward.
 
 ## Development Setup: Optional Dependencies
 
-The project uses optional dependencies to create different installation types for different environments. As a contributor, you will likely need the `indexing` dependencies.
+The project uses optional dependencies to create different installation types for different environments. As a contributor, you will need the `indexing` dependencies to run the full test suite and work on the RAG pipeline.
 
--   **For Indexing & Full Functionality (Recommended for Contributors):**
+-   **Full Development Environment (Recommended for Contributors):**
     ```bash
     pip install -e .[indexing,test]
     ```
--   **For Client-Only Functionality:**
+-   **Client-Only Environment (For UI/UX work):**
     ```bash
     pip install -e .[client,test]
     ```
-
+    
 ## Persona Governance
 
 This project enforces a strict structural standard for all persona files to ensure quality and consistency. All contributions that add or modify personas must pass our validation script.
