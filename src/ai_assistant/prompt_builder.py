@@ -159,6 +159,11 @@ You MUST embody the persona, philosophy, and directives provided in the SystemPr
 {history_section}
 <UserRequest>{query}</UserRequest>
 <ToolObservations>{observation_section}</ToolObservations>
+
+<AnsweringProtocol>
+CRITICAL: The information provided in `<ToolObservations>` is your SOLE SOURCE OF TRUTH. Your primary task is to synthesize an answer based *exclusively* on this data. If the observations contain code, explain that specific code. Do not use your general knowledge about other topics or libraries, even if the user's query seems generic. If the observations are empty, state that you have no information.
+</AnsweringProtocol>
+
 Synthesize all information to formulate a direct, clear, and actionable response.
 """
         return prompt
