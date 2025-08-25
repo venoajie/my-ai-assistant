@@ -59,6 +59,15 @@ async def orchestrate_agent_run(
                 
         if not success:
             print(f"{Colors.YELLOW}⚠️  RAG Warning: {rag_content}{Colors.RESET}")
+            
+        elif rag_content:
+            # The plugin succeeded and returned context.
+            logger.info("Injecting RAG context into planning history.")
+            system_note = f"<SystemNote>The following context was retrieved from the RAG system to aid in planning:\n{rag_content}</SystemNote>"
+            history.append({
+                "role": "system",
+                "content": system_note
+            })
         else:
             relevant_context = rag_plugin.get_context(query, [])
             if relevant_context:            
