@@ -18,7 +18,8 @@ try:
     import chromadb
     from chromadb.api.client import Client
     from chromadb.config import Settings
-    from chromadb import PersistentClient, HttpClient
+    from chromadb import HttpClient
+    from chromadb.ephemeral_client import EphemeralClient
     CHROMADB_AVAILABLE = True
 except ImportError:
     chromadb = None
@@ -27,6 +28,7 @@ except ImportError:
     PersistentClient = None # Define as None on failure
     HttpClient = None       # Define as None on failure
     CHROMADB_AVAILABLE = False
+    EphemeralClient = None
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -64,16 +66,10 @@ def _get_chroma_client(
             logger.error("Failed to connect to ChromaDB server", error=str(e))
             return None
     
-    logger.info(
-        "Attempting to load local persistent ChromaDB index",
-        path=str(index_path),
-        )
+    logger.info("Using local ephemeral ChromaDB client with persistent storage", path=str(index_path))
     try:
         if not index_path.exists() or not (index_path / "chroma.sqlite3").exists():
-             logger.warning(
-                 "Local index path does not appear to be a valid ChromaDB directory.", 
-                 path=str(index_path),
-                 )
+             logger.warning("Local index path does not appear to be a valid ChromaDB directory.", path=str(index_path))
              return None
         
         # 1. Create explicit local settings.
@@ -83,15 +79,21 @@ def _get_chroma_client(
             anonymized_telemetry=False,
         )
         
-        # 2. Use the specific PersistentClient class WITH the settings object.
-        # This is the most direct and unambiguous method, leaving no room for auto-detection errors.
-        client = PersistentClient(path=str(index_path), settings=settings)
+        # 2. This creates an in-memory server instance that reads from/writes to the specified path.
+        # It completely bypasses the faulty http-client detection logic.
+        client = EphemeralClient(
+            settings=Settings(
+                is_persistent=True,
+                persist_directory=str(index_path),
+                anonymized_telemetry=False
+            )
+        )
         
-        client.heartbeat() 
-        logger.info("Successfully loaded persistent ChromaDB client in local mode.")
+        logger.info("Successfully loaded ephemeral client with persistent data.")
         return client
+    
     except Exception as e:
-        logger.error("Failed to create persistent ChromaDB client", error=str(e), path=str(index_path))
+        logger.error("Failed to create ephemeral ChromaDB client", error=str(e), path=str(index_path))
         return None
     
 class RAGContextPlugin(ContextPluginBase):

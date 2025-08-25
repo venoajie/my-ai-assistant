@@ -143,7 +143,6 @@ class ResponseHandler:
             "Authorization": f"Bearer {api_key}",
         }
 
-        # --- THIS IS THE ROBUST FIX ---
         # Define the set of parameters supported by the OpenAI Chat Completions standard.
         SUPPORTED_PARAMS = {
             "temperature",

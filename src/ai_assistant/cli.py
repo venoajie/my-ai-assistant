@@ -277,7 +277,7 @@ def run_prompt_analyzer(
     try:
         rules_path_traversable = resources.files('ai_assistant').joinpath('internal_data/prompt_analysis_rules.yml')
         rules_path = Path(str(rules_path_traversable))
-        analyzer = PromptAnalyzer(rules_path)
+        analyzer = PromptAnalyzer()
         
         context = {
             'file_count': len(args.files) if args.files else 0,
