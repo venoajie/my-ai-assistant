@@ -122,33 +122,31 @@ jobs:
             "checksum": "${CHECKSUM}"
           }
           EOF
-      
+            
       - name: Upload Index to Object Storage
         run: |
           INDEX_DIR=".ai_rag_index"
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          LATEST_PATH="indexes/${{ env.BRANCH_NAME }}/latest"
-          ARCHIVE_PATH="indexes/${{ env.BRANCH_NAME }}/archive/${TIMESTAMP}_${{ github.sha }}.tar.gz"
           
-          # Create tar archive of the index
+          # Create tar archive
           tar -czf index.tar.gz -C "${INDEX_DIR}" .
           
-          # Upload archive
+          # Upload to timestamped archive (for history)
           oci os object put --force \
             --namespace "${OCI_NAMESPACE}" \
             --bucket-name "${OCI_BUCKET}" \
-            --name "${ARCHIVE_PATH}" \
+            --name "indexes/${{ env.BRANCH_NAME }}/archive/${TIMESTAMP}_${{ github.sha }}.tar.gz" \
             --file index.tar.gz
-            
-          # "Atomically" update latest by copying the new archive
-          oci os object copy --force \
+          
+          # Upload to latest (for easy access)
+          oci os object put --force \
             --namespace "${OCI_NAMESPACE}" \
             --bucket-name "${OCI_BUCKET}" \
-            --source-object-name "${ARCHIVE_PATH}" \
-            --destination-object-name "${LATEST_PATH}/index.tar.gz"
-
+            --name "indexes/${{ env.BRANCH_NAME }}/latest/index.tar.gz" \
+            --file index.tar.gz
+          
           echo "::notice::Successfully uploaded index for branch ${{ env.BRANCH_NAME }}"
-      
+
       - name: Create Failure Issue
         if: failure()
         uses: actions/github-script@v6
