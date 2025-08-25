@@ -87,3 +87,6 @@ plan_compliance_rules:
       max_steps: 1
       allowed_tools:
         - "read_file"
+        
+prompt_analysis_rules:
+  - name: "Multi-File Modification Anti-Pattern"

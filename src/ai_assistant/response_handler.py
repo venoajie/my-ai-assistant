@@ -122,46 +122,6 @@ class ResponseHandler:
             f"❌ ERROR: API call for model {model} failed unexpectedly after {max_retries} attempts.", 
             provider_name,
             )
-
-    async def _call_deepseek(
-        self, 
-        session: aiohttp.ClientSession, 
-        prompt: str, model: str, 
-        config: Any, 
-        gen_config: Dict,
-        ) -> str:
-        
-        api_key = os.getenv(config.api_key_env)
-        if not api_key:
-            raise APIKeyNotFoundError(f"API key '{config.api_key_env}' not found.")
-        
-        api_url = f"{config.api_endpoint.strip('/')}/chat/completions"
-        headers = {
-            "Content-Type": "application/json", 
-            "Authorization": f"Bearer {api_key}",
-            }
-        request_body = {
-            "model": model,
-            "messages": [
-                {"role": "user", 
-                 "content": prompt,
-                 }
-                ], 
-            "stream": False, 
-            **gen_config,
-            }
-
-        async with session.post(api_url, headers=headers, json=request_body) as response:
-            response.raise_for_status()
-            response_data = await response.json()
-        
-        content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-        if not content or not content.strip():
-            raise ValueError("API returned an empty or whitespace-only response.")
-        
-        print(f" ✅ Done!")
-        return content
     
     
     async def _call_openai_compatible(

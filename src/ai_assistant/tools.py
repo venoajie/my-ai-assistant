@@ -46,7 +46,7 @@ class CreateServiceFromTemplateTool(Tool):
     is_risky = True
 
     async def __call__(self, template_service_name: str, new_service_name: str, new_service_path: str) -> Tuple[bool, str]:
-        # ### --- FIX: Use configurable path instead of hard-coded string --- ###
+
         template_base_path = Path(ai_settings.general.services_template_directory)
         template_path = template_base_path / template_service_name
         new_path = Path(new_service_path)
@@ -54,7 +54,7 @@ class CreateServiceFromTemplateTool(Tool):
         if not template_path.is_dir():
             return (False, f"Error: Template service directory not found at '{template_path}'")
 
-        files_to_template = ["Dockerfile", "pyproject.toml"]
+        files_to_template = ai_settings.general.service_template_files
         log_messages = []
 
         try:

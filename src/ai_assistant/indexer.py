@@ -10,7 +10,6 @@ from typing import List, Dict, Any, Optional, Generator
 import fnmatch
 import subprocess
 
-# ### --- FIX: Use conditional imports and the new client factory --- ###
 try:
     import chromadb
 except ImportError:
@@ -20,31 +19,26 @@ import structlog
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
-from .config import load_ai_settings
+from .config import ai_settings, load_ai_settings
 from .logging_config import setup_logging
 
 load_dotenv()
 logger = structlog.get_logger()
 
 INDEX_DIR = Path(".ai_rag_index")
-STATE_FILE = INDEX_DIR / "state.json"
-DEFAULT_COLLECTION_NAME = "ai_settings.rag.collection_name"
 EMBEDDING_BATCH_SIZE = 16
 
 DEFAULT_IGNORE_PATTERNS = [
     ".git/", ".venv/", "venv/", "__pycache__/", "*.pyc", "*.log",
     ".DS_Store", "node_modules/", "build/", "dist/", ".idea/",
     ".vscode/", "*.egg-info/",
-    # Exclude all persona directories to prevent knowledge base pollution.
     "src/ai_assistant/personas/",
     ".ai/personas/",
-    # Exclude internal machine-generated artifacts.
     "src/ai_assistant/internal_data/",
 ]
 
 class EmbeddingProvider:
     def __init__(self):
-        ai_settings = load_ai_settings()
         self.model_name = ai_settings.rag.embedding_model_name
         logger.info("Loading local embedding model", model_name=self.model_name)
         self.model = SentenceTransformer(self.model_name)
@@ -59,58 +53,35 @@ class EmbeddingProvider:
             logger.error("Failed to get local embeddings", error=str(e))
             return []
 
-class HybridEmbeddingProvider:
-    def __init__(self):
-        ai_settings = load_ai_settings()
-        self.model_name = ai_settings.rag.embedding_model_name
-        self.fallback_chain = [
-            self._try_local_model,
-            self._try_remote_service
-        ]
-        self.cache = {}
-
-    def _try_local_model(self, texts: List[str]) -> Optional[List[List[float]]]:
-        try:
-            model = SentenceTransformer(self.model_name)
-            embeddings = model.encode(texts, show_progress_bar=True)
-            return [emb.tolist() for emb in embeddings]
-        except Exception:
-            return None
-
-    def _try_remote_service(self, texts: List[str]) -> Optional[List[List[float]]]:
-        # Implementation for remote embedding service would go here
-        return None
-
-    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        cache_key = hashlib.md5("".join(texts).encode()).hexdigest()
-        if cache_key in self.cache:
-            return self.cache[cache_key]
-        
-        for provider in self.fallback_chain:
-            if embeddings := provider(texts):
-                self.cache[cache_key] = embeddings
-                return embeddings
-        return []
-
 class Indexer:
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path, branch_override: Optional[str] = None):
         self.project_root = project_root
         self.index_path = project_root / INDEX_DIR
-        self.state_path = project_root / STATE_FILE
+        self.state_path = self.index_path / "state.json"
         self.index_path.mkdir(exist_ok=True)
         
         if not chromadb:
             raise ImportError("ChromaDB is not installed. Please install with 'pip install -e .[indexing]' to run the indexer.")
         
-        ai_settings = load_ai_settings()
-        self.branch = ai_settings.rag.github_actions_indexing.branch
-        self.collection_name = f"{DEFAULT_COLLECTION_NAME}_{self.branch}"
         if ai_settings.rag.chroma_server_host:
             logger.error("Indexer cannot be run in client-server mode. Unset chroma_server_host in your config to run the indexer.")
             raise ConnectionError("Indexer is configured to connect to a remote server, which is not allowed.")
 
+        if branch_override:
+            self.branch = branch_override.replace('/', '_')
+        else:
+            try:
+                result = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], capture_output=True, text=True, check=True, cwd=self.project_root)
+                self.branch = result.stdout.strip().replace('/', '_')
+            except Exception:
+                self.branch = ai_settings.rag.default_branch
+        
+        base_collection_name = ai_settings.rag.collection_name
+        self.collection_name = f"{base_collection_name}_{self.branch}"
+        logger.info("Indexer targeting collection", collection_name=self.collection_name)
+        
         self.db_client = chromadb.PersistentClient(path=str(self.index_path))
-        self.collection = self.db_client.get_or_create_collection(DEFAULT_COLLECTION_NAME)
+        self.collection = self.db_client.get_or_create_collection(self.collection_name)
         self.embed_provider = EmbeddingProvider()
         self.state = self._load_state()
         self.ignore_patterns = self._load_ignore_patterns()
@@ -120,24 +91,11 @@ class Indexer:
             with open(self.state_path, 'r') as f: return json.load(f)
         return {}
 
-    def get_changed_files(self) -> List[Path]:
-        """Get list of changed files using git diff for delta indexing"""
-        try:
-            result = subprocess.run(['git', 'diff', '--name-only', 'HEAD~1'], 
-                                  capture_output=True, text=True, cwd=self.project_root)
-            changed = [self.project_root / f.strip() for f in result.stdout.split('\n') if f.strip()]
-            return [f for f in changed if f.exists() and not self._is_ignored(f)]
-        except Exception:
-            return []
-        
-    # ### --- Implement atomic state saving --- ###
     def _save_state(self):
-        """Atomically saves the state to prevent corruption on crash."""
         temp_path = self.state_path.with_suffix('.tmp')
         try:
             with open(temp_path, 'w', encoding='utf-8') as f:
                 json.dump(self.state, f, indent=2)
-            # Atomic rename/replace operation
             temp_path.replace(self.state_path)
         except IOError as e:
             logger.error("Failed to save state atomically", error=str(e))
@@ -166,9 +124,7 @@ class Indexer:
     def _walk_project(self) -> Generator[Path, None, None]:
         for root, dirs, files in os.walk(self.project_root, topdown=True):
             root_path = Path(root)
-            original_dirs = list(dirs)
-            dirs[:] = [d for d in original_dirs if not self._is_ignored(root_path / d)]
-            
+            dirs[:] = [d for d in dirs if not self._is_ignored(root_path / d)]
             for name in files:
                 file_path = root_path / name
                 if not self._is_ignored(file_path): yield file_path
@@ -188,20 +144,14 @@ class Indexer:
         return True
 
     def _chunk_text(self, text: str, file_path: Path) -> List[str]:
-        # NOTE: This naive chunking is still a weakness. The AI's suggestion to use
-        # an AST-based chunker for Python is the correct next step for improving quality.
         file_ext = file_path.suffix.lower()
         if file_ext == '.py':
             chunks = re.split(r'(^\s*class\s|^\s*def\s)', text, flags=re.MULTILINE)
-            combined_chunks = []
-            for i in range(1, len(chunks), 2):
-                combined_chunks.append(chunks[i] + chunks[i+1])
+            combined_chunks = [chunks[i] + chunks[i+1] for i in range(1, len(chunks), 2)]
             return combined_chunks if combined_chunks else [text]
         if file_ext == '.md':
             chunks = re.split(r'(^#+\s)', text, flags=re.MULTILINE)
-            combined_chunks = []
-            for i in range(1, len(chunks), 2):
-                combined_chunks.append(chunks[i] + chunks[i+1])
+            combined_chunks = [chunks[i] + chunks[i+1] for i in range(1, len(chunks), 2)]
             return combined_chunks if combined_chunks else [text]
         chunk_size, overlap = 1000, 200
         return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size - overlap)]
@@ -211,13 +161,11 @@ class Indexer:
         if force_reindex:
             logger.warning("Forcing re-index of all files and clearing collection.")
             self.state = {}
-            self.db_client.delete_collection(name=DEFAULT_COLLECTION_NAME)
-            self.collection = self.db_client.get_or_create_collection(DEFAULT_COLLECTION_NAME)
+            self.db_client.delete_collection(name=self.collection_name)
+            self.collection = self.db_client.get_or_create_collection(self.collection_name)
 
-        # ### --- FIX: Implement full project scan for change detection --- ###
         current_files = {str(p.relative_to(self.project_root)): p for p in self._walk_project()}
         
-        # 1. Detect deleted files (orphans)
         indexed_files = set(self.state.keys())
         deleted_files = indexed_files - set(current_files.keys())
         
@@ -225,7 +173,6 @@ class Indexer:
             logger.info("Found orphaned files to remove from index", count=len(deleted_files))
             ids_to_delete = []
             for file_path_str in deleted_files:
-                # A file can have multiple chunks, so we need to find all IDs for that source.
                 results = self.collection.get(where={"source": file_path_str}, include=[])
                 ids_to_delete.extend(results['ids'])
                 self.state.pop(file_path_str, None)
@@ -234,7 +181,6 @@ class Indexer:
                 self.collection.delete(ids=ids_to_delete)
                 logger.info("Removed orphaned chunks from ChromaDB.", count=len(ids_to_delete))
 
-        # 2. Detect new or modified files
         files_to_index = []
         for rel_path_str, file_path in current_files.items():
             try:
@@ -246,7 +192,7 @@ class Indexer:
         
         if not files_to_index:
             logger.info("No new or modified files to index. Project is up to date.")
-            self._save_state() # Save state in case orphans were removed
+            self._save_state()
             return
 
         logger.info("Found new or modified files to index", count=len(files_to_index))
@@ -275,7 +221,7 @@ class Indexer:
 
         if not total_chunks_to_embed:
             logger.info("No valid new chunks to embed.")
-            self._save_state() # Save state in case orphans were removed
+            self._save_state()
             return
 
         logger.info("Total valid chunks to process", count=len(total_chunks_to_embed))
@@ -295,7 +241,6 @@ class Indexer:
                     documents=[item['document'] for item in batch],
                     metadatas=[item['metadata'] for item in batch]
                 )
-                # Update state for the files processed in this batch
                 for item in batch:
                     source_file = item['metadata']['source']
                     if source_file in file_hashes_to_update:
@@ -311,17 +256,17 @@ def main():
     parser = argparse.ArgumentParser(description="AI Assistant RAG Indexer")
     parser.add_argument("directory", nargs="?", default=".", help="The project directory to index.")
     parser.add_argument("--force-reindex", action="store_true", help="Force re-indexing of all files.")
+    parser.add_argument("--branch", help="The git branch being indexed (for CI/CD). Overrides local git detection.")
     args = parser.parse_args()
     project_path = Path(args.directory).resolve()
     if not project_path.is_dir():
         logger.error("Path is not a valid directory", path=project_path)
         return
     try:
-        indexer = Indexer(project_path)
+        indexer = Indexer(project_path, branch_override=args.branch)
         indexer.run(force_reindex=args.force_reindex)
     except (ImportError, ConnectionError) as e:
         logger.critical("Failed to initialize indexer", error=str(e))
         
-
 if __name__ == "__main__":
     main()

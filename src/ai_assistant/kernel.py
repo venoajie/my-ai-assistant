@@ -22,7 +22,6 @@ from .tools import TOOL_REGISTRY
 from .data_models import ExecutionPlan
 from .data_models import ExecutionPlan, CritiqueResponse
 from .llm_client_factory import get_instructor_client 
-# ### --- FIX: Import RAG plugin for automatic context injection --- ###
 from .plugins.rag_plugin import RAGContextPlugin
 
 logger = structlog.get_logger(__name__)
@@ -52,25 +51,21 @@ async def orchestrate_agent_run(
             logger.error("Persona loading failed", persona=persona_alias, error=str(e))
             return {"response": error_msg, "metrics": metrics}
 
-    # ### --- FIX: RAG-enhanced planning context injection --- ###
     # Check if a RAG index exists and inject relevant context for the planner.
-    rag_index_path = Path.cwd() / ".ai_rag_index"
-    if rag_index_path.exists():
-        logger.info("RAG index found. Retrieving context to enhance planning.")
-        try:
-            rag_plugin = RAGContextPlugin(project_root=Path.cwd())
-            # Use the plugin's get_context method which is designed for this
-            relevant_context = rag_plugin.get_context(query, [])
-            if relevant_context:
+    logger.info("Attempting to retrieve RAG context to enhance planning.")
+    try:
+        rag_plugin = RAGContextPlugin(project_root=Path.cwd())
+        relevant_context = rag_plugin.get_context(query, [])
+        if relevant_context:            
                 logger.info("Injecting RAG context into planning history.")
                 history.append({
                     "role": "system",
                     "content": f"<SystemNote>The following context was retrieved from the project's knowledge base to aid in your planning:\n{relevant_context}</SystemNote>"
                 })
-        except Exception as e:
-            logger.warning("Failed to retrieve or inject RAG context", error=str(e))
-    # ### --- END FIX --- ###
-
+            
+    except Exception as e:
+        logger.warning("Could not retrieve RAG context", error=str(e))
+    
     # --- PRE-PROCESSING LOGIC ---
     optimizer = ContextOptimizer()
     
@@ -102,14 +97,13 @@ async def orchestrate_agent_run(
              plan_expectation=plan_expectation, 
          )
         
-     # ### --- FIX: Handle critical planner failure inside the loop --- ###
+     # ### --- Handle critical planner failure inside the loop --- ###
         if plan is None:
             # The planner itself failed critically. No point in retrying.
             halt_message = "HALTED: The AI planner failed to generate a plan due to a critical internal error. Check the logs for details."
             logger.critical(halt_message)
             return {"response": halt_message, "metrics": metrics}        
         
-        # --- THE DEFINITIVE FIX IS HERE ---
         # This is the single, unified validation gate.
         is_compliant, compliance_reason = check_plan_compliance(plan, plan_expectation) # Pass the object
         
@@ -215,7 +209,7 @@ async def orchestrate_agent_run(
 
     # --- OUTPUT-FIRST MODE (GENERATE PACKAGE) ---
     if output_dir:
-        # ### --- FIX: Await the now-async handler function --- ###
+        # ### --- Await the now-async handler function --- ###
         return await _handle_output_first_mode(
             plan, 
             persona_alias,
@@ -419,7 +413,6 @@ async def _handle_output_first_mode(
         args = step.args
         thought = step.thought
         
-        # ### --- FIX: Correctly handle workflow by generating refactored content --- ###
         if tool_name == "execute_refactoring_workflow":
             logger.debug("Unpacking execute_refactoring_workflow for manifest.")
             
@@ -432,11 +425,9 @@ async def _handle_output_first_mode(
                     "branch_name": branch_name,
                 })
 
-            # 2. Refactor Files (as apply_file_change actions)
             instructions = args.get("refactoring_instructions")
             files_to_refactor = args.get("files_to_refactor", [])
             
-            # This is the critical fix: actually generate the refactored content
             for file_path_str in files_to_refactor:
                 file_path = Path(file_path_str)
                 if not file_path.exists():

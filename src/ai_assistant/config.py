@@ -1,3 +1,5 @@
+# src/ai_assistant/config.py
+
 import yaml
 from pathlib import Path
 from typing import Dict, Optional, List
@@ -29,10 +31,14 @@ class GeneralConfig(BaseModel):
     critique_persona_alias: str
     failure_persona_alias: str
     local_plugins_directory: str = ".ai/plugins"
-    enable_llm_json_corrector: bool = Field(default=True) # Let's default to True
+    enable_llm_json_corrector: bool = Field(default=True)
     services_template_directory: str = Field(
         default="src/services", 
         description="Default path for service templates.",
+        )
+    service_template_files: List[str] = Field(
+        default_factory=lambda: ["Dockerfile", 
+                                 "pyproject.toml"],
         )
 
 class ContextOptimizerConfig(BaseModel):
@@ -56,9 +62,7 @@ class DeepSeekDiscountConfig(BaseModel):
 
 class GenerationParams(BaseModel):
     temperature: float
-    # Use an alias to allow 'topP' in the config file but use 'top_p' in the code
     top_p: Optional[float] = Field(None, alias='topP')
-    # Use an alias to allow 'topK' in the config file but use 'top_k' in the code
     top_k: Optional[int] = Field(None, alias='topK')
     
 class GenerationConfig(BaseModel):
@@ -66,7 +70,6 @@ class GenerationConfig(BaseModel):
     synthesis: GenerationParams
     critique: GenerationParams
 
-# --- NEW: Oracle Cloud Storage Configuration ---
 class OracleCloudConfig(BaseModel):
     """Configuration for Oracle Cloud Object Storage."""
     namespace: Optional[str] = Field(None, description="OCI namespace")
@@ -75,7 +78,6 @@ class OracleCloudConfig(BaseModel):
     enable_caching: bool = Field(True, description="Enable local caching of downloaded indexes")
     cache_ttl_hours: int = Field(24, description="Cache TTL in hours")
 
-# --- UPDATED: RAG Configuration with Branch Awareness ---
 class RAGConfig(BaseModel):
     """Configuration for the RAG subsystem."""
     embedding_model_name: str = 'all-MiniLM-L6-v2'
@@ -84,18 +86,14 @@ class RAGConfig(BaseModel):
     chroma_server_port: Optional[int] = Field(None, description="Port of the ChromaDB server.")
     chroma_server_ssl: bool = Field(False, description="Use SSL to connect to the ChromaDB server.")
     
-    # NEW: Branch-aware and delta indexing configuration
-    default_branch: str = Field("main", description="Default branch for RAG indexing")
-    enable_branch_awareness: bool = Field(True, description="Enable branch-specific indexes")
-    enable_delta_indexing: bool = Field(True, description="Enable delta indexing for faster updates")
+    default_branch: str = Field("main", description="Default branch for RAG indexing if git detection fails.")
+    enable_branch_awareness: bool = Field(True, description="Enable branch-specific indexes.")
     
-    # NEW: Embedding provider configuration
     fallback_embedding_providers: List[str] = Field(
-        default_factory=lambda: ["openai", "cohere"], 
+        default_factory=lambda: ["openai"], 
         description="Fallback embedding providers if local model fails"
     )
     
-    # NEW: Oracle Cloud configuration
     oracle_cloud: Optional[OracleCloudConfig] = Field(
         default_factory=OracleCloudConfig,
         description="Oracle Cloud Object Storage configuration"
@@ -124,7 +122,6 @@ class AIConfig(BaseModel):
 # --- Configuration Loading Logic
 def load_ai_settings() -> AIConfig:
     """Loads and merges config from package defaults, user config, and project config"""
-    # 1. Load package defaults using the correct resource loading mechanism
     try:
         default_config_text = resources.files('ai_assistant').joinpath('default_config.yml').read_text(encoding='utf-8')
         config_data = yaml.safe_load(default_config_text)
@@ -132,42 +129,29 @@ def load_ai_settings() -> AIConfig:
         print(f"FATAL: Could not load or parse the default package configuration. Error: {e}")
         exit(1)
     
-    # 2. Load user config overrides
     user_config_path = Path.home() / ".config" / "ai_assistant" / "config.yml"
     if user_config_path.exists():
         with open(user_config_path, 'r') as f:
             user_config = yaml.safe_load(f)
         if user_config:
-            config_data = deep_merge(
-                config_data, 
-                user_config,
-                )
+            config_data = deep_merge(config_data, user_config)
      
-    # 3. Load project config overrides
     project_config_path = Path.cwd() / ".ai_config.yml"
     if project_config_path.exists():
         with open(project_config_path, 'r') as f:
             project_config = yaml.safe_load(f)
         if project_config:
-            config_data = deep_merge(
-                config_data, 
-                project_config,
-                )
+            config_data = deep_merge(config_data, project_config)
     
-    # 4. Create and inject the resolved paths into the config data before validation.    
-    # Define base directories for clarity and correctness
     project_root = Path.cwd()
     user_config_dir = Path.home() / ".config" / "ai_assistant"
-
-    # Get the final, merged general config section
     general_conf = config_data.get("general", {})
 
-    # Build the paths dictionary with correct base paths
     config_data["paths"] = {
         "project_root": project_root,
         "sessions_dir": project_root / general_conf.get("sessions_directory", ".ai_sessions"),
         "user_personas_dir": user_config_dir / general_conf.get("personas_directory", "personas"),
-        "project_local_personas_dir": project_root / ".ai" / "personas", # This is a fixed convention
+        "project_local_personas_dir": project_root / ".ai" / "personas",
         "local_plugins_dir": project_root / general_conf.get("local_plugins_directory", ".ai/plugins"),
     }
 
@@ -180,16 +164,10 @@ def deep_merge(base: Dict, update: Dict) -> Dict:
         return base
         
     for key, value in update.items():
-        if isinstance(value, dict) \
-            and key in base \
-                and isinstance(base[key], dict):
-            base[key] = deep_merge(
-                base[key], 
-                value,
-                )
+        if isinstance(value, dict) and key in base and isinstance(base[key], dict):
+            base[key] = deep_merge(base[key], value)
         else:
             base[key] = value
     return base
 
-# --- Global Singleton Instance ---
 ai_settings = load_ai_settings()
