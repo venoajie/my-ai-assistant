@@ -54,12 +54,21 @@ jobs:
       - name: Install Dependencies
         run: pip install -e .[indexing] oci-cli
       
-      - name: Configure Oracle Cloud OIDC
-        uses: oracle-actions/configure-oci-credentials@v1
-        with:
-          tenancy: ${{ secrets.OCI_TENANCY_OCID }}
-          region: ${{ env.OCI_REGION }}
+      - name: Configure Oracle Cloud CLI
+        run: |
+          mkdir -p ~/.oci
+          cat > ~/.oci/config << EOF
+          [DEFAULT]
+          user=${{ secrets.OCI_USER_OCID }}
+          fingerprint=${{ secrets.OCI_FINGERPRINT }}
+          tenancy=${{ secrets.OCI_TENANCY_OCID }}
+          region=${{ env.OCI_REGION }}
+          key_file=~/.oci/api_key.pem
+          EOF
           
+          echo "${{ secrets.OCI_API_KEY }}" > ~/.oci/api_key.pem
+          chmod 600 ~/.oci/api_key.pem
+        
       - name: Determine Indexing Mode
         id: mode
         run: |
