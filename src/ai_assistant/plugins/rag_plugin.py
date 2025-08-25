@@ -17,7 +17,6 @@ from ..utils.git_utils import get_normalized_branch_name
 try:
     import chromadb
     from chromadb.api.client import Client
-    # --- FIX: Use the correct import path for Settings ---
     from chromadb.config import Settings
     from chromadb import HttpClient
     CHROMADB_AVAILABLE = True
@@ -63,7 +62,6 @@ def _get_chroma_client(rag_config: ai_settings.rag, index_path: Path) -> Optiona
              logger.warning("Local index path does not appear to be a valid ChromaDB directory.", path=str(index_path))
              return None
         
-        # --- FIX: Use the modern factory pattern with explicit settings ---
         settings = Settings(
             is_persistent=True,
             persist_directory=str(index_path),
