@@ -366,8 +366,12 @@ async def async_main():
     print(f"{Colors.BLUE}║{Colors.CYAN} Critique:{Colors.RESET}  {ai_settings.model_selection.critique:<49}{Colors.BLUE}║{Colors.RESET}")
     print(f"{Colors.BLUE}╚{'═' * 60}╝{Colors.RESET}")
 
-    user_query = ' '.join(args.query)
-    # Initialize args.files as a list if it's None. This must be done first.
+
+    user_query = ' '.join(args.query).strip()
+    # --- Read from stdin if no query is provided on the command line ---
+    if not user_query and not sys.stdin.isatty():
+        print(f"{Colors.DIM}Reading prompt from stdin...{Colors.RESET}")
+        user_query = sys.stdin.read()    # Initialize args.files as a list if it's None. This must be done first.
 
     if args.files is None:
         args.files = []
