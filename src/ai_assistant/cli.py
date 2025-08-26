@@ -334,6 +334,11 @@ async def async_main():
     parser.add_argument('--context', help='The name of the context plugin to use (e.g., Trading).')
     parser.add_argument('--output-dir', help='Activates Output-First mode, generating an execution package in the specified directory instead of executing live.')
     parser.add_argument('--show-context', action='store_true', help='Build and display the context from files and plugins, then exit without running the agent.')
+    # --- NEW: Add model override arguments ---
+    model_group = parser.add_argument_group('Model Overrides', 'Temporarily override the models used for a single run.')
+    model_group.add_argument('--planning-model', help='Override the model used for the planning phase.')
+    model_group.add_argument('--synthesis-model', help='Override the model used for the synthesis phase.')
+    model_group.add_argument('--critique-model', help='Override the model used for the critique phase.')
     session_group = parser.add_mutually_exclusive_group()
     session_group.add_argument('--session', help='Continue an existing session by ID.')
     session_group.add_argument('--new-session', action='store_true', help='Start a new session.')    
@@ -343,10 +348,27 @@ async def async_main():
     args = parser.parse_args()   
     
     setup_logging(log_level=args.log_level)
-    
+     
+    # --- CORRECTED PLACEMENT: Apply model overrides FIRST ---
+    if args.planning_model:
+        ai_settings.model_selection.planning = args.planning_model
+    if args.synthesis_model:
+        ai_settings.model_selection.synthesis = args.synthesis_model
+    if args.critique_model:
+        ai_settings.model_selection.critique = args.critique_model
+
+    # --- CORRECTED PLACEMENT: Now, inform the user of the FINAL configuration ---
+    print(f"{Colors.BLUE}╔{'═' * 60}╗{Colors.RESET}")
+    print(f"{Colors.BLUE}║{Colors.BOLD} Model Configuration for this Run{' ' * (60 - 32)}{Colors.BLUE}║{Colors.RESET}")
+    print(f"{Colors.BLUE}╠{'═' * 60}╣{Colors.RESET}")
+    print(f"{Colors.BLUE}║{Colors.CYAN} Planning:{Colors.RESET}  {ai_settings.model_selection.planning:<49}{Colors.BLUE}║{Colors.RESET}")
+    print(f"{Colors.BLUE}║{Colors.CYAN} Synthesis:{Colors.RESET} {ai_settings.model_selection.synthesis:<50}{Colors.BLUE}║{Colors.RESET}")
+    print(f"{Colors.BLUE}║{Colors.CYAN} Critique:{Colors.RESET}  {ai_settings.model_selection.critique:<49}{Colors.BLUE}║{Colors.RESET}")
+    print(f"{Colors.BLUE}╚{'═' * 60}╝{Colors.RESET}")
+
     user_query = ' '.join(args.query)
-    
     # Initialize args.files as a list if it's None. This must be done first.
+
     if args.files is None:
         args.files = []
 
@@ -417,6 +439,9 @@ async def async_main():
     if not args.show_context:
        run_prompt_analyzer(args, user_query)
 
+    if args.critique_model:
+        ai_settings.model_selection.critique = args.critique_model
+ 
     session_manager = SessionManager()
     history = []
     session_id = None
