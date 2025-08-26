@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
 from importlib import resources
+import structlog  
+
+logger = structlog.get_logger(__name__)
 
 # --- Pydantic Models for Type-Safe Configuration ---
 class ModelSelectionConfig(BaseModel):
@@ -152,6 +155,7 @@ def load_ai_settings() -> AIConfig:
     try:
         default_config_text = resources.files('ai_assistant').joinpath('default_config.yml').read_text(encoding='utf-8')
         config_data = yaml.safe_load(default_config_text)
+        logger.debug("Loaded default package configuration.") 
     except (FileNotFoundError, yaml.YAMLError) as e:
         print(f"FATAL: Could not load or parse the default package configuration. Error: {e}")
         exit(1)
@@ -168,6 +172,7 @@ def load_ai_settings() -> AIConfig:
         with open(project_config_path, 'r') as f:
             project_config = yaml.safe_load(f)
         if project_config:
+            logger.info("Applying project-level configuration override.", path=str(project_config_path)) 
             config_data = deep_merge(config_data, project_config)
     
     project_root = Path.cwd()
