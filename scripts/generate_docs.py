@@ -17,14 +17,14 @@ def main():
 
     # 1. Load the sources of truth
     with open(governance_file, 'r', encoding='utf-8') as f:
-        rules = yaml.safe_load(f)
+        governance_data = yaml.safe_load(f)
     with open(config_file, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
     # 2. Format data for insertion into Markdown
     
-    # Process risky keywords
-    risky_keywords = rules.get("prompting_best_practices", {}).get("risky_modification_keywords", [])
+    # Process risky keywords from the unified governance file
+    risky_keywords = governance_data.get("prompting_best_practices", {}).get("risky_modification_keywords", [])
     keyword_list_str = ", ".join(f"`{word}`" for word in risky_keywords)
 
     # Process model configuration
@@ -39,6 +39,13 @@ def main():
     ]
     models_info_str = "\n".join(models_info_parts)
 
+    # Process analyzer rules from the unified governance file
+    analyzer_rules_list = governance_data.get("prompt_analysis_rules", [])
+    analyzer_rules_parts = []
+    for rule in analyzer_rules_list:
+        analyzer_rules_parts.append(f"-   **{rule['name']}:** {rule['description']}")
+    analyzer_rules_str = "\n".join(analyzer_rules_parts)
+
     # 3. Process the template file
     template_path = template_dir / "prompting_guide.md.template"
     output_path = output_dir / "prompting_guide.md"
@@ -49,6 +56,7 @@ def main():
     # 4. Replace placeholders
     content = content.replace("{{RISKY_KEYWORDS_LIST}}", keyword_list_str)
     content = content.replace("{{DEFAULT_MODELS_INFO}}", models_info_str)
+    content = content.replace("{{PROMPT_ANALYZER_RULES_LIST}}", analyzer_rules_str)
 
     # 5. Write the final documentation file
     output_path.write_text(content, encoding='utf-8')

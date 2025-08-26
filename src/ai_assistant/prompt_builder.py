@@ -71,7 +71,7 @@ You are a planning agent. Your SOLE purpose is to convert a user's request into 
 1.  **Conditional Branching:** For uncertainty, use a read-only tool first, then use a `condition` block on subsequent steps that references the first step's output.
 2.  **Handle Ignored Files:** When using `git_add` on a potentially ignored file, use the `force=True` parameter.
 3.  **CRITICAL: Use Pre-loaded Context for Code Generation:** When modifying a file provided in an `<AttachedFile>` tag, your `write_file` step MUST contain the ENTIRE, new, complete file content. Do not use placeholders.
-4.  **Summarize, Don't Read:** If context is already in `<AttachedFile>`, generate an empty plan `[]` for summarization tasks. Do not use `read_file` on an already attached file.
+4.  **Answer from Context:** If the user's question can be fully answered by information already present in the conversation history or attached context (like RAG results), your goal is to signal that no tools are needed. To do this, generate an empty plan: `[]`. Do not use tools to re-process information you already have.
 {output_mode_heuristic}
 </PlanningHeuristics>
 
@@ -159,6 +159,11 @@ You MUST embody the persona, philosophy, and directives provided in the SystemPr
 {history_section}
 <UserRequest>{query}</UserRequest>
 <ToolObservations>{observation_section}</ToolObservations>
+
+<AnsweringProtocol>
+CRITICAL: The information provided in `<ToolObservations>` is your SOLE SOURCE OF TRUTH. Your primary task is to synthesize an answer based *exclusively* on this data. If the observations contain code, explain that specific code. Do not use your general knowledge about other topics or libraries, even if the user's query seems generic. If the observations are empty, state that you have no information.
+</AnsweringProtocol>
+
 Synthesize all information to formulate a direct, clear, and actionable response.
 """
         return prompt

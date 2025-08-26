@@ -1,11 +1,10 @@
-
 # src\ai_assistant\internal_data\governance.yml
+
 # This file is the single source of truth for governance rules
 # that need to be shared between runtime code and documentation.
 
 prompting_best_practices:
-  # This list is read by cli.py to power the sanity checker and
-  # by scripts/generate_docs.py to keep the prompting guide in sync.
+  # This list is read by generate_docs.py to keep the prompting guide in sync.
   risky_modification_keywords:
     - "refactor"
     - "fix"
@@ -21,8 +20,65 @@ prompting_best_practices:
     - "apply"
     - "generate"
     - "implement"
-  
-# This new section maps user intent keywords to expected plan structures.
+
+# This section is now the single source of truth for the PromptAnalyzer.
+prompt_analysis_rules:
+  - name: "Batch Processing Anti-Pattern"
+    description: "Detects attempts to modify multiple files in one explicit ACTION, which is a known anti-pattern."
+    detector:
+      type: "multi_file_action" 
+      threshold: 1
+      keywords: ["refactor", "fix", "modify", "commit", "change", "add", "create", "write", "remove", "delete", "update", "apply", "generate", "implement"]
+      required_tags: ["<ACTION>", "<action>"]
+    severity: "warning"
+    message: "You have attached {file_count} files and are requesting a modification within a single <ACTION>. This is a known anti-pattern and is likely to fail."
+    suggestion: "Please decompose your goal into multiple, single-file <ACTION> steps for higher reliability."
+
+  - name: "Vague Instructions Detected"
+    description: "Detects vague or conversational language that leads to unpredictable results."
+    detector:
+      type: "vague_instructions"
+      patterns: ["make it better", "clean this up", "I think maybe", "could you please"]
+    severity: "warning"
+    message: "Your prompt contains vague, conversational language. The AI works best with specific, imperative commands."
+    suggestion: "Replace vague phrases with direct actions. For example, instead of 'make it better,' try 'Refactor the function X to use a connection pool.'"
+
+  - name: "Missing Action Tag for Modification"
+    description: "Detects modification requests that are not properly wrapped in <ACTION> tags."
+    detector:
+      type: "missing_structure"
+      trigger_keywords: ["refactor", "modify", "commit", "delete", "write", "apply", "implement"]
+      required_tags: ["<ACTION>", "<action>"]
+    severity: "warning"
+    message: "Your prompt appears to request a system modification but is missing the <ACTION> tag."
+    suggestion: "For clarity and safety, please wrap your primary goal in <ACTION>...</ACTION> tags."
+
+
+adversarial_critique:
+  # This list is read by the result presenter to highlight words
+  # in the critic's output, drawing user attention to key risks.
+  critical_keywords:
+    - "fail"
+    - "fails"
+    - "failure"
+    - "overwrite"
+    - "destroy"
+    - "destroying"
+    - "delete"
+    - "deleting"
+    - "risk"
+    - "risks"
+    - "security"
+    - "vulnerability"
+    - "danger"
+    - "dangerous"
+    - "corrupt"
+    - "corrupted"
+    - "backfire"
+    - "warning"
+    - "sensitive"
+
+# Maps user intent keywords to expected plan structures.
 plan_compliance_rules:
   # This rule MUST come BEFORE the general "Code Modification" rule.
   - intent: "Create Service from Template"
@@ -62,3 +118,4 @@ plan_compliance_rules:
       max_steps: 1
       allowed_tools:
         - "read_file"
+        

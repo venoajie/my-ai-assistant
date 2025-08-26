@@ -1,0 +1,19 @@
+# .aiignore
+
+# Ignore high-level project management and architectural documents
+# to keep the RAG knowledge base focused on implementation details.
+PROJECT_BLUEPRINT.md
+PROJECT_ROADMAP.md
+AGENTS.md
+TECHNICAL_DEBT.md
+README.md
+
+# Ignore the AI's own project management office directory.
+.ai_pmo/
+
+# Ignore session history files
+my_custom_sessions/
+*.session.json
+
+# Ignore temporary output packages
+rag_*_package/

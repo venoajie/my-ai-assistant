@@ -1,0 +1,160 @@
+# .github/workflows/smart-indexing.yml
+name: Smart RAG Indexing
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'release/**'
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+  workflow_dispatch:
+    inputs:
+      force_reindex:
+        description: 'Force complete reindexing'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: indexing-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+env:
+  OCI_NAMESPACE: ${{ vars.OCI_NAMESPACE }}
+  OCI_BUCKET: ${{ vars.OCI_BUCKET }}
+  OCI_REGION: ${{ vars.OCI_REGION }}
+  BRANCH_NAME: ${{ github.ref_name }}
+
+jobs:
+  index-codebase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for robust local indexing
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Verify Environment Variables
+        run: |
+          echo "OCI_NAMESPACE is: ${OCI_NAMESPACE}"
+          echo "OCI_BUCKET is: ${OCI_BUCKET}"
+          echo "OCI_REGION is: ${OCI_REGION}"
+          
+          if [ -z "${OCI_NAMESPACE}" ]; then
+            echo "ERROR: OCI_NAMESPACE is not set!"
+            exit 1
+          fi
+          
+          if [ -z "${OCI_BUCKET}" ]; then
+            echo "ERROR: OCI_BUCKET is not set!"
+            exit 1
+          fi
+
+      - name: Install Dependencies
+        run: pip install -e .[indexing] oci-cli
+      
+      - name: Configure Oracle Cloud CLI
+        env:
+          OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: true
+        run: |
+          mkdir -p ~/.oci
+          cat > ~/.oci/config << EOF
+          [DEFAULT]
+          user=${{ secrets.OCI_USER_OCID }}
+          fingerprint=${{ secrets.OCI_FINGERPRINT }}
+          tenancy=${{ secrets.OCI_TENANCY_OCID }}
+          region=${{ env.OCI_REGION }}
+          key_file=~/.oci/api_key.pem
+          EOF
+          
+          echo "${{ secrets.OCI_API_KEY }}" > ~/.oci/api_key.pem
+          chmod 600 ~/.oci/api_key.pem
+          chmod 600 ~/.oci/config
+          
+          # Verify authentication
+          oci os ns get
+        
+      - name: Determine Indexing Mode
+        id: mode
+        run: |
+          if [[ "${{ github.event.inputs.force_reindex }}" == "true" ]]; then
+            echo "mode=full" >> $GITHUB_OUTPUT
+          else
+            echo "mode=delta" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Run Indexer
+        id: indexing
+        run: |
+          INDEX_DIR=".ai_rag_index"
+          
+          # The indexer script now handles all logic internally
+          ai-index . \
+            --branch "${{ env.BRANCH_NAME }}" \
+            ${{ steps.mode.outputs.mode == 'full' && '--force-reindex' || '' }}
+          
+          # Create manifest for upload
+          CHECKSUM=$(find "${INDEX_DIR}" -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)
+          echo "checksum=${CHECKSUM}" >> $GITHUB_OUTPUT
+          
+          cat > "${INDEX_DIR}/manifest.json" <<EOF
+          {
+            "branch": "${{ env.BRANCH_NAME }}",
+            "commit": "${{ github.sha }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "checksum": "${CHECKSUM}"
+          }
+          EOF
+            
+      - name: Upload Index to Object Storage
+        run: |
+          INDEX_DIR=".ai_rag_index"
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          
+          # Create tar archive
+          tar -czf index.tar.gz -C "${INDEX_DIR}" .
+          
+          # Upload to timestamped archive (for history)
+          oci os object put --force \
+            --namespace "${OCI_NAMESPACE}" \
+            --bucket-name "${OCI_BUCKET}" \
+            --name "indexes/${{ env.BRANCH_NAME }}/archive/${TIMESTAMP}_${{ github.sha }}.tar.gz" \
+            --file index.tar.gz
+          
+          # Upload to latest (for easy access)
+          oci os object put --force \
+            --namespace "${OCI_NAMESPACE}" \
+            --bucket-name "${OCI_BUCKET}" \
+            --name "indexes/${{ env.BRANCH_NAME }}/latest/index.tar.gz" \
+            --file index.tar.gz
+          
+          echo "::notice::Successfully uploaded index for branch ${{ env.BRANCH_NAME }}"
+
+      - name: Create Failure Issue
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `RAG Indexing Failed for ${{ env.BRANCH_NAME }}`,
+              body: `The RAG indexing workflow failed for branch \`${{ env.BRANCH_NAME }}\` at commit ${{ github.sha }}.\n\n[View Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+            })

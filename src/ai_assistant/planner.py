@@ -1,12 +1,15 @@
 # src/ai_assistant/planner.py
 import structlog
 from typing import List, Dict, Any, Optional, Tuple
+import json
+from pydantic import ValidationError
 
 from .prompt_builder import PromptBuilder
 from .tools import TOOL_REGISTRY
 from .config import ai_settings
 from .data_models import ExecutionPlan
 from .llm_client_factory import get_instructor_client
+from .response_handler import ResponseHandler
 
 logger = structlog.get_logger(__name__)
 
@@ -72,6 +75,38 @@ class Planner:
             logger.info("Plan generated and validated successfully.", step_count=len(plan))
             return plan, {"duration": 0, "tokens": {}}
 
+        except ValidationError as e:
+            logger.warning("Initial plan generation failed Pydantic validation.", error=str(e))
+            if ai_settings.general.enable_llm_json_corrector:
+                logger.info("Attempting to self-correct invalid JSON with a corrector model.")
+                try:
+                    # Extract the raw, broken JSON string from the exception
+                    # This is a bit of a hack, but it's how we get the source material
+                    raw_llm_output = str(e).split("Invalid JSON:")[1].split("[type=json_invalid")[0].strip()
+
+                    correction_prompt = f"""The following JSON is broken. Please fix it. Return ONLY the corrected JSON, with no other text or explanation.
+
+BROKEN JSON:
+```json
+{raw_llm_output}
+```
+
+CORRECTED JSON:"""
+                    
+                    handler = ResponseHandler()
+                    corrector_model = ai_settings.model_selection.json_corrector
+                    correction_result = await handler.call_api(correction_prompt, model=corrector_model, generation_config={"temperature": 0.0})
+                    corrected_json_str = correction_result["content"].strip().replace("```json", "").replace("```", "").strip()
+                    
+                    plan = ExecutionPlan.model_validate_json(corrected_json_str)
+                    logger.info("Successfully self-corrected and validated the plan.", step_count=len(plan))
+                    return plan, {"duration": 0, "tokens": {}}
+                except Exception as correction_error:
+                    logger.error("JSON self-correction failed.", error=str(correction_error))
+                    return None, {"duration": 0, "tokens": {}}
+            
+            return None, {"duration": 0, "tokens": {}} # Return None if corrector is disabled or fails
+        
         except Exception as e:
-            logger.error("Failed to generate a valid plan with instructor.", error=str(e))
-            return None, {"duration": 0, "tokens": {}}
+             logger.error("Failed to generate a valid plan with instructor.", error=str(e))
+             return None, {"duration": 0, "tokens": {}}

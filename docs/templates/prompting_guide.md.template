@@ -81,3 +81,13 @@ The single most important factor for achieving high-quality results is to **use 
 
 *   **DON'T Assume the AI Remembers Things Outside the Current Context.**
     Unless you are using a `--session`, the AI has no memory of past runs. Each command is stateless. If a task requires knowledge from a previous run, you must either use a session or re-attach the relevant files.
+
+---
+
+## Automated Prompt Analysis
+
+To help you follow these best practices, the AI Assistant includes a built-in prompt analyzer that runs before every command. It will provide non-halting warnings and suggestions in your terminal if your prompt violates a known best practice.
+
+This system is governed by the following rules:
+
+{{PROMPT_ANALYZER_RULES_LIST}}

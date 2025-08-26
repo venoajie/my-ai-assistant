@@ -4,6 +4,7 @@ import aiohttp
 from typing import Optional, Dict, Any
 import asyncio
 import time
+from pydantic import ValidationError
 
 from .config import ai_settings
 from .utils.context_optimizer import ContextOptimizer
@@ -40,7 +41,7 @@ class ResponseHandler:
         
         """Calls the specified AI model asynchronously with enhanced error handling."""
         start_time = time.monotonic()
-        
+                
         # Centralized function to create a consistent error response
         def _create_error_response(
             content: str, 
@@ -68,37 +69,29 @@ class ResponseHandler:
                 "❌ ERROR: Empty prompt provided to call_api.", 
                 "internal",
                 )
-
+        
         provider_info = self.model_to_provider_map[model]
         provider_name = provider_info["provider_name"]
         provider_config = provider_info["config"]
-        final_gen_config = generation_config or ai_settings.generation_params.synthesis.model_dump()
-
+        final_gen_config = generation_config or \
+            ai_settings.generation_params.synthesis.model_dump()
+        
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=180.0)) as session:
             for attempt in range(max_retries):
                 try:
-                    print(f"🤖 Calling {provider_name.capitalize()} API (Model: {model}, T: {final_gen_config.get('temperature')}, Attempt: {attempt + 1}/{max_retries})...", end="", flush=True)
 
-                    content = ""
-                    if provider_name == "gemini":
-                        content = await self._call_gemini(
-                            session, 
-                            prompt,
-                            model,
-                            provider_config, 
-                            final_gen_config,
-                            )
-                    elif provider_name == "deepseek":
-                        content = await self._call_deepseek(
-                            session,
-                            prompt, 
-                            model, 
-                            provider_config, 
-                            final_gen_config,
-                            )
-                    else:
-                        content = f"❌ ERROR: No call implementation for provider '{provider_name}'."
-
+                    print(
+                        f"🤖 Calling {provider_name.capitalize()} API (Model: {model}, T: {final_gen_config.get('temperature')}, "
+                        f"Attempt: {attempt + 1}/{max_retries})...", end="", flush=True
+                    )
+                    content = await self._call_openai_compatible(
+                        session,
+                        prompt, 
+                        model, 
+                        provider_config, 
+                        final_gen_config,
+                    )
+                    
                     optimizer = ContextOptimizer()
                     prompt_tokens = optimizer.estimate_tokens(prompt)
                     response_tokens = optimizer.estimate_tokens(content)
@@ -122,8 +115,8 @@ class ResponseHandler:
                     
                     if not is_retriable or attempt >= max_retries - 1:
                         print("\n   ...API call failed. No more retries.")
-                        return _create_error_response(f"❌ ERROR: {error_msg}", provider_name) # <-- COMPREHENSIVE FIX
-                    
+                        return _create_error_response(error_msg, provider_name)
+                                        
                     wait_time = 2 ** (attempt + 1)
                     print(f"   ...Waiting {wait_time}s before retrying.")
                     await asyncio.sleep(wait_time)
@@ -133,49 +126,16 @@ class ResponseHandler:
             f"❌ ERROR: API call for model {model} failed unexpectedly after {max_retries} attempts.", 
             provider_name,
             )
-
-    async def _call_gemini(
+    
+    
+    async def _call_openai_compatible(
         self, 
         session: aiohttp.ClientSession, 
         prompt: str, model: str, 
         config: Any, 
         gen_config: Dict,
         ) -> str:
-        
-        api_key = os.getenv(config.api_key_env)
-        if not api_key:
-            raise APIKeyNotFoundError(f"API key '{config.api_key_env}' not found.")
-                
-        api_url = config.api_endpoint_template.format(model=model, api_key=api_key)
-        headers = {"Content-Type": "application/json"}
-        request_body = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": gen_config,
-            }
-        
-        async with session.post(
-            api_url, 
-            headers=headers,
-            json=request_body,
-            ) as response:
-            response.raise_for_status()
-            response_data = await response.json()
-        
-        content = response_data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-        
-        if not content or not content.strip():
-            raise ValueError("API returned an empty or whitespace-only response.")
-
-        print(f" ✅ Done!")
-        return content
-
-    async def _call_deepseek(
-        self, 
-        session: aiohttp.ClientSession, 
-        prompt: str, model: str, 
-        config: Any, 
-        gen_config: Dict,
-        ) -> str:
+        """A single, unified method to call any OpenAI-compatible API."""
         
         api_key = os.getenv(config.api_key_env)
         if not api_key:
@@ -185,17 +145,30 @@ class ResponseHandler:
         headers = {
             "Content-Type": "application/json", 
             "Authorization": f"Bearer {api_key}",
-            }
+        }
+
+        # Define the set of parameters supported by the OpenAI Chat Completions standard.
+        SUPPORTED_PARAMS = {
+            "temperature",
+            "top_p",
+            "max_tokens",
+            "presence_penalty",
+            "frequency_penalty",
+            "stop",
+            "n",
+            "logit_bias",
+            "user",
+        }
+        
+        # Filter the provided gen_config to only include supported parameters.
+        filtered_gen_config = {k: v for k, v in gen_config.items() if k in SUPPORTED_PARAMS}
+
         request_body = {
             "model": model,
-            "messages": [
-                {"role": "user", 
-                 "content": prompt,
-                 }
-                ], 
+            "messages": [{"role": "user", "content": prompt}], 
             "stream": False, 
-            **gen_config,
-            }
+            **filtered_gen_config, # Use the filtered config
+        }
 
         async with session.post(api_url, headers=headers, json=request_body) as response:
             response.raise_for_status()
@@ -204,7 +177,13 @@ class ResponseHandler:
         content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
         if not content or not content.strip():
-            raise ValueError("API returned an empty or whitespace-only response.")
-        
+            # Raise a specific, retriable error for the main loop to catch.
+            raise aiohttp.ClientResponseError(
+                request_info=response.request_info, 
+                history=response.history, 
+                status=503, 
+                message="API returned an empty or whitespace-only response.",
+                )
+                    
         print(f" ✅ Done!")
         return content

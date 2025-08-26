@@ -1,12 +1,13 @@
 # PROJECT BLUEPRINT: AI Assistant
 
-<!-- Version: 2.5 -->
+<!-- Version: 2.7 -->
+<!-- Change Summary (v2.7): Documented the hybrid client-server RAG architecture and the use of optional dependencies for flexible, environment-specific installations. -->
 
 ## 1. System Overview and Core Purpose
 
 This document is the canonical source of truth for the architectural principles and governance of the AI Assistant project. It serves as a "constitution" for human developers and a "README for the AI," ensuring that all development and AI-driven actions are aligned with the core design philosophy.
 
-The system is a command-line-native, persona-driven agent designed to assist with software development and other knowledge-work tasks. Its primary purpose is to provide a safe, reliable, and extensible framework for leveraging Large Language Models to perform complex, multi-step operations.
+The system is a command-line-native, persona-driven agent designed to assist with software development and other knowledge-work tasks. Its primary purpose is to provide a safe, reliable, and extensible framework for leveraging Large Language Models to perform complex, multi-step operations, **now enhanced with a codebase-aware RAG pipeline for deep project analysis.**
 
 ---
 
@@ -53,7 +54,7 @@ The project mandates a "Documentation-as-Code" pattern to prevent drift between 
 
 The persona ecosystem is a team of specialists with a clear, hierarchical structure.
 
--   **`_mixins/` & `_base/` (Foundations):** These are the architectural foundations. `_mixins` provide shared directives (like coding standards), while `_base` personas define the core archetypes for agent behavior.
+-   **`_mixins/` & ``_base/` (Foundations):** These are the architectural foundations. `_mixins` provide shared directives (like coding standards), while `_base` personas define the core archetypes for agent behavior.
     -   `_base/bcaa-1` (Base Collaborative Agent): The archetype for interactive, conversational agents that propose plans and seek confirmation.
     -   `_base/btaa-1` (Base Technical Analysis Agent): The archetype for non-interactive, "one-shot" analytical agents.
     -   `_base/developer-agent-1` (Base Professional Developer Agent): A crucial archetype that inherits from `bcaa-1` and adds a non-negotiable protocol for safe software development. All specialist personas that modify code MUST inherit from this base.
@@ -75,26 +76,35 @@ Instead of asking the AI to generate a complex sequence of granular tools (e.g.,
 
 ---
 
-## 5. Extensibility: The Context Plugin Architecture
+## 5. Extensibility: The Knowledge and Context Architecture
 
-To enhance the AI's domain-specific knowledge, the system uses a modular **Context Plugin Architecture**.
+To enhance the AI's domain-specific knowledge, the system uses a modular, two-tiered architecture for context injection.
 
-### 5.1. Core Contract
-All plugins MUST inherit from the `ContextPluginBase` class and implement its `get_context` method.
+### 5.1. The Context Plugin System (Static Knowledge)
+This system is for injecting pre-defined, static knowledge based on simple triggers.
 
-### 5.2. Discovery and Loading
--   **Built-in Plugins:** Registered via `entry_points` in `pyproject.toml`.
--   **Local Project Plugins:** Discovered at runtime from the `.ai/plugins/` directory within the user's project.
+-   **Core Contract:** All plugins MUST inherit from the `ContextPluginBase` class and implement its `get_context` method.
+-   **Discovery and Loading:**
+    -   **Built-in Plugins:** Registered via `entry_points` in `pyproject.toml`.
+    -   **Local Project Plugins:** Discovered at runtime from the `.ai/plugins/` directory within the user's project.
+-   **Activation Logic:**
+    -   **Automatic Loading:** A persona from `domains/<name>/...` automatically triggers loading of a plugin named `domains-<name>`.
+    -   **Manual Override:** The `--context` CLI flag overrides any automatically selected plugin.
 
-### 5.3. Activation Logic
--   **Automatic Loading:** A persona from `domains/<name>/...` automatically triggers loading of a plugin named `domains-<name>`.
--   **Manual Override:** The `--context` CLI flag overrides any automatically selected plugin.
+### 5.2. The RAG Pipeline (Dynamic Knowledge)
+This system provides the assistant with deep, codebase-aware knowledge by dynamically retrieving the most relevant information from a project-specific knowledge base. It is designed for a robust, automated, and scalable team environment.
+
+-   **Architecture:** The system uses a **CI/CD-driven, cloud-cached model**. A central, automated process builds the knowledge base, which is then distributed to lightweight clients via cloud object storage. This decouples the resource-intensive indexing process from the day-to-day client usage.
+-   **Indexing (CI/CD via GitHub Actions):** The `ai-index` command is executed within a CI/CD pipeline (e.g., GitHub Actions) upon every code push. It scans the project, chunks source code, and creates a branch-specific vector database. This index is then packaged and uploaded to a shared cloud object store (e.g., OCI Object Storage).
+-   **Retrieval (Client-Side Smart Caching):** The built-in `RAGContextPlugin` is activated automatically. On first run, or when its local cache is expired, it automatically downloads the latest index for the current branch from the cloud. Subsequent runs use the local cache for speed.
+-   **Injection:** The retrieved code chunks are automatically injected into the prompt, providing the AI with highly relevant, on-the-fly context.
+-   **Curation:** The knowledge base can be precisely controlled by adding file and directory patterns to a project-local `.aiignore` file, which is respected by the CI/CD indexing process.
 
 ---
 
 ## 6. Workflows
 
-The system supports three primary workflows:
+The system supports four primary workflows:
 
 ### 6.1. Live System Check Workflow
 For read-only diagnostics on a live system with real-time user confirmation.
@@ -104,6 +114,12 @@ For making changes to the local file system via a sandboxed "Output Package" and
 
 ### 6.3. Handoff Workflow (Brain-to-Hands)
 For preparing changes to be executed by a powerful, external agent.
+
+### 6.4. Codebase-Aware Analysis Workflow (RAG)
+For performing complex analysis on a large codebase. The standard flow is now fully automated:
+1.  **Index (Automated):** A developer pushes a commit. The CI/CD pipeline automatically runs `ai-index` and uploads the branch-specific knowledge base to cloud storage.
+2.  **Configure (One-Time Setup):** A developer configures their local `.ai_config.yml` to point to the shared cloud storage bucket.
+3.  **Query (Any Machine):** A developer runs an `ai "..."` command. The `RAGContextPlugin` automatically ensures a fresh, local copy of the index is present (downloading it if necessary) and injects the relevant context into the prompt.
 
 ---
 
@@ -127,6 +143,14 @@ The project adheres to modern Python packaging standards using `pyproject.toml`.
 To ensure absolute build and installation reliability for non-Python data files (e.g., personas, schemas), this project uses the `[tool.setuptools.package-data]` directive within `pyproject.toml`. This is a deliberate engineering choice to use modern, standardized packaging practices for explicit and deterministic control over packaged data.
 
 **Canonical Rule:** Any new non-Python data files that must be accessible by the installed package **MUST** be added to the `[tool.setuptools.package-data]` configuration in `pyproject.toml` to guarantee their inclusion.
+
+### 8.2. Optional Dependencies for Flexibility
+To support different operational environments (e.g., a powerful indexing server vs. a lightweight developer laptop), the project uses **optional dependencies**.
+
+-   **`[project.optional-dependencies].indexing`:** This group includes heavy libraries required for creating the RAG index (e.g., `torch`, `sentence-transformers`). It should only be installed on the machine responsible for indexing.
+-   **`[project.optional-dependencies].client`:** This group includes lightweight client libraries for querying a remote RAG index. This is the recommended installation for most users.
+
+This approach minimizes installation footprint and resource consumption on client machines, adhering to the principle of least privilege for dependencies.
 
 ---
 

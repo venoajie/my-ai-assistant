@@ -7,16 +7,17 @@ import argparse
 import asyncio
 import importlib.util
 import inspect
+import structlog
 import sys
 import time
 import yaml
-import structlog # Add this
 
 from . import kernel 
 from .config import ai_settings
 from .context_plugin import ContextPluginBase
 from .logging_config import setup_logging 
 from .persona_loader import PersonaLoader
+from .prompt_analyzer import PromptAnalyzer 
 from .response_handler import ResponseHandler, APIKeyNotFoundError
 from .session_manager import SessionManager
 from .utils.context_optimizer import ContextOptimizer
@@ -28,13 +29,9 @@ from .utils.symbol_extractor import extract_symbol_source
 
 logger = structlog.get_logger()
 
-try:
-    governance_text = resources.files('ai_assistant').joinpath('internal_data/governance.yml').read_text(encoding='utf-8')
-    GOVERNANCE_RULES = yaml.safe_load(governance_text)
-    RISKY_KEYWORDS = GOVERNANCE_RULES.get("prompting_best_practices", {}).get("risky_modification_keywords", [])
-except Exception as e:
-    print(f"⚠️  Warning: Could not load governance rules for sanity checks. Reason: {e}", file=sys.stderr)
-    RISKY_KEYWORDS = []
+governance_text = resources.files('ai_assistant').joinpath('internal_data/governance.yml').read_text(encoding='utf-8')
+GOVERNANCE_RULES = yaml.safe_load(governance_text)
+RISKY_KEYWORDS = GOVERNANCE_RULES.get("prompting_best_practices", {}).get("risky_modification_keywords", [])
 
 def list_available_plugins() -> List[str]:
     """Dynamically discovers available plugins from both entry points and the local project directory."""
@@ -58,7 +55,6 @@ def list_available_plugins() -> List[str]:
     local_plugins_path = ai_settings.paths.local_plugins_dir
     if local_plugins_path.is_dir():
         for file_path in local_plugins_path.glob("*.py"):
-            # --- THIS IS THE FIX ---
             # Explicitly ignore __init__.py files
             if file_path.name == "__init__.py":
                 continue
@@ -269,57 +265,38 @@ def load_context_plugin(plugin_name: Optional[str]) -> Optional[ContextPluginBas
         print(f"   - {Colors.RED}❌ Error: An unexpected error occurred while loading plugin '{plugin_name}': {e}{Colors.RESET}", file=sys.stderr)
         return None
 
-def _run_prompt_sanity_checks(
+def run_prompt_analyzer(
     args: argparse.Namespace, 
     query: str,
     ):
-    
     """
-    Analyzes the user's prompt and flags for common anti-patterns and
-    prints non-halting warnings to guide the user.
+    Analyzes the user's prompt using the data-driven PromptAnalyzer
+    and prints non-halting warnings to guide the user.
     """
-    warnings = []
-    query_lower = query.lower()
-    
-    # Check 1: Missing Persona
-    if not args.persona:
-        warnings.append(
-            "You are running without a specific persona (--persona). "
-            "Results may be generic. For best results, select a specialist."
-        )
-
-    # Check 2 Explicit high-risk action tag without the safe workflow
-    if "<action>" in query_lower \
-        and not args.output_dir:
-        warnings.append(
-            "CRITICAL: You used the <ACTION> tag to declare a high-risk operation "
-            "but did not use the --output-dir flag. This is highly discouraged. "
-            "Always use the two-stage workflow for actions."
-        )
-    # Check 3 (Fallback): Inferred risky action without the safe workflow
-    elif not "<action>" in query_lower:
+    try:
+        rules_path_traversable = resources.files('ai_assistant').joinpath('internal_data/prompt_analysis_rules.yml')
+        rules_path = Path(str(rules_path_traversable))
+        analyzer = PromptAnalyzer()
         
-        if any(keyword in query_lower for keyword in RISKY_KEYWORDS) \
-            and not args.output_dir:
-            warnings.append(
-                "Your prompt seems to request a system modification. For clarity and safety, "
-                "wrap your goal in <ACTION> tags and use the --output-dir flag."
-            )
+        context = {
+            'file_count': len(args.files) if args.files else 0,
+            'file_list': str(args.files),
+            'persona': args.persona or 'N/A'
+        }
+        
+        violations = analyzer.analyze(query, context)
+        
+        if violations:
+            logger.warning("Prompting Best Practice Reminders")
+            for i, violation in enumerate(violations):
+                logger.warning(f"[{i+1}] {violation.message}", rule=violation.rule_name)
+                if violation.suggestion:
+                    print(f"{Colors.CYAN}   💡 Suggestion: {violation.suggestion}{Colors.RESET}", file=sys.stderr)
+            print(f"{Colors.YELLOW}-------------------------------------------{Colors.RESET}", file=sys.stderr)
 
-    # Check 4: Large batch-processing attempt
-    file_count = len(args.files) if args.files else 0
-    if file_count > 5:
-        warnings.append(
-            f"You have attached {file_count} files. Attempting to process many files in a "
-            "single prompt can lead to incomplete runs due to context limits. "
-            "Consider using a shell script to process files in a loop."
-        )
-
-    if warnings:
-        logger.warning("Prompting Best Practice Reminders")
-        for i, warning in enumerate(warnings):
-            logger.warning(f"[{i+1}] {warning}")
-        print(f"{Colors.YELLOW}-------------------------------------------{Colors.RESET}", file=sys.stderr)
+    except Exception as e:
+        # This check should never halt the main application.
+        logger.error("Prompt analyzer failed to run", error=str(e))
 
 def main():
     """Synchronous entry point for the 'ai' command, required by pyproject.toml."""
@@ -349,6 +326,7 @@ async def async_main():
         metavar=('FILE_PATH', 'SYMBOL_NAME'),
         help="Extract only a specific class or function from a file for context. Use multiple times for multiple files."
     )
+    parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], help='Override the log level.')
     parser.add_argument('-f', '--file', dest='files', action='append', help='Attach a file to the context. Can be used multiple times.')
     parser.add_argument('--persona', help='The alias of the persona to use (e.g., core/SA-1).')
     parser.add_argument('--autonomous', action='store_true', help='Run in autonomous mode.')
@@ -356,30 +334,60 @@ async def async_main():
     parser.add_argument('--context', help='The name of the context plugin to use (e.g., Trading).')
     parser.add_argument('--output-dir', help='Activates Output-First mode, generating an execution package in the specified directory instead of executing live.')
     parser.add_argument('--show-context', action='store_true', help='Build and display the context from files and plugins, then exit without running the agent.')
+    # --- NEW: Add model override arguments ---
+    model_group = parser.add_argument_group('Model Overrides', 'Temporarily override the models used for a single run.')
+    model_group.add_argument('--planning-model', help='Override the model used for the planning phase.')
+    model_group.add_argument('--synthesis-model', help='Override the model used for the synthesis phase.')
+    model_group.add_argument('--critique-model', help='Override the model used for the critique phase.')
     session_group = parser.add_mutually_exclusive_group()
     session_group.add_argument('--session', help='Continue an existing session by ID.')
     session_group.add_argument('--new-session', action='store_true', help='Start a new session.')    
     parser.add_argument('--list-plugins', action='store_true', help='List available context plugins')
     parser.add_argument('query', nargs='*', help="Your request for the agent. For tasks that modify files, wrap your goal in <ACTION> tags.")
 
-    args = parser.parse_args()
+    args = parser.parse_args()   
     
-    user_query = ' '.join(args.query)
-    
-    # Initialize args.files as a list if it's None
+    setup_logging(log_level=args.log_level)
+     
+    # --- CORRECTED PLACEMENT: Apply model overrides FIRST ---
+    if args.planning_model:
+        ai_settings.model_selection.planning = args.planning_model
+    if args.synthesis_model:
+        ai_settings.model_selection.synthesis = args.synthesis_model
+    if args.critique_model:
+        ai_settings.model_selection.critique = args.critique_model
+
+    # --- CORRECTED PLACEMENT: Now, inform the user of the FINAL configuration ---
+    print(f"{Colors.BLUE}╔{'═' * 60}╗{Colors.RESET}")
+    print(f"{Colors.BLUE}║{Colors.BOLD} Model Configuration for this Run{' ' * (60 - 32)}{Colors.BLUE}║{Colors.RESET}")
+    print(f"{Colors.BLUE}╠{'═' * 60}╣{Colors.RESET}")
+    print(f"{Colors.BLUE}║{Colors.CYAN} Planning:{Colors.RESET}  {ai_settings.model_selection.planning:<49}{Colors.BLUE}║{Colors.RESET}")
+    print(f"{Colors.BLUE}║{Colors.CYAN} Synthesis:{Colors.RESET} {ai_settings.model_selection.synthesis:<50}{Colors.BLUE}║{Colors.RESET}")
+    print(f"{Colors.BLUE}║{Colors.CYAN} Critique:{Colors.RESET}  {ai_settings.model_selection.critique:<49}{Colors.BLUE}║{Colors.RESET}")
+    print(f"{Colors.BLUE}╚{'═' * 60}╝{Colors.RESET}")
+
+
+    user_query = ' '.join(args.query).strip()
+    # --- Read from stdin if no query is provided on the command line ---
+    if not user_query and not sys.stdin.isatty():
+        print(f"{Colors.DIM}Reading prompt from stdin...{Colors.RESET}")
+        user_query = sys.stdin.read()    # Initialize args.files as a list if it's None. This must be done first.
+
     if args.files is None:
         args.files = []
 
-    # Prepend auto-injected files from config, ensuring no duplicates
-    auto_injected_files = ai_settings.general.auto_inject_files or []
-    # Use a set for efficient duplicate checking of already present files
-    seen_files = set(args.files)
-    
-    # We prepend in reverse order so the final list has the config order correct
-    for f_path in reversed(auto_injected_files):
-        if f_path not in seen_files:
-            args.files.insert(0, f_path)
-            seen_files.add(f_path)
+    # Only perform auto-injection if a specific context plugin is NOT requested.
+    if not args.context:
+        # Prepend auto-injected files from config, ensuring no duplicates
+        auto_injected_files = ai_settings.general.auto_inject_files or []
+        # Use a set for efficient duplicate checking of already present files
+        seen_files = set(args.files)
+        
+        # We prepend in reverse order so the final list has the config order correct
+        for f_path in reversed(auto_injected_files):
+            if f_path not in seen_files:
+                args.files.insert(0, f_path)
+                seen_files.add(f_path)
             
     if args.persona:
         try:
@@ -433,8 +441,11 @@ async def async_main():
     # --- Sanity checks now run only when proceeding with a query ---
     # Don't run sanity checks if we are just showing context
     if not args.show_context:
-        _run_prompt_sanity_checks(args, user_query)
+       run_prompt_analyzer(args, user_query)
 
+    if args.critique_model:
+        ai_settings.model_selection.critique = args.critique_model
+ 
     session_manager = SessionManager()
     history = []
     session_id = None

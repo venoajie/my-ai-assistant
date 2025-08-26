@@ -1,9 +1,13 @@
 # src/ai_assistant/config.py
+
 import yaml
 from pathlib import Path
 from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
 from importlib import resources
+import structlog  
+
+logger = structlog.get_logger(__name__)
 
 # --- Pydantic Models for Type-Safe Configuration ---
 class ModelSelectionConfig(BaseModel):
@@ -30,7 +34,19 @@ class GeneralConfig(BaseModel):
     critique_persona_alias: str
     failure_persona_alias: str
     local_plugins_directory: str = ".ai/plugins"
-    enable_llm_json_corrector: bool = Field(default=True) # Let's default to True
+    enable_llm_json_corrector: bool = Field(default=True)
+    log_level: str = Field(
+        default="INFO", 
+        description="Default application log level.",
+        )
+    services_template_directory: str = Field(
+        default="src/services", 
+        description="Default path for service templates.",
+        )
+    service_template_files: List[str] = Field(
+        default_factory=lambda: ["Dockerfile", 
+                                 "pyproject.toml"],
+        )
 
 class ContextOptimizerConfig(BaseModel):
     max_tokens: int
@@ -53,15 +69,65 @@ class DeepSeekDiscountConfig(BaseModel):
 
 class GenerationParams(BaseModel):
     temperature: float
-    # Use an alias to allow 'topP' in the config file but use 'top_p' in the code
     top_p: Optional[float] = Field(None, alias='topP')
-    # Use an alias to allow 'topK' in the config file but use 'top_k' in the code
     top_k: Optional[int] = Field(None, alias='topK')
     
 class GenerationConfig(BaseModel):
     planning: GenerationParams
     synthesis: GenerationParams
     critique: GenerationParams
+
+class OracleCloudConfig(BaseModel):
+    """Configuration for Oracle Cloud Object Storage."""
+    namespace: Optional[str] = Field(None, description="OCI namespace")
+    bucket: Optional[str] = Field(None, description="OCI bucket name")
+    region: Optional[str] = Field(None, description="OCI region")
+    enable_caching: bool = Field(True, description="Enable local caching of downloaded indexes")
+    cache_ttl_hours: int = Field(24, description="Cache TTL in hours")
+
+class RAGConfig(BaseModel):
+    """Configuration for the RAG subsystem."""
+    embedding_model_name: str = 'all-MiniLM-L6-v2'
+    collection_name: str = Field("codebase_collection", description="Default collection name for ChromaDB.")
+    chroma_server_host: Optional[str] = Field(None, description="Hostname of the ChromaDB server.")
+    chroma_server_port: Optional[int] = Field(None, description="Port of the ChromaDB server.")
+    chroma_server_ssl: bool = Field(False, description="Use SSL to connect to the ChromaDB server.")
+    
+    default_branch: str = Field("main", description="Default branch for RAG indexing if git detection fails.")
+    enable_branch_awareness: bool = Field(True, description="Enable branch-specific indexes.")
+    
+    fallback_embedding_providers: List[str] = Field(
+        default_factory=lambda: ["openai"], 
+        description="Fallback embedding providers if local model fails",
+    )
+    
+    oracle_cloud: Optional[OracleCloudConfig] = Field(
+        default_factory=OracleCloudConfig,
+        description="Oracle Cloud Object Storage configuration",
+    )
+    local_index_path: str = Field(
+        ".ai_rag_index", 
+        description="Path for the local ChromaDB index, relative to project root.",
+        )
+    
+    # --- SETTINGS FOR RERANKING ---
+    enable_reranking: bool = Field(
+        False, 
+        description="Enable a second-stage reranker for more accurate RAG results."
+    )
+    reranker_model_name: str = Field(
+        'cross-encoder/ms-marco-MiniLM-L-6-v2',
+        description="The CrossEncoder model to use for reranking."
+    )
+    retrieval_n_results: int = Field(
+        25,
+        description="How many documents to initially retrieve from ChromaDB before reranking."
+    )
+    rerank_top_n: int = Field(
+        5,
+        description="How many of the top documents to return after the reranking step."
+    )
+
 
 class ProviderConfig(BaseModel):
     api_key_env: str
@@ -78,6 +144,7 @@ class AIConfig(BaseModel):
     tools: ToolsConfig
     deepseek_discount: DeepSeekDiscountConfig
     generation_params: GenerationConfig
+    rag: RAGConfig = Field(default_factory=RAGConfig)
     providers: Dict[str, ProviderConfig]
     paths: PathsConfig
 
@@ -85,53 +152,38 @@ class AIConfig(BaseModel):
 # --- Configuration Loading Logic
 def load_ai_settings() -> AIConfig:
     """Loads and merges config from package defaults, user config, and project config"""
-    # 1. Load package defaults using the correct resource loading mechanism
     try:
         default_config_text = resources.files('ai_assistant').joinpath('default_config.yml').read_text(encoding='utf-8')
         config_data = yaml.safe_load(default_config_text)
+        logger.debug("Loaded default package configuration.") 
     except (FileNotFoundError, yaml.YAMLError) as e:
         print(f"FATAL: Could not load or parse the default package configuration. Error: {e}")
         exit(1)
     
-    # 2. Load user config overrides
     user_config_path = Path.home() / ".config" / "ai_assistant" / "config.yml"
     if user_config_path.exists():
         with open(user_config_path, 'r') as f:
             user_config = yaml.safe_load(f)
         if user_config:
-            config_data = deep_merge(
-                config_data, 
-                user_config,
-                )
+            config_data = deep_merge(config_data, user_config)
      
-    # 3. Load project config overrides
     project_config_path = Path.cwd() / ".ai_config.yml"
     if project_config_path.exists():
         with open(project_config_path, 'r') as f:
             project_config = yaml.safe_load(f)
         if project_config:
-            config_data = deep_merge(
-                config_data, 
-                project_config,
-                )
+            logger.info("Applying project-level configuration override.", path=str(project_config_path)) 
+            config_data = deep_merge(config_data, project_config)
     
-    # --- THIS IS THE FIX ---
-    # 4. Create and inject the resolved paths into the config data before validation.
-    # This new logic is more explicit and correctly constructs paths.
-    
-    # Define base directories for clarity and correctness
     project_root = Path.cwd()
     user_config_dir = Path.home() / ".config" / "ai_assistant"
-
-    # Get the final, merged general config section
     general_conf = config_data.get("general", {})
 
-    # Build the paths dictionary with correct base paths
     config_data["paths"] = {
         "project_root": project_root,
         "sessions_dir": project_root / general_conf.get("sessions_directory", ".ai_sessions"),
         "user_personas_dir": user_config_dir / general_conf.get("personas_directory", "personas"),
-        "project_local_personas_dir": project_root / ".ai" / "personas", # This is a fixed convention
+        "project_local_personas_dir": project_root / ".ai" / "personas",
         "local_plugins_dir": project_root / general_conf.get("local_plugins_directory", ".ai/plugins"),
     }
 
@@ -144,16 +196,10 @@ def deep_merge(base: Dict, update: Dict) -> Dict:
         return base
         
     for key, value in update.items():
-        if isinstance(value, dict) \
-            and key in base \
-                and isinstance(base[key], dict):
-            base[key] = deep_merge(
-                base[key], 
-                value,
-                )
+        if isinstance(value, dict) and key in base and isinstance(base[key], dict):
+            base[key] = deep_merge(base[key], value)
         else:
             base[key] = value
     return base
 
-# --- Global Singleton Instance ---
 ai_settings = load_ai_settings()
