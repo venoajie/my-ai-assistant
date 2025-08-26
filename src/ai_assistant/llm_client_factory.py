@@ -4,14 +4,22 @@ import instructor
 from openai import AsyncOpenAI
 
 from .config import ai_settings
-from .response_handler import ResponseHandler
 
 def get_instructor_client(model_name: str):
     """
     Factory function to get an instructor-patched client for a given model name.
     This function now uses the OpenAI-compatible standard for ALL providers.
     """
-    provider_info = ResponseHandler().model_to_provider_map.get(model_name)
+    provider_info = None
+    # --- NEW, MORE ROBUST LOOKUP LOGIC ---
+    for provider_name, provider_config in ai_settings.providers.items():
+        if model_name in provider_config.models:
+            provider_info = {
+                "provider_name": provider_name,
+                "config": provider_config,
+            }
+            break # Found it, stop searching
+
     if not provider_info:
         raise ValueError(f"Model '{model_name}' not found in any provider config.")
     
