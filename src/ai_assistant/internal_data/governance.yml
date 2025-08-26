@@ -21,7 +21,6 @@ prompting_best_practices:
     - "generate"
     - "implement"
 
-# --- NEW UNIFIED SECTION ---
 # This section is now the single source of truth for the PromptAnalyzer.
 prompt_analysis_rules:
   - name: "Batch Processing Anti-Pattern"
