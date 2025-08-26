@@ -48,6 +48,7 @@ providers:
     models:
       - "gemini-2.5-pro"
       - "gemini-2.5-flash-lite" 
+      - "gemini-2.5-flash" 
   deepseek:
     api_key_env: "DEEPSEEK_API_KEY"
     api_endpoint: "https://api.deepseek.com"
