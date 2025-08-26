@@ -4,6 +4,7 @@ import aiohttp
 from typing import Optional, Dict, Any
 import asyncio
 import time
+from pydantic import ValidationError
 
 from .config import ai_settings
 from .utils.context_optimizer import ContextOptimizer
