@@ -79,8 +79,11 @@ class ResponseHandler:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=180.0)) as session:
             for attempt in range(max_retries):
                 try:
-                    print(f"🤖 Calling {provider_name.capitalize()} API (Model: {model}, T: {final_gen_config.get('temperature')}, Attempt: {attempt + 1}/{max_retries})...", end="", flush=True)
 
+                    print(
+                        f"🤖 Calling {provider_name.capitalize()} API (Model: {model}, T: {final_gen_config.get('temperature')}, "
+                        f"Attempt: {attempt + 1}/{max_retries})...", end="", flush=True
+                    )
                     content = await self._call_openai_compatible(
                         session,
                         prompt, 
@@ -174,7 +177,13 @@ class ResponseHandler:
         content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
         if not content or not content.strip():
-            raise ValueError("API returned an empty or whitespace-only response.")
-        
+            # Raise a specific, retriable error for the main loop to catch.
+            raise aiohttp.ClientResponseError(
+                request_info=response.request_info, 
+                history=response.history, 
+                status=503, 
+                message="API returned an empty or whitespace-only response.",
+                )
+                    
         print(f" ✅ Done!")
         return content
