@@ -6,7 +6,7 @@ We welcome contributions to the AI Assistant! This guide provides the informatio
 
 -   **Python Version:** Python 3.12 or higher is **required**.
 -   **Reason:** The project relies on modern dependencies and packaging standards. The application will not run on older versions.
--   **API Client Architecture:** This project uses a unified client factory (llm_client_factory.py) that leverages the openai Python library as a standard interface for all supported LLM providers (including DeepSeek and Google Gemini). This simplifies the architecture and makes adding new OpenAI-compatible providers straightforward.
+-   **API Client Architecture:** This project uses a unified client factory (`llm_client_factory.py`) that leverages the `openai` Python library as a standard interface for all supported LLM providers (including DeepSeek and Google Gemini). This simplifies the architecture and makes adding new OpenAI-compatible providers straightforward.
 
 ## Development Setup: Optional Dependencies
 

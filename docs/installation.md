@@ -1,3 +1,6 @@
+I have updated the installation commands to reflect the new `[client]` and `[indexing]` optional dependency groups, guiding users and contributors to the correct setup.
+
+```markdown
 # Installation Guide
 
 This guide provides the recommended installation methods for the AI Assistant.
@@ -23,7 +26,7 @@ source .venv/bin/activate
 ```
 
 **Step 2: Install the Assistant**
-This command uses the modern, PEP 508 compliant syntax to install the lightweight "client" version of the tool.
+This command uses the modern, PEP 508 compliant syntax to install the lightweight "client" version of the tool. This is all you need to run prompts and connect to a pre-built RAG index.
 
 ```bash
 # Make sure your virtual environment is active!

@@ -2,6 +2,27 @@
 
 This guide covers advanced workflows for experienced users to maximize productivity and automate complex tasks.
 
+## On-the-Fly Model Selection
+
+While the project's `.ai_config.yml` provides a stable, default set of models, you can override this configuration for a single run directly from the command line. This is the ideal workflow for experimenting with new models or using a more powerful (but slower or more expensive) model for a particularly difficult task.
+
+The following flags allow you to temporarily set the model for each phase of the AI's operation:
+
+-   `--planning-model <MODEL_NAME>`
+-   `--synthesis-model <MODEL_NAME>`
+-   `--critique-model <MODEL_NAME>`
+
+**Example: Using a High-Power Model for a Critical Task**
+```bash
+# This command uses the default models for critique and synthesis,
+# but forces the use of the powerful 'deepseek-reasoner' for the critical planning phase.
+ai --persona core/arc-1 \
+   --output-dir ./ai_runs/critical-plan \
+   --planning-model "deepseek-reasoner" \
+   -f "src/core/security.py" \
+   "<ACTION>Generate a plan to refactor our security module.</ACTION>"
+```
+
 ## Building a Prompt Library
 
 To make your common, high-value prompts reusable and reliable, you should store them in a structured library of executable scripts.
@@ -74,4 +95,3 @@ git reset --hard HEAD
 
 # 3. Remove all untracked files and directories (like leftover ai_runs/)
 git clean -dfx
-```
