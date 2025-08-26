@@ -167,7 +167,11 @@ async def orchestrate_agent_run(
     # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
     critique = None
     if plan and plan.steps and any(step.tool_name for step in plan):
-        print("🕵️  Submitting plan for adversarial validation...")
+
+        critique_model_name = ai_settings.model_selection.critique
+        logger.info("Submitting plan for adversarial validation.",
+                    model=critique_model_name
+                    )
         start_time = time.monotonic()
         try:
             critic_loader = PersonaLoader()
@@ -180,7 +184,6 @@ async def orchestrate_agent_run(
                 persona_context=critic_context
             )
             
-            critique_model_name = ai_settings.model_selection.critique
             critique_client = get_instructor_client(critique_model_name)
             critique_gen_config = ai_settings.generation_params.critique.model_dump(exclude_none=True)
 
@@ -206,10 +209,10 @@ async def orchestrate_agent_run(
             
             metrics["timings"]["critique"] = time.monotonic() - start_time
             metrics["tokens"]["critique"] = {"prompt": prompt_tokens, "response": response_tokens, "total": prompt_tokens + response_tokens}
-            print("   ✅ Critique received.")
+            logger.info("Critique received and validated successfully.")
         except Exception as e:
-            print(f"   - ⚠️ Warning: Could not perform plan validation. Reason: {e}")
             critique = "Plan validation step failed due to an internal error."
+            logger.warning("Could not perform plan validation.", error=str(e))
 
     if output_dir:
         return await _handle_output_first_mode(
