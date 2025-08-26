@@ -143,27 +143,29 @@ async def orchestrate_agent_run(
     if not plan or not plan.steps or all(not step.tool_name for step in plan):
         print("📝 No tool execution required. Generating direct response...")
         
-        # *** START OF KEY CHANGE FOR DIRECT RESPONSE ***
-        # If we have RAG content, it becomes the primary observation.
         direct_observations = ["<Observation>No tool execution was required for this query.</Observation>"]
         if rag_content:
             direct_observations = [f"<Observation step='0' tool='RAG_retrieval'>\n{rag_content}\n</Observation>"]
-        # *** END OF KEY CHANGE FOR DIRECT RESPONSE ***
 
         direct_prompt = prompt_builder.build_synthesis_prompt(
             query=query,
             history=history,
-            observations=direct_observations, # Use the potentially updated observations
+            observations=direct_observations,
             persona_context=persona_context or "You are a helpful AI assistant.",
             directives=persona_directives
         )
         response_handler = ResponseHandler()
+        
+        # Ensure we explicitly use the model configured for synthesis.
         synthesis_model = ai_settings.model_selection.synthesis
+        
         synthesis_result = await response_handler.call_api(direct_prompt, model=synthesis_model)
+        
+        # Update metrics with the results
         metrics["timings"]["synthesis"] = synthesis_result["duration"]
         metrics["tokens"]["synthesis"] = synthesis_result["tokens"]        
         return {"response": synthesis_result["content"], "metrics": metrics}
-
+    
     # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
     critique = None
     if plan and plan.steps and any(step.tool_name for step in plan):
