@@ -20,22 +20,8 @@ class Tool:
     async def __call__(self, *args, **kwargs) -> Tuple[bool, str]: raise NotImplementedError
     def to_dict(self) -> Dict[str, Any]: return {"name": self.name, "description": self.description, "is_risky": self.is_risky}
 
-# --- Synchronous Helper Functions (Used by multiple tools) ---
 
-def _run_git_command(command_parts: List[str]) -> Tuple[bool, str]:
-    try:
-        result = subprocess.run(command_parts, capture_output=True, text=True, check=True, timeout=60)
-        command_str = " ".join(command_parts)
-        output = f"Success: `{command_str}`"
-        if result.stdout: output += f"\nSTDOUT: {result.stdout.strip()}"
-        if result.stderr: output += f"\nSTDERR: {result.stderr.strip()}"
-        return (True, output)
-    except subprocess.CalledProcessError as e:
-        command_str = " ".join(command_parts)
-        error_message = f"Error running `{command_str}`:\nSTDOUT: {e.stdout.strip()}\nSTDERR: {e.stderr.strip()}"
-        return (False, error_message)
-
-async def _run_git_command_async(command_parts: List[str]) -> Tuple[bool, str]:
+async def _run_git_command(command_parts: List[str]) -> Tuple[bool, str]:
     try:
         proc = await asyncio.create_subprocess_exec(
             *command_parts,
@@ -167,7 +153,7 @@ class ExecuteRefactoringWorkflowTool(Tool):
         ) -> Tuple[bool, str]:
         try:
             # Step 1: Create Branch
-            success, result = _run_git_command(["git", "checkout", "-b", branch_name])
+            success, result = await _run_git_command(["git", "checkout", "-b", branch_name])
             if not success:
                 return (False, f"Failed to create branch: {result}")
             print(f"   - ✅ Branched: {branch_name}")
@@ -177,7 +163,7 @@ class ExecuteRefactoringWorkflowTool(Tool):
                 for file_path in files_to_remove:
                     p = Path(file_path)
                     if p.exists():
-                        success, result = _run_git_command(["git", "rm", file_path])
+                        success, result = await _run_git_command(["git", "rm", file_path])
                         if not success:
                             return (False, f"Failed to remove file {file_path}: {result}")
                         print(f"   - ✅ Removed: {file_path}")
@@ -197,13 +183,13 @@ class ExecuteRefactoringWorkflowTool(Tool):
                     print(f"   - ✅ Refactored: {path}")
 
             # Step 4: Stage All Changes
-            success, result = _run_git_command(["git", "add", "."])
+            success, result = await _run_git_command(["git", "add", "."])
             if not success:
                 return (False, f"Failed to stage changes: {result}")
             print("   - ✅ Staged all changes.")
 
             # Step 5: Commit
-            success, result = _run_git_command(["git", "commit", "-m", commit_message])
+            success, result = await _run_git_command(["git", "commit", "-m", commit_message])
             if not success:
                 return (False, f"Failed to commit changes: {result}")
             print("   - ✅ Committed.")
@@ -324,7 +310,7 @@ class GitCreateBranchTool(Tool):
         self, 
         branch_name: str,
         ) -> Tuple[bool, str]:
-        return await _run_git_command_async(
+        return await _run_git_command(
             ["git", 
              "checkout", 
              "-b", 
@@ -334,7 +320,7 @@ class GitCreateBranchTool(Tool):
 class GitAddTool(Tool):
     name = "git_add"; description = "Stages a specific file or directory. Usage: git_add(path: str)"; is_risky = True
     async def __call__(self, path: str) -> Tuple[bool, str]:
-        return await _run_git_command_async(
+        return await _run_git_command(
             ["git", 
              "add",
              path],
@@ -346,7 +332,7 @@ class GitCommitTool(Tool):
         self, 
         commit_message: str,
         ) -> Tuple[bool, str]:
-        return await _run_git_command_async(
+        return await _run_git_command(
             ["git", 
              "commit", 
              "-m", commit_message],
@@ -358,7 +344,13 @@ class GitPushTool(Tool):
         try:
             result = subprocess.run("git rev-parse --abbrev-ref HEAD", shell=True, capture_output=True, text=True, check=True, timeout=60)
             current_branch = result.stdout.strip()
-            return _run_git_command(["git", "push", "--set-upstream", "origin", current_branch])
+            return await _run_git_command(
+                ["git", 
+                 "push", 
+                 "--set-upstream",
+                 "origin", 
+                 current_branch],
+                )
         except subprocess.CalledProcessError as e:
             return (False, f"Error getting current branch name: {e.stderr.strip()}")
 
@@ -382,7 +374,11 @@ class GitCheckoutTool(Tool):
         self,
         branch_name: str,
         ) -> Tuple[bool, str]:
-        return _run_git_command(["git", "checkout", branch_name])
+        return await _run_git_command(
+            ["git", 
+             "checkout",
+             branch_name],
+            )
 
 class GitRemoveFileTool(Tool):
     name = "git_remove_file"
@@ -396,7 +392,12 @@ class GitRemoveFileTool(Tool):
         if not p.exists():
             # This is not an error in a workflow; the desired state is "file is gone".
             return (True, f"File not found at {path}. No action needed.")
-        return _run_git_command(["git", "rm", path])
+        return await _run_git_command([
+            "git", 
+            "rm", 
+            path,
+            ]
+                                            )
 
 # --- The Central Registry ---
 
