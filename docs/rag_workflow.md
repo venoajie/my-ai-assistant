@@ -22,6 +22,9 @@ The RAG pipeline is designed for a robust team environment and operates in two d
 2.  **Phase 2: Index Consumption (Automatic on Your Machine)**
     This is the lightweight phase that happens when you run the `ai` command. The RAG plugin automatically detects your current project and branch, checks for a local copy of the index, and if it's missing or out of date, downloads the latest version from the shared cloud storage. This gives you the power of a full codebase index with the speed of a local database.
 
+    **Optional Enhancement: The Reranker**
+    To maximize accuracy, you can enable a **reranker**. This adds a second, more sophisticated filtering step. After the initial search finds a broad set of documents (prioritizing *recall*), the reranker uses a powerful cross-encoder model to re-order them based on true contextual relevance to your specific query. This ensures only the absolute best snippets are sent to the AI, prioritizing *precision*.
+
 ---
 
 ## Setup Guide: Making Your Project RAG-Aware
@@ -30,7 +33,7 @@ Follow these steps to configure your project to use the RAG pipeline.
 
 ### Prerequisite: Installation
 
-Ensure you have the client-side dependencies installed in your project's virtual environment. This lightweight installation is all that's needed to connect to a pre-built index.
+Ensure you have the client-side dependencies installed in your project's virtual environment. This lightweight installation is all that's needed to connect to a pre-built index and use the optional reranker.
 
 ```bash
 # From your project's root, assuming the ai-assistant repo is a sibling directory
@@ -55,6 +58,16 @@ rag:
     bucket: "your-oci-bucket-name"
     # The OCI region for the bucket (e.g., eu-frankfurt-1)
     region: "your-oci-region"
+
+  # --- Optional: Enable and configure the reranker for higher precision results ---
+  enable_reranking: true
+  
+  # How many documents to retrieve initially for the reranker to process.
+  # A larger number gives the reranker more to work with but is slightly slower.
+  retrieval_n_results: 25
+  
+  # How many of the top documents to send to the AI after reranking.
+  rerank_top_n: 5
 ```
 Commit this file to your repository so the entire team shares the same configuration.
 
@@ -120,16 +133,21 @@ ai --persona domains/programming/csa-1 "How does our authentication system work?
 
 ## Example in Action: Before vs. After RAG
 
-**Scenario:** You want to understand your project's custom error handling.
+**Scenario:** You want to understand your project's custom error handling. Your codebase contains `utils/error_handling.py` (current) and `utils/legacy_errors.py` (old, deprecated).
 
 *   **Before RAG:**
     *   **Prompt:** `ai "How should I handle exceptions in this project?"`
     *   **Result:** A generic, textbook answer about Python's `try...except` blocks. It's correct, but not specific to your project.
 
-*   **With RAG:**
+*   **With Basic RAG (Reranker Disabled):**
     *   **Prompt:** `ai "How should I handle exceptions in this project?"`
-    *   **Result:** The RAG plugin searches the index and finds your `utils/error_handling.py` file, your `logging_config.py`, and a section in your `PROJECT_BLUEPRINT.md` about error standards.
-    *   **AI Response:** "Based on your project's existing code, you should use the custom `CustomAPIException` class defined in `utils/error_handling.py`. All exceptions should be caught and logged using the structured logger, which is configured to output JSON format in `logging_config.py`. Your project blueprint also specifies that all 5xx errors must trigger an alert."
+    *   **Result:** The RAG plugin searches the index and finds both `utils/error_handling.py` and the old `utils/legacy_errors.py` because they are semantically similar.
+    *   **AI Response:** The AI gets a mixed context. It might say, "You can use the `CustomAPIException` from `error_handling.py`, but I also see a `LegacyError` class. You should use one of these..." This is confusing and unhelpful.
+
+*   **With RAG + Reranker (Recommended):**
+    *   **Prompt:** `ai "How should I handle exceptions in this project?"`
+    *   **Result:** The RAG plugin retrieves the same initial set of documents. However, the **reranker** then analyzes them against your query. It determines that `utils/error_handling.py` and your `PROJECT_BLUEPRINT.md` are highly relevant, but `utils/legacy_errors.py` is a poor contextual match for modern best practices. It discards the legacy file.
+    *   **AI Response:** "Based on your project's existing code, you should use the custom `CustomAPIException` class defined in `utils/error_handling.py`. Your project blueprint also specifies that all 5xx errors must trigger an alert." This answer is clean, precise, and actionable.
 
 ## Maintenance and Troubleshooting
 
