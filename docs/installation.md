@@ -23,11 +23,11 @@ source .venv/bin/activate
 ```
 
 **Step 2: Install the Assistant**
-This command installs the lightweight "client" version of the tool, which is all you need for day-to-day use.
+This command uses the modern, PEP 508 compliant syntax to install the lightweight "client" version of the tool.
 
 ```bash
 # Make sure your virtual environment is active!
-pip install "git+https://github.com/venoajie/my-ai-assistant.git@develop#egg=my-ai-assistant[client]"
+pip install "my-ai-assistant[client]@git+https://github.com/venoajie/my-ai-assistant.git@develop"
 ```
 The `ai`, `ai-execute`, and `ai-index` commands are now available as long as this virtual environment is active.
 
@@ -69,10 +69,10 @@ source .venv/bin/activate
 
 ### Step 2: Run the Upgrade Command
 
-Use the `pip install --upgrade` flag with the original Git URL. This tells `pip` to fetch the latest version from the `develop` branch and install it.
+Use the `pip install --upgrade` flag with the modern PEP 508 syntax. This tells `pip` to fetch the latest version from the `develop` branch and install it.
 
 ```bash
-pip install --upgrade "git+https://github.com/venoajie/my-ai-assistant.git@develop#egg=my-ai-assistant[client]"
+pip install --upgrade "my-ai-assistant[client]@git+https://github.com/venoajie/my-ai-assistant.git@develop"
 ```
 
 ### Step 3: Verify the Update

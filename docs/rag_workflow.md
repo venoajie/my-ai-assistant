@@ -130,3 +130,21 @@ ai --persona domains/programming/csa-1 "How does our authentication system work?
     *   **Prompt:** `ai "How should I handle exceptions in this project?"`
     *   **Result:** The RAG plugin searches the index and finds your `utils/error_handling.py` file, your `logging_config.py`, and a section in your `PROJECT_BLUEPRINT.md` about error standards.
     *   **AI Response:** "Based on your project's existing code, you should use the custom `CustomAPIException` class defined in `utils/error_handling.py`. All exceptions should be caught and logged using the structured logger, which is configured to output JSON format in `logging_config.py`. Your project blueprint also specifies that all 5xx errors must trigger an alert."
+
+## Maintenance and Troubleshooting
+
+### Forcing a Full Re-Index
+
+If you find that RAG is returning poor or stale results, or if you have made significant changes to your `.aiignore` file, your local index may be out of date or incomplete. You can force the system to delete the old index and build a fresh one from scratch.
+
+**Command:**
+```bash
+# Run this from your project's root directory
+# This will delete the existing index and create a new one for the specified branch
+ai-index . --force-reindex --branch <your-branch-name>
+```
+**Example:**
+```bash
+ai-index . --force-reindex --branch develop
+```
+This is the best first step for resolving most RAG-related issues.
