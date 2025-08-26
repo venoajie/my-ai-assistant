@@ -2,7 +2,7 @@
 
 [project]
 name = "my-ai-assistant"
-version = "1.2.5"
+version = "1.2.6"
 description = "A Persona-Driven AI Assistant for Development and Knowledge Work"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -42,17 +42,20 @@ test = [
     "jsonschema",
 ]
 
+rag-base = [
+    "chromadb==1.0.20",
+    ]
+
 # For the production/indexing environment
 indexing = [
-    "chromadb==1.0.20",
+    "my-ai-assistant[rag-base]",
     "sentence-transformers==5.1.0",
     "torch==2.8.0 ",
 ]
-# For developer/laptop environments that only need to query the index
+# For lightweight developer environments that only query the remote index
 client = [
-    "sentence-transformers==5.1.0",
-    "chromadb==1.0.20",
-    "oci-cli",
+    "my-ai-assistant[rag-base]",
+    "oci",
 ]
 
 

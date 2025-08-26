@@ -51,26 +51,29 @@ async def orchestrate_agent_run(
             return {"response": error_msg, "metrics": metrics}
 
     # --- RAG CONTEXT INJECTION ---
-    rag_content = "" # Initialize rag_content to ensure it's always defined
     logger.info("Attempting to retrieve RAG context to enhance planning.")
+    rag_content = "" # Ensure rag_content is always defined for direct response path
+    system_note = None
     try:
         rag_plugin = RAGContextPlugin(project_root=Path.cwd())
         success, rag_content_result = rag_plugin.get_context(query, [])
                 
-        if not success:
-            print(f"{Colors.YELLOW}⚠️  RAG Warning: {rag_content_result}{Colors.RESET}", file=sys.stderr)
-        elif rag_content_result:
+        if success and rag_content_result:
             rag_content = rag_content_result # Store the content for later use
             logger.info("Injecting RAG context into planning history.")
             system_note = f"<SystemNote>The following context was retrieved from the RAG system to aid in planning:\n{rag_content}</SystemNote>"
-            history.append({
-                "role": "system",
-                "content": system_note
-            })
+        elif not success:
+            print(f"{Colors.YELLOW}⚠️  RAG Warning: {rag_content_result}{Colors.RESET}", file=sys.stderr)
+            # Explicitly inform the AI planner of the failure.
+            system_note = f"<SystemNote>CRITICAL: The RAG context retrieval system failed with the following error: {rag_content_result}. You must proceed without this information.</SystemNote>"
             
     except Exception as e:
+        system_note = f"<SystemNote>CRITICAL: The RAG context retrieval system failed with an unexpected exception: {e}. You must proceed without this information.</SystemNote>"
         logger.warning("Could not retrieve RAG context due to an unexpected error", error=str(e))
         print(f"{Colors.YELLOW}⚠️  RAG Warning: Could not retrieve context due to an unexpected error. Check logs for details.{Colors.RESET}", file=sys.stderr)
+    
+    if system_note:
+        history.append({"role": "system", "content": system_note})
             
     optimizer = ContextOptimizer()
     threshold = ai_settings.context_optimizer.prompt_compression_threshold

@@ -3,25 +3,21 @@ import os
 import json
 import tarfile
 import tempfile
-import fcntl
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 from pathlib import Path
 import structlog
-import subprocess
 import sys 
 
+os.environ.pop('CHROMA_API_IMPL', None)
 import oci
 from oci.object_storage import ObjectStorageClient
-
-os.environ.pop('CHROMA_API_IMPL', None)
 
 try:
     import chromadb
     from chromadb.api.client import Client
     from chromadb.config import Settings
     from chromadb import HttpClient
-    from chromadb import EphemeralClient
     CHROMADB_AVAILABLE = True
 except ImportError as e:
     # This error message will now work correctly
@@ -30,7 +26,6 @@ except ImportError as e:
     Client = None
     Settings = None
     HttpClient = None
-    EphemeralClient = None
     CHROMADB_AVAILABLE = False
 
 try:
@@ -71,43 +66,22 @@ def _get_chroma_client(
             logger.error("Failed to connect to ChromaDB server", error=str(e))
             return None
 
-    logger.info("Using local persistent ChromaDB client", path=str(index_path))
+    # --- Local persistent client logic ---
+    logger.info("Using local persistent ChromaDB client.", path=str(index_path))
+    if not index_path.exists() or not (index_path / "chroma.sqlite3").exists():
+        logger.error(
+            "Local index path is not a valid ChromaDB directory. It must be downloaded first.",
+            path=str(index_path)
+        )
+        return None
     try:
+        # Use the standard, intended client for persistent local storage.
+        # If this fails, it's a fundamental issue that should not be hidden by workarounds.
         return chromadb.PersistentClient(path=str(index_path))
     except Exception as e:
         logger.error("Failed to create persistent ChromaDB client", error=str(e), path=str(index_path))
         return None
-    
-    logger.info("Using local ephemeral ChromaDB client with persistent storage", path=str(index_path))
-    try:
-        if not index_path.exists() or not (index_path / "chroma.sqlite3").exists():
-             logger.warning("Local index path does not appear to be a valid ChromaDB directory.", path=str(index_path))
-             return None
         
-        # 1. Create explicit local settings.
-        settings = Settings(
-            is_persistent=True,
-            persist_directory=str(index_path),
-            anonymized_telemetry=False,
-        )
-        
-        # 2. This creates an in-memory server instance that reads from/writes to the specified path.
-        # It completely bypasses the faulty http-client detection logic.
-        client = EphemeralClient(
-            settings=Settings(
-                is_persistent=True,
-                persist_directory=str(index_path),
-                anonymized_telemetry=False
-            )
-        )
-        
-        logger.info("Successfully loaded ephemeral client with persistent data.")
-        return client
-    
-    except Exception as e:
-        logger.error("Failed to create ephemeral ChromaDB client", error=str(e), path=str(index_path))
-        return None
-    
 class RAGContextPlugin(ContextPluginBase):
     name = "RAG Plugin"
     
@@ -129,6 +103,11 @@ class RAGContextPlugin(ContextPluginBase):
             self._download_latest_index()
         
         self.db_client = _get_chroma_client(ai_settings.rag, self.index_path)
+        if not self.db_client:
+            logger.error("Failed to initialize ChromaDB client - RAG features disabled")
+            self.rag_enabled = False
+        else:
+            self.rag_enabled = True
             
         base_collection_name = ai_settings.rag.collection_name
         self.collection_name = f"{base_collection_name}_{self.branch}"
@@ -166,34 +145,58 @@ class RAGContextPlugin(ContextPluginBase):
             return datetime.utcnow() - last_checked > ttl
         except Exception: return True
 
+         
     def _download_latest_index(self):
         logger.info("Attempting to download latest RAG index from OCI", branch=self.branch)
-        lock_file_path = self.cache_path / f"{self.branch}.lock"
-        with open(lock_file_path, "w") as lock_file:
-            try:
-                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    archive_path = Path(temp_dir) / "index.tar.gz"
-                    object_name = f"indexes/{self.branch}/latest/index.tar.gz"
-                    command = ["oci", "os", "object", "get", "--namespace", self.oci_config.namespace, "-bn", self.oci_config.bucket, "--name", object_name, "--file", str(archive_path)]
-                    result = subprocess.run(command, capture_output=True, text=True)
-                    if result.returncode != 0:
-                        logger.error("Failed to download index from OCI", stderr=result.stderr)
-                        return
-                    logger.info("Successfully downloaded index archive. Extracting...")
-                    self.index_path.mkdir(exist_ok=True)
-                    with tarfile.open(archive_path, "r:gz") as tar:
-                        tar.extractall(path=self.index_path, filter='data')
-                    logger.info("Index extracted successfully.", destination=str(self.index_path))
-                    metadata = {"last_checked_utc": datetime.utcnow().isoformat()}
-                    with open(self.cache_path / f"{self.branch}_metadata.json", 'w') as f: json.dump(metadata, f)
-            except BlockingIOError:
-                logger.warning("Another process is already downloading the index. Skipping.")
-            except Exception as e:
-                logger.error("An unexpected error occurred during index download.", error=str(e))
-            finally:
-                fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file = self.cache_path / f"{self.branch}.lock"
+        try:
+            # Cross-platform, time-based locking mechanism
+            if lock_file.exists() and (datetime.utcnow() - datetime.fromtimestamp(lock_file.stat().st_mtime) < timedelta(minutes=10)):
+                logger.warning("Another process is already downloading the index (lock file is fresh). Skipping.")
+                return
 
+            # Acquire lock
+            lock_file.touch()
+
+            # --- Use OCI Python SDK instead of subprocess ---
+            config = oci.config.from_file() # Assumes default ~/.oci/config
+            object_storage_client = ObjectStorageClient(config)
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                archive_path = Path(temp_dir) / "index.tar.gz"
+                object_name = f"indexes/{self.branch}/latest/index.tar.gz"
+                
+                logger.info("Downloading index from OCI object storage...", object_name=object_name)
+                response = object_storage_client.get_object(
+                    self.oci_config.namespace,
+                    self.oci_config.bucket,
+                    object_name
+                )
+
+                with open(archive_path, 'wb') as f:
+                    for chunk in response.data.raw.stream(1024 * 1024, decode_content=False):
+                        f.write(chunk)
+                
+                logger.info("Successfully downloaded index archive. Extracting...")
+                self.index_path.mkdir(exist_ok=True)
+                with tarfile.open(archive_path, "r:gz") as tar:
+                    # Removed filter='data' for broader Python version compatibility
+                    tar.extractall(path=self.index_path) 
+                
+                logger.info("Index extracted successfully.", destination=str(self.index_path))
+                metadata = {"last_checked_utc": datetime.utcnow().isoformat()}
+                with open(self.cache_path / f"{self.branch}_metadata.json", 'w') as f:
+                    json.dump(metadata, f)
+
+        except oci.exceptions.ServiceError as e:
+            logger.error("Failed to download index from OCI. The object may not exist.", status=e.status, code=e.code, message=e.message)
+        except Exception as e:
+            logger.error("An unexpected error occurred during index download.", error=str(e))
+        finally:
+            # Release lock
+            if lock_file.exists():
+                lock_file.unlink(missing_ok=True)
+                       
     def _embed_query(self, query: str) -> List[float]:
         if not self.embedding_model: return []
         try: return self.embedding_model.encode([query])[0].tolist()
@@ -202,6 +205,9 @@ class RAGContextPlugin(ContextPluginBase):
             return []
     
     def get_context(self, query: str, files: List[str]) -> Tuple[bool, str]:
+                
+        if not self.rag_enabled:
+            return False, "RAG system not available"
         if not self.db_client or not self.embedding_model: return True, ""
         try:
             try:

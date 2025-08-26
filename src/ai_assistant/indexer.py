@@ -220,7 +220,7 @@ class Indexer:
             self._save_state()
             return
 
-        logger.info("Total valid chunks to process", count=len(total_chunks_to_embed))
+        logger.info("Total valid chunks to process", count=len(total_chunks_to_embed))  
 
         for i in range(0, len(total_chunks_to_embed), EMBEDDING_BATCH_SIZE):
             batch = total_chunks_to_embed[i:i+EMBEDDING_BATCH_SIZE]
