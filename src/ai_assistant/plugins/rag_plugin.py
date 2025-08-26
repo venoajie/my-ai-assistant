@@ -1,246 +1,133 @@
 # src/ai_assistant/plugins/rag_plugin.py
-import os
-import json
-import tarfile
-import tempfile
-from datetime import datetime, timedelta
-from typing import List, Optional, Tuple
-from pathlib import Path
-import structlog
-import sys 
 
-os.environ.pop('CHROMA_API_IMPL', None)
-import oci
-from oci.object_storage import ObjectStorageClient
+from pathlib import Path
+from typing import List, Tuple, Optional
+import structlog
 
 try:
     import chromadb
-    from chromadb.api.client import Client
-    from chromadb.config import Settings
-    from chromadb import HttpClient
-    CHROMADB_AVAILABLE = True
-except ImportError as e:
-    # This error message will now work correctly
-    print(f"WARNING: ChromaDB components failed to import. RAG features will be disabled. Error: {e}", file=sys.stderr)
-    chromadb = None
-    Client = None
-    Settings = None
-    HttpClient = None
-    CHROMADB_AVAILABLE = False
-
-try:
     from sentence_transformers import SentenceTransformer
-    SENTENCE_TRANSFORMERS_AVAILABLE = True
-    
 except ImportError:
+    chromadb = None
     SentenceTransformer = None
-    SENTENCE_TRANSFORMERS_AVAILABLE = False
 
-from ..context_plugin import ContextPluginBase
 from ..config import ai_settings
+from ..context_plugin import ContextPluginBase
 from ..utils.git_utils import get_normalized_branch_name
+from ..reranker import get_reranker, Reranker
 
-logger = structlog.get_logger(__name__)
+logger = structlog.get_logger()
 
-def _get_chroma_client(
-    rag_config: ai_settings.rag,
-    index_path: Path,
-) -> Optional[Client]:
-    if not CHROMADB_AVAILABLE:
-        logger.warning("ChromaDB not installed. RAG features disabled.")
-        return None
+class ChromaDBClient:
+    """A client to connect to and query a ChromaDB collection."""
+    def __init__(self, project_root: Path):
+        self.host = ai_settings.rag.chroma_server_host
+        self.port = ai_settings.rag.chroma_server_port
+        self.ssl = ai_settings.rag.chroma_server_ssl
+        self.project_root = project_root
+        self.client = None
+        self.collection = None
+        self.embed_model = None
 
-    if rag_config.chroma_server_host and rag_config.chroma_server_port:
-        logger.info(
-            "Connecting to remote ChromaDB server",
-            host=rag_config.chroma_server_host,
-            port=rag_config.chroma_server_port,
-        )
-        try:
-            return HttpClient(
-                host=rag_config.chroma_server_host,
-                port=rag_config.chroma_server_port,
-                ssl=rag_config.chroma_server_ssl,
-            )
-        except Exception as e:
-            logger.error("Failed to connect to ChromaDB server", error=str(e))
-            return None
-
-    # --- Local persistent client logic ---
-    logger.info("Using local persistent ChromaDB client.", path=str(index_path))
-    if not index_path.exists() or not (index_path / "chroma.sqlite3").exists():
-        logger.error(
-            "Local index path is not a valid ChromaDB directory. It must be downloaded first.",
-            path=str(index_path)
-        )
-        return None
-    try:
-        # Use the standard, intended client for persistent local storage.
-        # If this fails, it's a fundamental issue that should not be hidden by workarounds.
-        return chromadb.PersistentClient(path=str(index_path))
-    except Exception as e:
-        logger.error("Failed to create persistent ChromaDB client", error=str(e), path=str(index_path))
-        return None
+    def connect(self) -> Tuple[bool, str]:
+        if not chromadb:
+            return (False, "ChromaDB is not installed. Please run 'pip install -e .[client]'")
         
+        try:
+            if self.host:
+                logger.debug("Connecting to remote ChromaDB server", host=self.host, port=self.port)
+                self.client = chromadb.HttpClient(host=self.host, port=self.port, ssl=self.ssl)
+            else:
+                self.local_path = self.project_root / ai_settings.rag.local_index_path
+                if not self.local_path.exists():
+                    return (False, f"Local index path does not exist: {self.local_path}. Please run the indexer.")
+                logger.debug("Connecting to local ChromaDB", path=str(self.local_path))
+                self.client = chromadb.PersistentClient(path=str(self.local_path))
+
+            branch = get_normalized_branch_name(self.project_root, ai_settings.rag.default_branch)
+            collection_name = f"{ai_settings.rag.collection_name}_{branch}"
+            
+            logger.debug("Getting collection", collection_name=collection_name)
+            self.collection = self.client.get_collection(collection_name)
+            
+            logger.debug("Loading embedding model for queries", model=ai_settings.rag.embedding_model_name)
+            self.embed_model = SentenceTransformer(ai_settings.rag.embedding_model_name)
+            
+            return (True, "Successfully connected to ChromaDB and loaded models.")
+        except Exception as e:
+            logger.error("ChromaDB connection failed", error=str(e))
+            return (False, f"Failed to connect to ChromaDB or load models: {e}")
+
+    def query(self, query_text: str, n_results: int) -> List[str]:
+        if not self.collection or not self.embed_model:
+            logger.error("Cannot query, ChromaDB client not connected.")
+            return []
+        try:
+            embedding = self.embed_model.encode([query_text])[0].tolist()
+            results = self.collection.query(
+                query_embeddings=[embedding],
+                n_results=n_results
+            )
+            return results['documents'][0] if results and 'documents' in results else []
+        except Exception as e:
+            logger.error("ChromaDB query failed", error=str(e))
+            return []
+
 class RAGContextPlugin(ContextPluginBase):
-    name = "RAG Plugin"
-    
+    name = "Codebase-Aware RAG"
+
     def __init__(self, project_root: Path):
         super().__init__(project_root)
-        
-        self.index_path = project_root / ai_settings.rag.local_index_path
-        self.cache_path = project_root / ".ai_rag_cache"
-        self.cache_path.mkdir(exist_ok=True)
-        
-        self.branch = get_normalized_branch_name(
-            self.project_root,
-            ai_settings.rag.default_branch
-        ) if ai_settings.rag.enable_branch_awareness else "main"
-        
-        self._init_oracle_cloud()
-        
-        if self._should_download_index():
-            self._download_latest_index()
-        
-        self.db_client = _get_chroma_client(ai_settings.rag, self.index_path)
-        if not self.db_client:
-            logger.error("Failed to initialize ChromaDB client - RAG features disabled")
-            self.rag_enabled = False
+        self.db_client = ChromaDBClient(project_root)
+        self.is_connected, self.message = self.db_client.connect()
+        # --- NEW ---
+        self.reranker: Optional[Reranker] = None
+        if ai_settings.rag.enable_reranking:
+            logger.info("Reranking is enabled. Initializing reranker.")
+            self.reranker = get_reranker()
         else:
-            self.rag_enabled = True
-            
-        base_collection_name = ai_settings.rag.collection_name
-        self.collection_name = f"{base_collection_name}_{self.branch}"
-        
-        logger.info("RAG plugin targeting collection", collection_name=self.collection_name)
+            logger.info("Reranking is disabled.")
 
-        if SENTENCE_TRANSFORMERS_AVAILABLE:
-            try:
-                self.model_name = ai_settings.rag.embedding_model_name
-                self.embedding_model = SentenceTransformer(self.model_name)
-            except Exception as e:
-                logger.error("Failed to load embedding model, RAG will be disabled.", error=str(e))
-                self.embedding_model = None
-        else:
-            logger.warning("sentence-transformers is not installed. RAG queries disabled.")
-            self.embedding_model = None
-
-    def _init_oracle_cloud(self):
-        self.oci_config = ai_settings.rag.oracle_cloud
-        self.oci_enabled = (
-            self.oci_config and
-            self.oci_config.enable_caching and
-            self.oci_config.namespace and
-            self.oci_config.bucket
-        )
-
-    def _should_download_index(self) -> bool:
-        if not self.oci_enabled: return False
-        metadata_path = self.cache_path / f"{self.branch}_metadata.json"
-        if not metadata_path.exists(): return True
-        try:
-            with open(metadata_path, 'r') as f: metadata = json.load(f)
-            last_checked = datetime.fromisoformat(metadata.get("last_checked_utc"))
-            ttl = timedelta(hours=self.oci_config.cache_ttl_hours)
-            return datetime.utcnow() - last_checked > ttl
-        except Exception: return True
-
-         
-    def _download_latest_index(self):
-        logger.info("Attempting to download latest RAG index from OCI", branch=self.branch)
-        lock_file = self.cache_path / f"{self.branch}.lock"
-        try:
-            # Cross-platform, time-based locking mechanism
-            if lock_file.exists() and (datetime.utcnow() - datetime.fromtimestamp(lock_file.stat().st_mtime) < timedelta(minutes=10)):
-                logger.warning("Another process is already downloading the index (lock file is fresh). Skipping.")
-                return
-
-            # Acquire lock
-            lock_file.touch()
-
-            # --- Use OCI Python SDK instead of subprocess ---
-            config = oci.config.from_file() # Assumes default ~/.oci/config
-            object_storage_client = ObjectStorageClient(config)
-
-            with tempfile.TemporaryDirectory() as temp_dir:
-                archive_path = Path(temp_dir) / "index.tar.gz"
-                object_name = f"indexes/{self.branch}/latest/index.tar.gz"
-                
-                logger.info("Downloading index from OCI object storage...", object_name=object_name)
-                response = object_storage_client.get_object(
-                    self.oci_config.namespace,
-                    self.oci_config.bucket,
-                    object_name
-                )
-
-                with open(archive_path, 'wb') as f:
-                    for chunk in response.data.raw.stream(1024 * 1024, decode_content=False):
-                        f.write(chunk)
-                
-                logger.info("Successfully downloaded index archive. Extracting...")
-                self.index_path.mkdir(exist_ok=True)
-                with tarfile.open(archive_path, "r:gz") as tar:
-                    # Removed filter='data' for broader Python version compatibility
-                    tar.extractall(path=self.index_path) 
-                
-                logger.info("Index extracted successfully.", destination=str(self.index_path))
-                metadata = {"last_checked_utc": datetime.utcnow().isoformat()}
-                with open(self.cache_path / f"{self.branch}_metadata.json", 'w') as f:
-                    json.dump(metadata, f)
-
-        except oci.exceptions.ServiceError as e:
-            logger.error("Failed to download index from OCI. The object may not exist.", status=e.status, code=e.code, message=e.message)
-        except Exception as e:
-            logger.error("An unexpected error occurred during index download.", error=str(e))
-        finally:
-            # Release lock
-            if lock_file.exists():
-                lock_file.unlink(missing_ok=True)
-                       
-    def _embed_query(self, query: str) -> List[float]:
-        if not self.embedding_model: return []
-        try: return self.embedding_model.encode([query])[0].tolist()
-        except Exception as e:
-            logger.error("Failed to embed query", error=str(e))
-            return []
-    
     def get_context(self, query: str, files: List[str]) -> Tuple[bool, str]:
-                
-        if not self.rag_enabled:
-            return False, "RAG system not available"
-        if not self.db_client or not self.embedding_model: return True, ""
-        try:
-            try:
-                # This will fail explicitly if the collection is missing.
-                collection = self.db_client.get_collection(self.collection_name)
-            except ValueError as e: # Or the specific exception ChromaDB throws
-                logger.error("RAG collection not found.", collection_name=self.collection_name)
-                return False, f"Error: RAG index '{self.collection_name}' not found on client."
-        except Exception as e:
-            logger.error(
-                "Failed to get or create RAG collection from ChromaDB.",
-                collection_name=self.collection_name,
-                error=str(e)
-            )
-            return True, ""
-        enhanced_query = query
-        if files:
-            try:
-                file_content = Path(files[0]).read_text(encoding='utf-8', errors='ignore')[:1000]
-                enhanced_query = f"Based on this file content:\n{file_content}\n\nAnswer this query: {query}"
-            except Exception as e:
-                logger.warning("Could not read attached file for RAG enhancement", file=files[0], error=str(e))
-        try:
-            query_embedding = self._embed_query(enhanced_query)
-            if not query_embedding: return True, ""
-            results = collection.query(query_embeddings=[query_embedding], n_results=5, include=["documents", "metadatas"])
-            if not results.get('documents') or not results['documents'][0]: return True, ""
-            context_parts = ["# RAG-Retrieved Context\n"]
-            for doc, meta in zip(results['documents'][0], results['metadatas'][0]):
-                source = meta.get('source', 'unknown')
-                context_parts.append(f"## Source: {source}\n```\n{doc}\n```\n")
-            return True, "\n".join(context_parts)
-        except Exception as e:
-            error_msg = f"Error: Could not retrieve context from RAG system. Reason: {e}"
-            logger.error("Error querying ChromaDB", error=str(e))
-            return False, error_msg
+        if not self.is_connected:
+            return (False, self.message)
+
+        # --- MODIFIED ---
+        # Retrieve more documents initially to give the reranker a good selection.
+        n_results = ai_settings.rag.retrieval_n_results
+        logger.info("Retrieving documents from vector store...", query=query, n_results=n_results)
+        documents = self.db_client.query(query, n_results=n_results)
+
+        if not documents:
+            return (True, "<Context>No relevant documents found in the codebase for the query.</Context>")
+
+        final_documents = documents
+        # --- NEW: Reranking Step ---
+        if self.reranker:
+            reranked_docs = self.reranker.rerank(query, documents)
+            top_n = ai_settings.rag.rerank_top_n
+            final_documents = reranked_docs[:top_n]
+            logger.info("Reranked documents.", initial_count=len(documents), final_count=len(final_documents))
+
+        context_str = "\n\n---\n\n".join(
+            f"<ContextChunk source=\"{doc_source}\">\n{doc_content}\n</ContextChunk>"
+            for doc_source, doc_content in self._extract_source(final_documents)
+        )
+        
+        return (True, context_str)
+
+    def _extract_source(self, documents: List[str]) -> List[Tuple[str, str]]:
+        # This is a placeholder. In a real scenario, the source would be in the metadata.
+        # For now, we'll assume the first line might be a source comment.
+        results = []
+        for doc in documents:
+            # A simple heuristic to find a source path
+            first_line = doc.split('\n')[0]
+            if first_line.strip().startswith(('#', '//')) and '/' in first_line:
+                source = first_line.strip('#/ ').strip()
+                content = '\n'.join(doc.split('\n')[1:])
+                results.append((source, content))
+            else:
+                # If no source found, use a placeholder
+                results.append(("unknown", doc))
+        return results

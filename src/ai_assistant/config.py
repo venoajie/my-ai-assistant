@@ -106,6 +106,25 @@ class RAGConfig(BaseModel):
         ".ai_rag_index", 
         description="Path for the local ChromaDB index, relative to project root.",
         )
+    
+    # --- SETTINGS FOR RERANKING ---
+    enable_reranking: bool = Field(
+        False, 
+        description="Enable a second-stage reranker for more accurate RAG results."
+    )
+    reranker_model_name: str = Field(
+        'cross-encoder/ms-marco-MiniLM-L-6-v2',
+        description="The CrossEncoder model to use for reranking."
+    )
+    retrieval_n_results: int = Field(
+        25,
+        description="How many documents to initially retrieve from ChromaDB before reranking."
+    )
+    rerank_top_n: int = Field(
+        5,
+        description="How many of the top documents to return after the reranking step."
+    )
+
 
 class ProviderConfig(BaseModel):
     api_key_env: str

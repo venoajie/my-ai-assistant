@@ -11,4 +11,8 @@ rag:
     namespace: frpowqeyehes
     bucket: bucket-20230107-0704
     region: eu-frankfurt-1
+  enable_reranking: true
+  # Optional: You can tune these parameters
+  # retrieval_n_results: 30 # Retrieve more to start
+  # rerank_top_n: 7         # Return more to the LLM
 
