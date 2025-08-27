@@ -18,8 +18,14 @@ The architecture is built on three foundational principles:
 ### 2.1. Persona-First Operation
 The primary interface for quality and control is the **Persona System**. All complex tasks should be initiated through a specialized persona. This ensures that AI behavior is constrained, predictable, and follows a proven operational protocol.
 
-### 2.2. Decoupled Execution
-A strict separation is maintained between **AI-driven analysis (thinking)** and **deterministic execution (doing)**. The AI's primary output for any task that modifies the system is a reviewable "Output Package." A separate, non-AI `executor` script then applies these changes. This provides a critical safety layer and enhances auditability.
+### 2.2. Decoupled Thinking and Doing
+A strict separation is maintained between **AI-driven analysis (thinking)** and **deterministic execution (doing)**. This principle is enforced through two primary operational modes:
+
+-   **Live Execution Mode:** This is the default interactive workflow. The `kernel` orchestrates the entire process: planning, adversarial validation, and step-by-step execution of deterministic tools. It includes a critical safety gate where the user **MUST** provide explicit confirmation before any risky action (e.g., writing a file) is performed.
+
+-   **Output-First Mode:** This workflow is designed for generating reviewable change packages, ideal for asynchronous or automated environments. The AI's final output is a standardized "Output Package" containing a manifest of deterministic actions (`manifest.json`) and all necessary files. A separate, non-AI `executor` script (`ai-execute`) is then used to safely and predictably apply these changes to the system.
+
+Both modes rely on the same underlying planning and validation chain to ensure consistency.
 
 #### 2.2.1. Adversarial Validation
 To enhance the safety of the "thinking" phase, the system employs an Adversarial Validation Chain. After an initial execution plan is generated, it is passed to a specialized, skeptical "critic" persona. This critic's sole purpose is to identify potential flaws, unstated assumptions, and risks in the plan. This principle acts as an automated "red team" review for the AI's own logic.
@@ -65,15 +71,24 @@ The persona ecosystem is a team of specialists with a clear, hierarchical struct
 
 ---
 
-## 4. The Workflow Tool Pattern
+## 4. The Kernel-Driven Workflow Expansion Pattern
 
 
-To ensure maximum reliability and to simplify the AI Planner's task, the system favors a **Workflow Tool Pattern** for all complex, multi-step operations.
+To ensure maximum reliability and to simplify the AI Planner's task, the system uses a **Kernel-Driven Workflow Expansion Pattern** for all complex, multi-step operations.
 
-Instead of asking the AI to generate a complex sequence of granular tools (e.g., `git_create_branch`, `refactor_file_content`, `git_add`), the system provides a single, powerful "workflow tool" (e.g., `execute_refactoring_workflow`) that encapsulates the entire best-practice sequence in deterministic Python code.
+Instead of asking the AI to generate a long and potentially fragile sequence of granular tools (e.g., `git_create_branch`, `write_file`, `git_add`), the system instructs the AI to generate a single, high-level "workflow" step (e.g., `execute_refactoring_workflow`).
 
-**Canonical Rule:** Personas responsible for code modification (i.e., those inheriting from `_base/developer-agent-1`) **MUST** be instructed to use the appropriate high-level workflow tool in a single-step plan. To enforce this, personas MUST also be explicitly instructed on the tool's argument schema (e.g., providing a single string for instructions) to safeguard against the AI inventing incompatible data structures.
+The `kernel` is designed to **intercept** these specific workflow steps before execution. It then performs the following sequence:
+1.  It extracts the high-level intent and arguments from the single step (e.g., "refactor these files with these instructions").
+2.  It performs all necessary non-deterministic "thinking" itself. For a refactoring task, this is where it calls the LLM to generate the new, modified code content.
+3.  It then **dynamically replaces** the original single workflow step with a new, fully deterministic sequence of granular tool calls (e.g., `git_create_branch`, `write_file` with the newly generated content, `git_add`, `git_commit`).
 
+This pattern provides three major architectural advantages:
+-   **Centralized Logic:** All complex, LLM-dependent logic is centralized in the `kernel`, not scattered across various tools.
+-   **Consistency:** Live Execution Mode and Output-First Mode are guaranteed to use the exact same code generation logic, eliminating behavioral drift between the two workflows.
+-   **Simplified Planning:** The AI Planner's task is simplified to producing a high-level, one-step plan, which is a much easier and more reliable task for an LLM than creating a complex, multi-step sequence.
+
+**Canonical Rule:** Personas responsible for code modification (i.e., those inheriting from `_base/developer-agent-1`) **MUST** be instructed to use the appropriate high-level workflow tool in a single-step plan.
 ---
 
 ## 5. Extensibility: The Knowledge and Context Architecture
@@ -96,8 +111,12 @@ This system provides the assistant with deep, codebase-aware knowledge by dynami
 
 -   **Architecture:** The system uses a **CI/CD-driven, cloud-cached model**. A central, automated process builds the knowledge base, which is then distributed to lightweight clients via cloud object storage. This decouples the resource-intensive indexing process from the day-to-day client usage.
 -   **Indexing (CI/CD via GitHub Actions):** The `ai-index` command is executed within a CI/CD pipeline (e.g., GitHub Actions) upon every code push. It scans the project, chunks source code, and creates a branch-specific vector database. This index is then packaged and uploaded to a shared cloud object store (e.g., OCI Object Storage).
--   **Retrieval (Client-Side Smart Caching):** The built-in `RAGContextPlugin` is activated automatically. On first run, or when its local cache is expired, it automatically downloads the latest index for the current branch from the cloud. Subsequent runs use the local cache for speed.
--   **Injection:** The retrieved code chunks are automatically injected into the prompt, providing the AI with highly relevant, on-the-fly context.
+-   **Retrieval, Reranking, and Caching (Client-Side):** The built-in `RAGContextPlugin` is activated automatically. The client-side process involves multiple stages for maximum accuracy and performance:
+    1.  **Smart Caching:** On first run, or when its local cache is expired, the client automatically downloads the latest index for the current branch from the cloud. Subsequent runs use the local cache for speed.
+    2.  **Initial Retrieval:** The plugin performs a broad semantic search against the local vector database, retrieving a larger set of potentially relevant documents (`retrieval_n_results`).
+    3.  **Second-Stage Reranking:** To improve precision, these initial results are passed to a more sophisticated CrossEncoder model (`reranker.py`). This model re-evaluates and re-scores the documents specifically against the user's query, pushing the most relevant results to the top.
+    4.  **Final Selection:** The system selects the top N documents (`rerank_top_n`) from the reranked list.
+-   **Injection:** The final, highly-relevant code chunks are automatically injected into the prompt, providing the AI with on-the-fly context for its analysis.
 -   **Curation:** The knowledge base can be precisely controlled by adding file and directory patterns to a project-local `.aiignore` file, which is respected by the CI/CD indexing process.
 
 ---
