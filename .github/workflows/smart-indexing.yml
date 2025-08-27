@@ -24,7 +24,6 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  id-token: write
   contents: read
   issues: write
 
@@ -39,38 +38,32 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     
+    # --- FIX 1: Removed the duplicate 'steps:' keyword ---
     steps:
-      - name: Checkout Repository
+      - name: Checkout Project Repository
+        uses: actions/checkout@v4
+
+      - name: Checkout AI Assistant Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Full history for robust local indexing
-      
+          repository: venoajie/my-ai-assistant
+          ref: develop
+          path: my-ai-assistant
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
-      
-      - name: Verify Environment Variables
-        run: |
-          echo "OCI_NAMESPACE is: ${OCI_NAMESPACE}"
-          echo "OCI_BUCKET is: ${OCI_BUCKET}"
-          echo "OCI_REGION is: ${OCI_REGION}"
-          
-          if [ -z "${OCI_NAMESPACE}" ]; then
-            echo "ERROR: OCI_NAMESPACE is not set!"
-            exit 1
-          fi
-          
-          if [ -z "${OCI_BUCKET}" ]; then
-            echo "ERROR: OCI_BUCKET is not set!"
-            exit 1
-          fi
 
-      - name: Install Dependencies
-        run: pip install -e .[indexing] oci-cli
-      
+      # --- FIX 2 & 3: Combined and moved installation to happen first ---
+      - name: Install All Dependencies
+        run: |
+          pip install -e ./my-ai-assistant[indexing]
+          pip install oci-cli
+
       - name: Configure Oracle Cloud CLI
+        # This step now runs AFTER oci-cli is installed.
         env:
           OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: true
         run: |
@@ -88,9 +81,26 @@ jobs:
           chmod 600 ~/.oci/api_key.pem
           chmod 600 ~/.oci/config
           
-          # Verify authentication
           oci os ns get
         
+      - name: Download Previous Index (for incremental update)
+        id: download_previous
+        # This step now runs AFTER oci-cli is installed and configured.
+        run: |
+          INDEX_DIR=".ai_rag_index"
+          echo "Attempting to download previous index to enable smart indexing..."
+          oci os object get --namespace "${OCI_NAMESPACE}" --bucket-name "${OCI_BUCKET}" --name "indexes/${BRANCH_NAME}/latest/index.tar.gz" --file index.tar.gz || true
+          
+          if [ -f "index.tar.gz" ]; then
+            echo "Previous index found. Unpacking for incremental update."
+            mkdir -p "${INDEX_DIR}"
+            tar -xzf index.tar.gz -C "${INDEX_DIR}"
+            echo "unpacked=true" >> $GITHUB_OUTPUT
+          else
+            echo "No previous index found. A full re-index will be performed."
+            echo "unpacked=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Determine Indexing Mode
         id: mode
         run: |
@@ -101,44 +111,25 @@ jobs:
           fi
       
       - name: Run Indexer
-        id: indexing
         run: |
-          INDEX_DIR=".ai_rag_index"
-          
-          # The indexer script now handles all logic internally
+          # --- FIX 4: Restored the --force-reindex functionality ---
           ai-index . \
             --branch "${{ env.BRANCH_NAME }}" \
             ${{ steps.mode.outputs.mode == 'full' && '--force-reindex' || '' }}
-          
-          # Create manifest for upload
-          CHECKSUM=$(find "${INDEX_DIR}" -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)
-          echo "checksum=${CHECKSUM}" >> $GITHUB_OUTPUT
-          
-          cat > "${INDEX_DIR}/manifest.json" <<EOF
-          {
-            "branch": "${{ env.BRANCH_NAME }}",
-            "commit": "${{ github.sha }}",
-            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "checksum": "${CHECKSUM}"
-          }
-          EOF
             
       - name: Upload Index to Object Storage
         run: |
           INDEX_DIR=".ai_rag_index"
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           
-          # Create tar archive
           tar -czf index.tar.gz -C "${INDEX_DIR}" .
           
-          # Upload to timestamped archive (for history)
           oci os object put --force \
             --namespace "${OCI_NAMESPACE}" \
             --bucket-name "${OCI_BUCKET}" \
             --name "indexes/${{ env.BRANCH_NAME }}/archive/${TIMESTAMP}_${{ github.sha }}.tar.gz" \
             --file index.tar.gz
           
-          # Upload to latest (for easy access)
           oci os object put --force \
             --namespace "${OCI_NAMESPACE}" \
             --bucket-name "${OCI_BUCKET}" \
