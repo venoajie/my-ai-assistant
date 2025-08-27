@@ -113,7 +113,7 @@ env:
 jobs:
   index-codebase:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - name: Checkout Project Repository
         uses: actions/checkout@v4
