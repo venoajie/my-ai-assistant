@@ -9,14 +9,18 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Generator
 import fnmatch
 import subprocess
+from datetime import datetime, timezone
 
 try:
     import chromadb
+    from sentence_transformers import SentenceTransformer
+    from openai import OpenAI
 except ImportError:
     chromadb = None
+    SentenceTransformer = None
+    OpenAI = None
 
 import structlog
-from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
 from .config import ai_settings
@@ -27,50 +31,66 @@ load_dotenv()
 logger = structlog.get_logger()
 
 EMBEDDING_BATCH_SIZE = 16
+DEFAULT_IGNORE_PATTERNS = [".git/", ".venv/", "venv/", "__pycache__/", "*.pyc", "*.log", ".DS_Store", "node_modules/", "build/", "dist/", ".idea/", ".vscode/", "*.egg-info/", "src/ai_assistant/personas/", ".ai/personas/", "src/ai_assistant/internal_data/"]
 
-DEFAULT_IGNORE_PATTERNS = [
-    ".git/", ".venv/", "venv/", "__pycache__/", "*.pyc", "*.log",
-    ".DS_Store", "node_modules/", "build/", "dist/", ".idea/",
-    ".vscode/", "*.egg-info/",
-    "src/ai_assistant/personas/",
-    ".ai/personas/",
-    "src/ai_assistant/internal_data/",
-]
-
+# --- FIX 1: FULLY REFACTORED EmbeddingProvider CLASS ---
 class EmbeddingProvider:
-    def __init__(self):
-        self.model_name = ai_settings.rag.embedding_model_name
-        logger.info("Loading local embedding model", model_name=self.model_name)
-        self.model = SentenceTransformer(self.model_name)
-        logger.info("Local model loaded successfully.")
+    def __init__(self, provider_name: str = "local"):
+        self.provider_name = provider_name
+        
+        if self.provider_name == "local":
+            self.model_name = ai_settings.rag.embedding_model_name
+            logger.info("Loading local embedding model", model_name=self.model_name)
+            if not SentenceTransformer:
+                raise ImportError("sentence-transformers is not installed. Please run 'pip install -e .[indexing]'")
+            self.model = SentenceTransformer(self.model_name)
+            logger.info("Local model loaded successfully.")
+        elif self.provider_name == "openai":
+            if not OpenAI:
+                raise ImportError("openai library is not installed. Please run 'pip install openai'.")
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY environment variable is not set.")
+            self.client = OpenAI(api_key=api_key)
+            self.model_name = "text-embedding-3-large" # Using the high-quality model
+            logger.info("Using OpenAI embedding provider", model_name=self.model_name)
+        else:
+            raise ValueError(f"Unsupported embedding provider: {provider_name}")
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         if not texts: return []
-        try:
-            embeddings = self.model.encode(texts, show_progress_bar=True)
-            return [emb.tolist() for emb in embeddings]
-        except Exception as e:
-            logger.error("Failed to get local embeddings", error=str(e))
-            return []
+        
+        if self.provider_name == "local":
+            try:
+                embeddings = self.model.encode(texts, show_progress_bar=True)
+                return [emb.tolist() for emb in embeddings]
+            except Exception as e:
+                logger.error("Failed to get local embeddings", error=str(e))
+                return []
+        elif self.provider_name == "openai":
+            try:
+                response = self.client.embeddings.create(input=texts, model=self.model_name)
+                return [item.embedding for item in response.data]
+            except Exception as e:
+                logger.error("Failed to get OpenAI embeddings", error=str(e))
+                return []
+        return []
 
 class Indexer:
-    def __init__(self, project_root: Path, branch_override: Optional[str] = None):
+    def __init__(self, project_root: Path, branch_override: Optional[str] = None, embedding_provider: str = "local"):
         self.project_root = project_root
         self.index_path = project_root / ai_settings.rag.local_index_path
         self.state_path = self.index_path / "state.json"
         self.index_path.mkdir(exist_ok=True)
-        
+        self.embedding_provider_name = embedding_provider
+
         if not chromadb:
-            raise ImportError("ChromaDB is not installed. Please install with 'pip install -e .[indexing]' to run the indexer.")
+            raise ImportError("ChromaDB is not installed. Please install with 'pip install -e .[indexing]'")
         
         if ai_settings.rag.chroma_server_host:
-            logger.error("Indexer cannot be run in client-server mode. Unset chroma_server_host in your config to run the indexer.")
             raise ConnectionError("Indexer is configured to connect to a remote server, which is not allowed.")
 
-        self.branch = branch_override or get_normalized_branch_name(
-            self.project_root, 
-            ai_settings.rag.default_branch
-        )
+        self.branch = branch_override or get_normalized_branch_name(self.project_root, ai_settings.rag.default_branch)
         
         base_collection_name = ai_settings.rag.collection_name
         self.collection_name = f"{base_collection_name}_{self.branch}"
@@ -78,10 +98,14 @@ class Indexer:
         
         self.db_client = chromadb.PersistentClient(path=str(self.index_path))
         self.collection = self.db_client.get_or_create_collection(self.collection_name)
-        self.embed_provider = EmbeddingProvider()
+        
+        # --- FIX 2: PASS THE PROVIDER NAME TO THE CLASS ---
+        self.embed_provider = EmbeddingProvider(provider_name=self.embedding_provider_name)
+        
         self.state = self._load_state()
         self.ignore_patterns = self._load_ignore_patterns()
 
+    # ... (all other methods like _load_state, _walk_project, etc., are unchanged) ...
     def _load_state(self) -> Dict[str, str]:
         if self.state_path.exists():
             with open(self.state_path, 'r') as f: return json.load(f)
@@ -153,7 +177,7 @@ class Indexer:
         return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size - overlap)]
 
     def run(self, force_reindex: bool = False):
-        logger.info("Starting indexer for project", project_root=self.project_root)
+        logger.info("Starting indexer for project", project_root=self.project_root, provider=self.embedding_provider_name)
         if force_reindex:
             logger.warning("Forcing re-index of all files and clearing collection.")
             self.state = {}
@@ -189,6 +213,7 @@ class Indexer:
         if not files_to_index:
             logger.info("No new or modified files to index. Project is up to date.")
             self._save_state()
+            self._create_manifest() # Still create manifest to update timestamp/commit
             return
 
         logger.info("Found new or modified files to index", count=len(files_to_index))
@@ -218,6 +243,7 @@ class Indexer:
         if not total_chunks_to_embed:
             logger.info("No valid new chunks to embed.")
             self._save_state()
+            self._create_manifest()
             return
 
         logger.info("Total valid chunks to process", count=len(total_chunks_to_embed))  
@@ -245,23 +271,58 @@ class Indexer:
                 logger.error("Failed to get embeddings for batch", first_chunk_id=batch[0]['id'])
 
         self._save_state()
-        logger.info("Indexing process complete.")
+        self._create_manifest()
+        logger.info("Indexing process complete and manifest created.")
 
+    def _get_current_commit_sha(self) -> Optional[str]:
+        try:
+            result = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, check=True, cwd=self.project_root)
+            return result.stdout.strip()
+        except Exception as e:
+            logger.warning("Could not determine current git commit SHA", error=str(e))
+            return None
+
+    def _create_manifest(self):
+        manifest_path = self.index_path / "index_manifest.json"
+        manifest_data = {
+            "branch": self.branch,
+            "commit_sha": self._get_current_commit_sha(),
+            "created_at_utc": datetime.now(timezone.utc).isoformat(),
+            "embedding_provider": self.embedding_provider_name,
+            "embedding_model": self.embed_provider.model_name
+        }
+        try:
+            manifest_path.write_text(json.dumps(manifest_data, indent=2))
+            logger.info("Created index manifest.", path=str(manifest_path))
+        except Exception as e:
+            logger.error("Failed to write index manifest", error=str(e))
+
+# --- FIX 3: FULLY REFACTORED main() FUNCTION ---
 def main():
     setup_logging()
     parser = argparse.ArgumentParser(description="AI Assistant RAG Indexer")
     parser.add_argument("directory", nargs="?", default=".", help="The project directory to index.")
     parser.add_argument("--force-reindex", action="store_true", help="Force re-indexing of all files.")
     parser.add_argument("--branch", help="The git branch being indexed (for CI/CD). Overrides local git detection.")
+    parser.add_argument(
+        "--embedding-provider", 
+        choices=["local", "openai"], 
+        default="local", 
+        help="The embedding provider to use (default: local)."
+    )
     args = parser.parse_args()
     project_path = Path(args.directory).resolve()
     if not project_path.is_dir():
         logger.error("Path is not a valid directory", path=project_path)
         return
     try:
-        indexer = Indexer(project_path, branch_override=args.branch)
+        indexer = Indexer(
+            project_path, 
+            branch_override=args.branch,
+            embedding_provider=args.embedding_provider
+        )
         indexer.run(force_reindex=args.force_reindex)
-    except (ImportError, ConnectionError) as e:
+    except (ImportError, ConnectionError, ValueError) as e:
         logger.critical("Failed to initialize indexer", error=str(e))
         
 if __name__ == "__main__":
