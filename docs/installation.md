@@ -84,3 +84,24 @@ Check the version of the tool to confirm the update was successful.
 
 ```bash
 ai --version
+```
+
+## Method 3: Project Bootstrap (Automated Setup)
+
+The fastest way to configure your project is to use the provided `Makefile`. This will interactively prompt you for necessary details and create all the required configuration files for you.
+
+1.  **Copy the Makefile:** Copy the `Makefile` from the AI Assistant repository into the root of your project.
+2.  **Run the Setup Command:**
+
+    ```bash
+    make ai-setup
+    ```
+
+This command will:
+*   Ask for your project name and OCI details.
+*   Create a `.ai_config.yml` file configured for the RAG workflow.
+*   Create a `.aiignore` file to control what gets indexed.
+*   Create a `.github/workflows/smart-indexing.yml` file tailored for a project that uses the AI Assistant as a separate tool.
+*   Create the `.ai/personas` and `.ai/plugins` directories to encourage best practices.
+
+After running the command, your project is configured. The next step is to provide the CI/CD system with the necessary secrets.
