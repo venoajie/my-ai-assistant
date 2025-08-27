@@ -10,6 +10,7 @@ from typing import List, Dict, Any, Tuple
 from ._security_guards import SHELL_COMMAND_BLOCKLIST
 from .response_handler import ResponseHandler
 from .config import ai_settings
+from .plugins.rag_plugin import RAGContextPlugin
 
 
 SHELL_COMMAND_ALLOWLIST = {
@@ -203,7 +204,33 @@ class ExecuteRefactoringWorkflowTool(Tool):
         except Exception as e:
             return (False, f"An unexpected error occurred during the workflow: {e}")
 
-# --- Granular Synchronous Tools (Still useful for simple, one-off tasks) ---
+# --- NEW: The RAG-aware tool for active codebase searching ---
+class CodebaseSearchTool(Tool):
+    name = "codebase_search"
+    description = (
+        "Performs a semantic search against the project's codebase to find relevant context. "
+        "Use this to gather information before planning modifications. Usage: codebase_search(query: str)"
+    )
+    is_risky = False
+
+    async def __call__(self, query: str) -> Tuple[bool, str]:
+        try:
+            # Instantiate the plugin on-demand to perform the search
+            rag_plugin = RAGContextPlugin(Path.cwd())
+            success, result = rag_plugin.get_context(query, files=[])
+            
+            if not success:
+                # Pass the error message from the plugin directly to the agent
+                return (False, f"Codebase search failed: {result}")
+            
+            if "<Context>No relevant documents found" in result:
+                return (True, "No relevant documents were found for your query.")
+
+            return (True, result)
+        except Exception as e:
+            return (False, f"An unexpected error occurred during codebase search: {e}")
+
+# --- Granular Tools ---
 
 class ReadFileTool(Tool):
     name = "read_file"; description = "Reads the entire content of a specified file. Usage: read_file(path: str)"; is_risky = False
@@ -275,7 +302,6 @@ class RunShellCommandTool(Tool):
         command_parts: List[str],
         ) -> Tuple[bool, str]:
         
-        # --- Enforce list type for security ---
         if not isinstance(command_parts, list) or not all(isinstance(i, str) for i in command_parts):
             return (False, "🚫 SECURITY: Command must be a list of strings.")
         
@@ -286,8 +312,6 @@ class RunShellCommandTool(Tool):
         if command not in SHELL_COMMAND_ALLOWLIST:
             return (False, f"🚫 SECURITY BLOCK: Command '{command}' is not in the allowed list.")
         
-        # We still check each part against the blocklist as a defense-in-depth measure.
-        # This is less critical now but still good practice.
         command_str_for_checking = " ".join(command_parts)
         for pattern in SHELL_COMMAND_BLOCKLIST:
             if re.search(
@@ -301,8 +325,6 @@ class RunShellCommandTool(Tool):
                     )
         
         try:
-            # --- KEY SECURITY CHANGE: shell=False ---
-            # We pass the list of parts directly.
             proc = await asyncio.create_subprocess_exec(
                 *command_parts,
                 stdout=asyncio.subprocess.PIPE,
@@ -413,7 +435,6 @@ class GitRemoveFileTool(Tool):
         ) -> Tuple[bool, str]:
         p = Path(path)
         if not p.exists():
-            # This is not an error in a workflow; the desired state is "file is gone".
             return (True, f"File not found at {path}. No action needed.")
         return await _run_git_command([
             "git", 
@@ -443,6 +464,8 @@ class ToolRegistry:
         self.register(GitCheckoutTool())
         self.register(GitRemoveFileTool())
         self.register(CreateServiceFromTemplateTool())
+        # --- NEW: Register the codebase search tool ---
+        self.register(CodebaseSearchTool())
 
     def register(self, tool: Tool):
         self._tools[tool.name] = tool
