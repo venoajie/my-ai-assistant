@@ -307,7 +307,6 @@ def main():
     except KeyboardInterrupt:
         print(f"\n{Colors.CYAN}👋 Exiting.{Colors.RESET}")
 
-    
 async def async_main():
     """The core asynchronous logic of the application."""
     # Pre-flight check for API keys is critical.
@@ -500,7 +499,6 @@ async def async_main():
             session_id=session_id,
             persona_alias=args.persona,
             is_autonomous=args.autonomous,
-            context_plugin=context_plugin,
         )
     else:
         if not user_query.strip() and not full_context_str:
@@ -514,8 +512,8 @@ async def async_main():
             persona_alias=args.persona,
             is_autonomous=args.autonomous,
             output_dir=args.output_dir,
-            context_plugin=context_plugin,
         )
+
         
 def print_summary_metrics(
     start_time: float,
