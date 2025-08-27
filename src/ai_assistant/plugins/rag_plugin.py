@@ -61,19 +61,23 @@ class ChromaDBClient:
             logger.debug("Getting collection", collection_name=collection_name)
             self.collection = self.client.get_collection(collection_name)
             
-            # --- LOGIC IMPROVEMENT: Use the model name from the manifest ---
+            # --- FIX: Stricter model loading from the index manifest ---
             manifest_path = self.local_path / "index_manifest.json"
-            model_name_to_load = ai_settings.rag.embedding_model_name # Default
-            if manifest_path.exists():
-                try:
-                    manifest_data = json.loads(manifest_path.read_text())
-                    # Only use local models specified in the manifest
-                    if manifest_data.get("embedding_provider") == "local":
-                        model_name_to_load = manifest_data.get("embedding_model", model_name_to_load)
-                except Exception:
-                    logger.warning("Could not parse index_manifest.json, using default embedding model.")
+            if not manifest_path.exists():
+                return (False, "CRITICAL: index_manifest.json not found in the downloaded index. Cannot determine which embedding model to use.")
 
-            logger.debug("Loading embedding model for queries", model=model_name_to_load)
+            try:
+                manifest_data = json.loads(manifest_path.read_text())
+                model_name_to_load = manifest_data.get("embedding_model")
+                provider = manifest_data.get("embedding_provider")
+
+                if provider != "local" or not model_name_to_load:
+                    return (False, f"CRITICAL: The index was built with a non-local provider ('{provider}') or the model name is missing in the manifest. The client cannot proceed.")
+                
+            except (json.JSONDecodeError, KeyError) as e:
+                return (False, f"CRITICAL: Could not parse index_manifest.json or it is malformed. Error: {e}")
+
+            logger.info("Loading embedding model specified by index manifest", model=model_name_to_load)
             self.embed_model = SentenceTransformer(model_name_to_load)
             
             return (True, "Successfully connected to ChromaDB and loaded models.")

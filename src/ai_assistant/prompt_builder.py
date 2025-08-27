@@ -53,7 +53,7 @@ CRITICAL: Based on an automated analysis of the user's request, you MUST adhere 
 
         output_mode_heuristic = ""
         if is_output_mode:
-            output_mode_heuristic = """5.  **OUTPUT-FIRST MODE:** You are in a special mode where your plan will NOT be executed directly. Instead, it will be saved to a manifest file. Your plan must be a complete, end-to-end sequence of actions (e.g., create branch, write file, add, commit, push) that can be executed by a separate, non-AI tool. Do not use read-only tools like `list_files` unless their output is critical for a subsequent step's condition. Your primary goal is to generate a complete and executable action plan."""
+            output_mode_heuristic = """6.  **OUTPUT-FIRST MODE:** You are in a special mode where your plan will NOT be executed directly. Instead, it will be saved to a manifest file. Your plan must be a complete, end-to-end sequence of actions (e.g., create branch, write file, add, commit, push) that can be executed by a separate, non-AI tool. Do not use read-only tools like `list_files` unless their output is critical for a subsequent step's condition. Your primary goal is to generate a complete and executable action plan."""
 
         prompt = f"""{persona_section}
 <Task>
@@ -72,6 +72,7 @@ You are a planning agent. Your SOLE purpose is to convert a user's request into 
 2.  **Handle Ignored Files:** When using `git_add` on a potentially ignored file, use the `force=True` parameter.
 3.  **CRITICAL: Use Pre-loaded Context for Code Generation:** When modifying a file provided in an `<AttachedFile>` tag, your `write_file` step MUST contain the ENTIRE, new, complete file content. Do not use placeholders.
 4.  **Answer from Context:** If the user's question can be fully answered by information already present in the conversation history or attached context (like RAG results), your goal is to signal that no tools are needed. To do this, generate an empty plan: `[]`. Do not use tools to re-process information you already have.
+5.  **Codebase Search:** If you need to search the codebase for information, you MUST use the `codebase_search` tool. The `query` argument for this tool MUST be the original user's question or a highly relevant summary of it.
 {output_mode_heuristic}
 </PlanningHeuristics>
 
