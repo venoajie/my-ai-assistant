@@ -27,7 +27,8 @@ class Planner:
         
         # We get the provider name directly from the client for logging.
         # The client.provider attribute might be a string or an enum, so we convert to string.
-        self.provider_name = str(self.client.provider)
+        self.provider_name = str(getattr(self.client, 'provider', 'unknown'))
+
 
     async def create_plan(
         self,
@@ -55,35 +56,45 @@ class Planner:
         planning_gen_config = ai_settings.generation_params.planning.model_dump(exclude_none=True)
 
         try:
-            # we check if the lowercase provider string CONTAINS "gemini".
-            # This correctly handles 'Provider.GEMINI' and 'gemini'.
-            if "gemini" in self.provider_name.lower():
-                plan = await self.client.create(
-                    response_model=ExecutionPlan,
-                    messages=[{"role": "user", "content": prompt}],
-                    generation_config=planning_gen_config
-                )
-            else: # Assumes OpenAI-compatible (like DeepSeek)
-                plan = await self.client.chat.completions.create(
-                    model=planning_model_name,
-                    response_model=ExecutionPlan,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_retries=2,
-                    **planning_gen_config,
-                )
+            # REFACTORED: This single, standardized call now works for all 
+            # OpenAI-compatible providers, removing the need for special "gemini" logic.
+            plan = await self.client.chat.completions.create(
+                model=planning_model_name,
+                response_model=ExecutionPlan,
+                messages=[{"role": "user", "content": prompt}],
+                max_retries=2,
+                **planning_gen_config,
+            )
 
             logger.info("Plan generated and validated successfully.", step_count=len(plan))
             return plan, {"duration": 0, "tokens": {}}
 
         except ValidationError as e:
             logger.warning("Initial plan generation failed Pydantic validation.", error=str(e))
+            
+            # --- REFACTORED: Robustly extract raw LLM output ---
+            raw_llm_output = None
+            # The `instructor` library attaches the original response to the exception
+            if hasattr(e, 'body') and e.body and 'choices' in e.body:
+                try:
+                    raw_llm_output = e.body['choices'][0]['message']['content']
+                    logger.debug("Successfully extracted raw response from exception body.")
+                except (KeyError, IndexError):
+                    logger.debug("Could not find raw response in exception body structure.")
+
+            # Fallback to brittle string parsing only if the robust method fails
+            if not raw_llm_output:
+                logger.warning("Could not extract raw response from exception body. Falling back to brittle string parsing.")
+                try:
+                    # This is fragile and should be avoided.
+                    raw_llm_output = str(e).split("Invalid JSON:")[1].split("[type=json_invalid")[0].strip()
+                except IndexError:
+                    logger.error("Failed to parse raw output from exception string. Cannot self-correct.")
+                    return None, {"duration": 0, "tokens": {}}
+
             if ai_settings.general.enable_llm_json_corrector:
                 logger.info("Attempting to self-correct invalid JSON with a corrector model.")
                 try:
-                    # Extract the raw, broken JSON string from the exception
-                    # This is a bit of a hack, but it's how we get the source material
-                    raw_llm_output = str(e).split("Invalid JSON:")[1].split("[type=json_invalid")[0].strip()
-
                     correction_prompt = f"""The following JSON is broken. Please fix it. Return ONLY the corrected JSON, with no other text or explanation.
 
 BROKEN JSON:

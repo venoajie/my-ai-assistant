@@ -94,117 +94,6 @@ class CreateServiceFromTemplateTool(Tool):
             return (False, f"An unexpected error occurred during service creation: {e}")
         
 # --- Core Asynchronous Tools ---
-
-class RefactorFileContentTool(Tool):
-    name = "refactor_file_content"
-    description = (
-        "Reads a file, applies a set of refactoring instructions to its content, and writes the result back to the same file. "
-        "This is a specialized sub-tool, typically called by a larger workflow."
-    )
-    is_risky = True
-
-    async def __call__(self, path: str, instructions: str) -> Tuple[bool, str]:
-        p = Path(path)
-        if not p.exists() or not p.is_file():
-            return (False, f"Error: File not found at {path}")
-
-        try:
-            original_content = p.read_text(encoding='utf-8')
-
-            prompt = f"""You are an expert code refactoring agent. Your sole task is to modify the provided source code based on the user's instructions. You must return only the complete, final, modified code file. Do not add any commentary, explanations, or markdown formatting.
-
-<Instructions>
-{instructions}
-</Instructions>
-
-<OriginalCode path="{path}">
-{original_content}
-</OriginalCode>
-
-Modified Code:"""
-
-            handler = ResponseHandler()
-            synthesis_model =  ai_settings.model_selection.synthesis
-            result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
-            
-            modified_content = result["content"].strip()
-
-            if not modified_content:
-                return (False, "Error: Refactoring agent returned an empty response. No changes were made.")
-
-            p.write_text(modified_content, encoding='utf-8')
-            return (True, f"Successfully refactored and wrote new content to {path}")
-
-        except Exception as e:
-            return (False, f"Error refactoring file {path}: {e}")
-
-class ExecuteRefactoringWorkflowTool(Tool):
-    name = "execute_refactoring_workflow"
-    description = (
-        "Executes a complete, safe refactoring workflow for existing code within a new git branch. "
-        "It creates a branch, removes specified files, refactors content in other files, and commits all changes. "
-        "This is the mandatory tool for any development task that modifies the codebase. "
-        "Do NOT use this for creating a new service from a template; use 'create_service_from_template' for that specific task."
-    )
-    is_risky = True
-
-    async def __call__(
-        self, 
-        branch_name: str, 
-        commit_message: str, 
-        refactoring_instructions: str, 
-        files_to_remove: List[str] = None, 
-        files_to_refactor: List[str] = None,
-        ) -> Tuple[bool, str]:
-        try:
-            # Step 1: Create Branch
-            success, result = await _run_git_command(["git", "checkout", "-b", branch_name])
-            if not success:
-                return (False, f"Failed to create branch: {result}")
-            print(f"   - ✅ Branched: {branch_name}")
-
-            # Step 2: Remove Files
-            if files_to_remove:
-                for file_path in files_to_remove:
-                    p = Path(file_path)
-                    if p.exists():
-                        success, result = await _run_git_command(["git", "rm", file_path])
-                        if not success:
-                            return (False, f"Failed to remove file {file_path}: {result}")
-                        print(f"   - ✅ Removed: {file_path}")
-                    else:
-                        print(f"   - ℹ️ Skipped removal (file not found): {file_path}")
-
-            # Step 3: Refactor Files
-            if files_to_refactor:
-                for path in files_to_refactor:
-                    if not path or not refactoring_instructions:
-                        return (False, "Invalid arguments. 'path' in files_to_refactor and 'refactoring_instructions' are required.")
-                    
-                    refactor_tool = RefactorFileContentTool()
-                    success, result = await refactor_tool(path, refactoring_instructions)
-                    if not success:
-                        return (False, f"Failed to refactor file {path}: {result}")
-                    print(f"   - ✅ Refactored: {path}")
-
-            # Step 4: Stage All Changes
-            success, result = await _run_git_command(["git", "add", "."])
-            if not success:
-                return (False, f"Failed to stage changes: {result}")
-            print("   - ✅ Staged all changes.")
-
-            # Step 5: Commit
-            success, result = await _run_git_command(["git", "commit", "-m", commit_message])
-            if not success:
-                return (False, f"Failed to commit changes: {result}")
-            print("   - ✅ Committed.")
-
-            return (True, f"Workflow completed successfully on branch '{branch_name}'.")
-
-        except Exception as e:
-            return (False, f"An unexpected error occurred during the workflow: {e}")
-
-# --- NEW: The RAG-aware tool for active codebase searching ---
 class CodebaseSearchTool(Tool):
     name = "codebase_search"
     description = (
@@ -458,13 +347,10 @@ class ToolRegistry:
         self.register(GitAddTool())
         self.register(GitCommitTool()) 
         self.register(GitPushTool())
-        self.register(RefactorFileContentTool())
-        self.register(ExecuteRefactoringWorkflowTool())
         self.register(GitListBranchesTool())
         self.register(GitCheckoutTool())
         self.register(GitRemoveFileTool())
         self.register(CreateServiceFromTemplateTool())
-        # --- NEW: Register the codebase search tool ---
         self.register(CodebaseSearchTool())
 
     def register(self, tool: Tool):
@@ -478,6 +364,8 @@ class ToolRegistry:
 
     def get_tool_descriptions(self) -> str:
         descriptions = "<Tools>\n"
+        # This tells the planner that the workflow exists, even though the implementation is in the kernel.
+        descriptions += "  <Tool name='execute_refactoring_workflow' signature='Executes a complete, safe refactoring workflow for existing code within a new git branch. It creates a branch, removes specified files, refactors content in other files, and commits all changes. This is the mandatory tool for any development task that modifies the codebase. Usage: execute_refactoring_workflow(branch_name: str, commit_message: str, refactoring_instructions: str, files_to_remove: List[str] = None, files_to_refactor: List[str] = None)' />\n"
         for tool in self.get_all_tools():
             descriptions += f"  <Tool name='{tool.name}' signature='{tool.description}' />\n"
         descriptions += "</Tools>"

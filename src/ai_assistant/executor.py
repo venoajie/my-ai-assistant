@@ -69,11 +69,13 @@ class ManifestExecutor:
 
         for i, action in enumerate(actions):
             action_type = action.get("type")
+            comment = action.get("comment", "No comment provided.")
 
             self.logger.info(
                 "Executing action", 
                 step=f"{i+1}/{len(actions)}", 
-                type=action_type
+                type=action_type,
+                reason=comment
             )
             
             try:
@@ -83,11 +85,13 @@ class ManifestExecutor:
                 
                 handler(action)
             except Exception as e:
-                print(f"❌ HALT: Action {i+1} failed. Reason: {e}", file=sys.stderr)
+                self.logger.critical("HALT: Action failed. Execution stopped.", step=f"{i+1}/{len(actions)}", reason=str(e))
+                # Also print to stderr for immediate visibility
+                print(f"❌ HALT: Action {i+1} ('{action_type}') failed. Reason: {e}", file=sys.stderr)
                 print("🛑 Execution stopped. The system state may be partially modified.", file=sys.stderr)
                 sys.exit(1)
         
-        self.logger.info("Plan executed successfully.")
+        self.logger.info("✅ Plan executed successfully.")
 
     def _run_command(self, command: list[str], cwd: Path = None):
         """Helper to run a subprocess command."""
@@ -112,6 +116,7 @@ class ManifestExecutor:
         self.logger.debug(
             "Command succeeded", 
             command=command_str,
+            stdout=result.stdout.strip()
             )
 
     def _handle_create_branch(self, action: dict):
@@ -131,9 +136,9 @@ class ManifestExecutor:
         target_path = (self.project_root / target_rel).resolve()
 
         self.logger.debug(
-            "Applying file change", 
-            source=source_path, 
-            target=target_path,
+            "Preparing to apply file change", 
+            source=str(source_path), 
+            target=str(target_path),
             )
 
         if not source_path.exists():
@@ -142,15 +147,17 @@ class ManifestExecutor:
         if self.dry_run:
             self.logger.info(
                 "Skipped copying file due to dry-run mode", 
-                source=source_path,
+                source=str(source_path),
+                target=str(target_path),
                 )
             return
         
         target_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_path, target_path)
         self.logger.info(
-            "Copied file to target destination", 
-            target=target_path,
+            "Applied file change", 
+            source=source_rel,
+            target=target_rel,
             )
 
     def _handle_create_directory(self, action: dict):
@@ -166,7 +173,7 @@ class ManifestExecutor:
             return
         
         target_path.mkdir(parents=True, exist_ok=True)
-        self.logger.info("Created directory successfully.", path=str(target_path))
+        self.logger.info("Created directory successfully", path=str(target_path))
 
     def _handle_move_file(self, action: dict):
         source_rel = action.get("source")
@@ -177,39 +184,38 @@ class ManifestExecutor:
         source_path = (self.project_root / source_rel).resolve()
         dest_path = (self.project_root / dest_rel).resolve()
 
-        print(f"   - Source: {source_path}")
-        print(f"   - Destination: {dest_path}")
+        self.logger.info("Moving item", source=str(source_path), destination=str(dest_path))
 
         if not source_path.exists():
             raise FileNotFoundError(f"Source path for move operation not found: {source_path}")
 
         if self.dry_run:
-            print("     (Skipped move operation due to dry-run mode)")
+            self.logger.info("Skipped move operation due to dry-run mode", source=str(source_path), destination=str(dest_path))
             return
         
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(source_path), str(dest_path))
-        print(f"   - ✅ Moved item successfully.")
+        self.logger.info("Moved item successfully.")
 
     def _handle_git_add(self, action: dict):
         path = action.get("path")
         if not path:
             raise ValueError("Action 'git_add' is missing 'path'.")
-        print(f"   - Path to add: {path}")
+        self.logger.info("Staging path", path=path)
         self._run_command(["git", "add", path])
 
     def _handle_git_commit(self, action: dict):
         message = action.get("message")
         if not message:
             raise ValueError("Action 'git_commit' is missing 'message'.")
-        print(f"   - Commit message: \"{message[:72]}...\"")
+        self.logger.info("Committing changes", message=f"\"{message[:72].strip()}...\"")
         self._run_command(["git", "commit", "-m", message])
 
     def _handle_git_push(self, action: dict):
         # Get current branch name to push safely
         result = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, check=True)
         current_branch = result.stdout.strip()
-        print(f"   - Pushing current branch '{current_branch}' to origin.")
+        self.logger.info("Pushing branch to origin", branch=current_branch)
         self._run_command(["git", "push", "--set-upstream", "origin", current_branch])
 
 def main():
