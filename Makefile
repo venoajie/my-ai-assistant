@@ -1,4 +1,3 @@
-
 # Makefile for bootstrapping and managing the AI Assistant in a new project
 
 # --- Colors for better output ---
@@ -114,7 +113,7 @@ env:
 jobs:
   index-codebase:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout Project Repository
         uses: actions/checkout@v4
@@ -160,11 +159,11 @@ EOC
         run: |
           INDEX_DIR=".ai_rag_index"
           echo "Attempting to download previous index..."
-          oci os object get --namespace "$${OCI_NAMESPACE}" --bucket-name "$${OCI_BUCKET}" --name "indexes/$${BRANCH_NAME}/latest/index.tar.gz" --file index.tar.gz || true
+          oci os object get --namespace "${OCI_NAMESPACE}" --bucket-name "${OCI_BUCKET}" --name "indexes/${BRANCH_NAME}/latest/index.tar.gz" --file index.tar.gz || true
           if [ -f "index.tar.gz" ]; then
             echo "Previous index found. Unpacking for incremental update."
-            mkdir -p "$${INDEX_DIR}"
-            tar -xzf index.tar.gz -C "$${INDEX_DIR}"
+            mkdir -p "${INDEX_DIR}"
+            tar -xzf index.tar.gz -C "${INDEX_DIR}"
           else
             echo "No previous index found. A full re-index will be performed."
           fi
@@ -173,19 +172,30 @@ EOC
         id: mode
         run: echo "mode=${{ github.event.inputs.force_reindex == 'true' && 'full' || 'delta' }}" >> $GITHUB_OUTPUT
 
+      # <<< FIX: This new step ensures the correct embedding model is used >>>
+      - name: Create Project-Specific AI Config
+        run: |
+          cat > .ai_config.yml << EOCONFIG
+          # This file overrides the default AI Assistant configuration for the indexing job.
+          # It ensures the large BAAI model is used to create the vector index.
+          rag:
+            embedding_model_name: 'BAAI/bge-large-en-v1.5'
+EOCONFIG
+          echo "Created .ai_config.yml to enforce correct embedding model."
+
       - name: Run Indexer
         run: |
           ai-index . \
-            --branch "$${{ env.BRANCH_NAME }}" \
+            --branch "${{ env.BRANCH_NAME }}" \
             ${{ steps.mode.outputs.mode == 'full' && '--force-reindex' || '' }}
 
       - name: Upload Index to Object Storage
         run: |
           INDEX_DIR=".ai_rag_index"
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          tar -czf index.tar.gz -C "$${INDEX_DIR}" .
-          oci os object put --force --namespace "$${OCI_NAMESPACE}" --bucket-name "$${OCI_BUCKET}" --name "indexes/$${{ env.BRANCH_NAME }}/archive/$${TIMESTAMP}_\$${{ github.sha }}.tar.gz" --file index.tar.gz
-          oci os object put --force --namespace "$${OCI_NAMESPACE}" --bucket-name "$${OCI_BUCKET}" --name "indexes/$${{ env.BRANCH_NAME }}/latest/index.tar.gz" --file index.tar.gz
+          tar -czf index.tar.gz -C "${INDEX_DIR}" .
+          oci os object put --force --namespace "${OCI_NAMESPACE}" --bucket-name "${OCI_BUCKET}" --name "indexes/${{ env.BRANCH_NAME }}/archive/${TIMESTAMP}_${{ github.sha }}.tar.gz" --file index.tar.gz
+          oci os object put --force --namespace "${OCI_NAMESPACE}" --bucket-name "${OCI_BUCKET}" --name "indexes/${{ env.BRANCH_NAME }}/latest/index.tar.gz" --file index.tar.gz
 EOF
 	@echo "${GREEN}Done.${NC}"; \
 	\
