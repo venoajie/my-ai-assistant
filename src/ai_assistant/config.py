@@ -88,7 +88,7 @@ class OracleCloudConfig(BaseModel):
     
 class RAGConfig(BaseModel):
     """Configuration for the RAG subsystem."""
-    embedding_model_name: str = 'all-MiniLM-L6-v2'
+    embedding_model_name: str = 'BAAI/bge-large-en-v1.5'
     collection_name: str = Field("codebase_collection", description="Default collection name for ChromaDB.")
     chroma_server_host: Optional[str] = Field(None, description="Hostname of the ChromaDB server.")
     chroma_server_port: Optional[int] = Field(None, description="Port of the ChromaDB server.")
