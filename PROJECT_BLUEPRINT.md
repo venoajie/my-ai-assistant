@@ -140,6 +140,36 @@ For performing complex analysis on a large codebase. The standard flow is now fu
 2.  **Configure (One-Time Setup):** A developer configures their local `.ai_config.yml` to point to the shared cloud storage bucket.
 3.  **Query (Any Machine):** A developer runs an `ai "..."` command. The `RAGContextPlugin` automatically ensures a fresh, local copy of the index is present (downloading it if necessary) and injects the relevant context into the prompt.
 
+#### 6.5. The RAG Index Data Lifecycle
+
+The codebase-aware RAG system operates on a robust, automated data lifecycle that ensures all clients have access to a fresh, relevant index without manual intervention. The flow is triggered by developer actions in Git and managed by the CI/CD pipeline.
+
+The lifecycle consists of five distinct stages:
+
+**Stage 1: Local Development (Developer's Machine)**
+*   A developer writes or modifies code in their local Git repository. This is the source of all new information.
+
+**Stage 2: The Trigger (Git Push)**
+*   The entire automated workflow is triggered when a developer executes a `git push` to a tracked branch on the remote repository (e.g., GitHub).
+
+**Stage 3: Indexing (CI/CD Environment)**
+*   The push event activates the `smart-indexing.yml` GitHub Actions workflow.
+*   The CI/CD runner checks out the specific commit.
+*   It runs the `ai-index` command, which scans the repository, chunks the code, and builds a complete, self-contained vector database in the `.ai_rag_index/` directory.
+
+**Stage 4: Centralization (Cloud Object Storage)**
+*   The CI/CD workflow compresses the entire `.ai_rag_index/` directory into a `index.tar.gz` file.
+*   This archive is uploaded to the central OCI Object Storage bucket. Two copies are stored:
+    1.  `indexes/<branch>/latest/index.tar.gz`: This file is **overwritten** on every push, always representing the absolute latest version for that branch.
+    2.  `indexes/<branch>/archive/<timestamp>_<commit>.tar.gz`: A new, timestamped file is created for **historical auditing and debugging**. These are automatically deleted after a set period by a bucket lifecycle policy.
+
+**Stage 5: Consumption (Client Machine)**
+*   A developer runs an `ai "..."` command on their local machine.
+*   The `RAGContextPlugin` activates and checks its local cache (`.ai_rag_index/.cache_state.json`).
+*   **If the cache is fresh** (within the configured TTL), it uses the existing local database instantly.
+*   **If the cache is stale or missing**, the plugin connects to OCI, downloads `latest/index.tar.gz` for the current Git branch, unpacks it, and updates its cache state.
+*   The plugin then queries this fresh, local database to provide context to the LLM.
+
 ---
 
 ## 7. Data & State Contracts
