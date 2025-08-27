@@ -486,12 +486,14 @@ async def async_main():
                 # --- Feedback when an auto-plugin is not found ---
                 print(f"{Colors.DIM}   - Searched for plugin '{plugin_name_to_load}' (triggered by persona '{args.persona}') but it was not found.{Colors.RESET}")
              
-             
     # --- Manual Override ---
     # If the user specifies --context, it overrides any auto-loaded plugin.
     if args.context:
         print(f"{Colors.YELLOW}--context flag provided, overriding any auto-loaded plugin.{Colors.RESET}")
         context_plugin = load_context_plugin(args.context)
+        if not context_plugin:
+            print(f"{Colors.RED}🛑 HALTING: The requested context plugin '{args.context}' could not be loaded.{Colors.RESET}", file=sys.stderr)
+            sys.exit(1) # Exit the program
 
     if context_plugin:
         print(f"   - {Colors.GREEN}✅ Plugin loaded successfully.{Colors.RESET}")

@@ -1,9 +1,10 @@
 # src/ai_assistant/config.py
 
+import os
 import yaml
 from pathlib import Path
 from typing import Dict, Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from importlib import resources
 import structlog  
 
@@ -83,8 +84,8 @@ class OracleCloudConfig(BaseModel):
     bucket: Optional[str] = Field(None, description="OCI bucket name")
     region: Optional[str] = Field(None, description="OCI region")
     enable_caching: bool = Field(True, description="Enable local caching of downloaded indexes")
-    cache_ttl_hours: int = Field(24, description="Cache TTL in hours")
-
+    cache_ttl_hours: int = Field(24, description="Cache TTL in hours before re-downloading")
+    
 class RAGConfig(BaseModel):
     """Configuration for the RAG subsystem."""
     embedding_model_name: str = 'all-MiniLM-L6-v2'
@@ -128,6 +129,17 @@ class RAGConfig(BaseModel):
         description="How many of the top documents to return after the reranking step."
     )
 
+    # --- NEW: Add the validator to enforce the configuration contract ---
+    @model_validator(mode='after')
+    def validate_reranking_counts(self) -> 'RAGConfig':
+        if self.enable_reranking and self.rerank_top_n > self.retrieval_n_results:
+            raise ValueError(
+                f"'rerank_top_n' ({self.rerank_top_n}) cannot be greater than "
+                f"'retrieval_n_results' ({self.retrieval_n_results})."
+            )
+        return self
+
+
 
 class ProviderConfig(BaseModel):
     api_key_env: str
@@ -160,7 +172,11 @@ def load_ai_settings() -> AIConfig:
         print(f"FATAL: Could not load or parse the default package configuration. Error: {e}")
         exit(1)
     
-    user_config_path = Path.home() / ".config" / "ai_assistant" / "config.yml"
+    # --- NEW: Use environment variable for user config directory ---
+    user_config_dir_str = os.getenv('AI_ASSISTANT_CONFIG_DIR', str(Path.home() / ".config" / "ai_assistant"))
+    user_config_dir = Path(user_config_dir_str)
+    
+    user_config_path = user_config_dir / "config.yml"
     if user_config_path.exists():
         with open(user_config_path, 'r') as f:
             user_config = yaml.safe_load(f)
@@ -175,20 +191,22 @@ def load_ai_settings() -> AIConfig:
             logger.info("Applying project-level configuration override.", path=str(project_config_path)) 
             config_data = deep_merge(config_data, project_config)
     
+    if "paths" not in config_data:
+        config_data["paths"] = {}
+        
+    temp_config = AIConfig.model_validate(config_data)
+
     project_root = Path.cwd()
-    user_config_dir = Path.home() / ".config" / "ai_assistant"
-    general_conf = config_data.get("general", {})
+    
+    temp_config.paths = PathsConfig(
+        project_root=project_root,
+        sessions_dir=project_root / temp_config.general.sessions_directory,
+        user_personas_dir=user_config_dir / temp_config.general.personas_directory,
+        project_local_personas_dir=project_root / ".ai" / "personas",
+        local_plugins_dir=project_root / temp_config.general.local_plugins_directory,
+    )
 
-    config_data["paths"] = {
-        "project_root": project_root,
-        "sessions_dir": project_root / general_conf.get("sessions_directory", ".ai_sessions"),
-        "user_personas_dir": user_config_dir / general_conf.get("personas_directory", "personas"),
-        "project_local_personas_dir": project_root / ".ai" / "personas",
-        "local_plugins_dir": project_root / general_conf.get("local_plugins_directory", ".ai/plugins"),
-    }
-
-    return AIConfig.model_validate(config_data)
-
+    return temp_config 
  
 def deep_merge(base: Dict, update: Dict) -> Dict:
     """Deep merge two dictionaries"""

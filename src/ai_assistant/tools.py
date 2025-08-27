@@ -12,6 +12,10 @@ from .response_handler import ResponseHandler
 from .config import ai_settings
 
 
+SHELL_COMMAND_ALLOWLIST = {
+    "ls", "git", "grep", "find", "cat", "echo", "pytest", "python"
+}
+
 # --- The base Tool class MUST be defined first and be async ---
 class Tool:
     name: str = "Base Tool"
@@ -263,46 +267,65 @@ class MoveFileTool(Tool):
         
 class RunShellCommandTool(Tool):
     name = "run_shell"
-    description = "Executes a shell command in the project's root directory. Usage: run_shell(command: str)"
+    description = "Executes a shell command in the project's root directory. The command must be provided as a list of strings. Usage: run_shell(command_parts: List[str])"
     is_risky = True
     
     async def __call__(
         self, 
-        command: str,
+        command_parts: List[str],
         ) -> Tuple[bool, str]:
-        if not isinstance(command, str):
-            return (False, "🚫 SECURITY: Command must be a string.")
-        command = command.strip()
-        if not command:
+        
+        # --- Enforce list type for security ---
+        if not isinstance(command_parts, list) or not all(isinstance(i, str) for i in command_parts):
+            return (False, "🚫 SECURITY: Command must be a list of strings.")
+        
+        if not command_parts:
             return (False, "🚫 ERROR: Empty command provided.")
         
+        command = command_parts[0]        
+        if command not in SHELL_COMMAND_ALLOWLIST:
+            return (False, f"🚫 SECURITY BLOCK: Command '{command}' is not in the allowed list.")
+        
+        # We still check each part against the blocklist as a defense-in-depth measure.
+        # This is less critical now but still good practice.
+        command_str_for_checking = " ".join(command_parts)
         for pattern in SHELL_COMMAND_BLOCKLIST:
             if re.search(
                 pattern, 
-                command, 
+                command_str_for_checking, 
                 re.IGNORECASE,
                 ):
                 return (
                     False, 
-                    f"🚫 SECURITY BLOCK: Command '{command}' matches a dangerous pattern.",
+                    f"🚫 SECURITY BLOCK: Command '{command_str_for_checking}' matches a dangerous pattern.",
                     )
         
         try:
-            result = subprocess.run(
-                command, shell=True, capture_output=True, text=True, 
-                check=False, timeout=60, cwd=Path.cwd()
+            # --- KEY SECURITY CHANGE: shell=False ---
+            # We pass the list of parts directly.
+            proc = await asyncio.create_subprocess_exec(
+                *command_parts,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=Path.cwd()
             )
-            stdout = result.stdout[:10000] if result.stdout else ""
-            stderr = result.stderr[:10000] if result.stderr else ""
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=60)
+            
+            stdout = stdout_bytes.decode('utf-8', errors='ignore')[:10000]
+            stderr = stderr_bytes.decode('utf-8', errors='ignore')[:10000]
+            
             output = f"STDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
-            if result.returncode == 0:
+            
+            if proc.returncode == 0:
                 return (True, output)
             else:
-                return (False, f"Command failed with return code {result.returncode}\n\n{output}")
-        except subprocess.TimeoutExpired:
-            return (False, f"Error: Command '{command}' timed out after 60 seconds.")
+                return (False, f"Command failed with return code {proc.returncode}\n\n{output}")
+        except asyncio.TimeoutError:
+            return (False, f"Error: Command '{command_str_for_checking}' timed out after 60 seconds.")
+        except FileNotFoundError:
+            return (False, f"Error: Command not found: '{command_parts[0]}'. Please ensure it is installed and in your PATH.")
         except Exception as e:
-            return (False, f"Error executing command '{command}': {str(e)}")
+            return (False, f"Error executing command '{command_str_for_checking}': {str(e)}")
 
 class GitCreateBranchTool(Tool):
     name = "git_create_branch"; description = "Creates and checks out a new local branch. Usage: git_create_branch(branch_name: str)"; is_risky = True
