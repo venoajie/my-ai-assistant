@@ -160,7 +160,6 @@ class AIConfig(BaseModel):
     providers: Dict[str, ProviderConfig]
     paths: PathsConfig
 
-
 # --- Configuration Loading Logic
 def load_ai_settings() -> AIConfig:
     """Loads and merges config from package defaults, user config, and project config"""
@@ -172,7 +171,6 @@ def load_ai_settings() -> AIConfig:
         print(f"FATAL: Could not load or parse the default package configuration. Error: {e}")
         exit(1)
     
-    # --- NEW: Use environment variable for user config directory ---
     user_config_dir_str = os.getenv('AI_ASSISTANT_CONFIG_DIR', str(Path.home() / ".config" / "ai_assistant"))
     user_config_dir = Path(user_config_dir_str)
     
@@ -191,23 +189,27 @@ def load_ai_settings() -> AIConfig:
             logger.info("Applying project-level configuration override.", path=str(project_config_path)) 
             config_data = deep_merge(config_data, project_config)
     
-    if "paths" not in config_data:
-        config_data["paths"] = {}
-        
-    temp_config = AIConfig.model_validate(config_data)
-
+    # 1. First, calculate all runtime paths based on the merged config dictionary.
     project_root = Path.cwd()
+    general_config = config_data.get("general", {})
     
-    temp_config.paths = PathsConfig(
+    # 2. Create the PathsConfig object manually.
+    paths_obj = PathsConfig(
         project_root=project_root,
-        sessions_dir=project_root / temp_config.general.sessions_directory,
-        user_personas_dir=user_config_dir / temp_config.general.personas_directory,
+        sessions_dir=project_root / general_config.get("sessions_directory", ".ai_sessions"),
+        user_personas_dir=user_config_dir / general_config.get("personas_directory", "personas"),
         project_local_personas_dir=project_root / ".ai" / "personas",
-        local_plugins_dir=project_root / temp_config.general.local_plugins_directory,
+        local_plugins_dir=project_root / general_config.get("local_plugins_directory", ".ai/plugins"),
     )
+    
+    # 3. Inject the fully formed PathsConfig object into our main config dictionary.
+    config_data["paths"] = paths_obj.model_dump()
 
-    return temp_config 
- 
+    # 4. NOW, with a complete dictionary, ask Pydantic to validate everything at once.
+    # This will succeed because the 'paths' field is now present and correctly structured.
+    return AIConfig.model_validate(config_data)
+
+
 def deep_merge(base: Dict, update: Dict) -> Dict:
     """Deep merge two dictionaries"""
     if not isinstance(update, dict):
