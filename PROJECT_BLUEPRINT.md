@@ -194,13 +194,13 @@ To ensure absolute build and installation reliability for non-Python data files 
 **Canonical Rule:** Any new non-Python data files that must be accessible by the installed package **MUST** be added to the `[tool.setuptools.package-data]` configuration in `pyproject.toml` to guarantee their inclusion.
 
 ### 8.2. Optional Dependencies for Flexibility
-To support different operational environments (e.g., a powerful indexing server vs. a lightweight developer laptop), the project uses **optional dependencies**.
+
+To support different operational environments (e.g., a powerful indexing server vs. a developer laptop), the project uses **optional dependencies**.
 
 -   **`[project.optional-dependencies].indexing`:** This group includes heavy libraries required for creating the RAG index (e.g., `torch`, `sentence-transformers`). It should only be installed on the machine responsible for indexing.
--   **`[project.optional-dependencies].client`:** This group includes lightweight client libraries for querying a remote RAG index. This is the recommended installation for most users.
+-   **`[project.optional-dependencies].client`:** This group includes libraries for querying a remote RAG index. This is the recommended installation for most users.
 
-This approach minimizes installation footprint and resource consumption on client machines, adhering to the principle of least privilege for dependencies.
-
+**Architectural Note:** The current `[client]` installation is not fully "lightweight" as it requires `sentence-transformers` (and its dependency, `torch`) to perform query embedding and reranking on the client machine. While this ensures maximum flexibility, it introduces a significant installation footprint. A future architectural goal is to offload query embedding to a remote service, which would allow for a truly minimal client dependency set.
 ---
 
 ## 9. Project Management & State

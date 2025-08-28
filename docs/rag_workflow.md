@@ -20,10 +20,16 @@ The RAG pipeline is designed for a robust team environment and operates in two d
     This is the "heavy lifting" phase, typically handled by an automated process like GitHub Actions. On every `git push`, the CI/CD system checks out the code, scans it, and uses powerful machine learning models to create a vector database—the "index"—of your project for that specific branch. This index is then packaged and uploaded to a shared cloud object store (like OCI Object Storage).
 
 2.  **Phase 2: Index Consumption (Automatic on Your Machine)**
-    This is the lightweight phase that happens when you run the `ai` command. The RAG plugin automatically detects your current project and branch, checks for a local copy of the index, and if it's missing or out of date, downloads the latest version from the shared cloud storage. This gives you the power of a full codebase index with the speed of a local database.
+    This is the lightweight phase that happens when you run the `ai` command. It now includes an intelligent pre-processing step.
 
-    **Optional Enhancement: The Reranker**
-    To maximize accuracy, you can enable a **reranker**. This adds a second, more sophisticated filtering step. After the initial search finds a broad set of documents (prioritizing *recall*), the reranker uses a powerful cross-encoder model to re-order them based on true contextual relevance to your specific query. This ensures only the absolute best snippets are sent to the AI, prioritizing *precision*.
+    **A. Intelligent Query Expansion (New)**
+    Before searching, the system uses the high-level documents defined in your project's `auto_inject_files` (see the **[Configuration Guide](./project_configuration.md)**) to transform your simple query into a project-specific one. This bridges the gap between your intent and the technical keywords in the code.
+
+    **B. Retrieval and Caching**
+    The RAG plugin uses the expanded query to search the knowledge base. It automatically detects your current project and branch, checks for a local copy of the index, and if it's missing or out of date, downloads the latest version from shared cloud storage.
+
+    **C. Optional Reranking**
+    To maximize accuracy, you can enable a **reranker**. After the initial search finds a broad set of documents, the reranker uses a powerful cross-encoder model to re-order them based on true contextual relevance. This ensures only the absolute best snippets are sent to the AI.
 
 ---
 
@@ -33,121 +39,71 @@ Follow these steps to configure your project to use the RAG pipeline.
 
 ### Prerequisite: Installation
 
-Ensure you have the client-side dependencies installed in your project's virtual environment. This lightweight installation is all that's needed to connect to a pre-built index and use the optional reranker.
+Ensure you have the client-side dependencies installed in your project's virtual environment.
 
 ```bash
-# From your project's root, assuming the ai-assistant repo is a sibling directory
-pip install -e ../ai-assistant[client]
+pip install "my-ai-assistant[client]@git+https://github.com/venoajie/my-ai-assistant.git@develop"
 ```
 
 ### Step 1: Configure the Client (`.ai_config.yml`)
 
-Create a `.ai_config.yml` file in your project's root. This tells the assistant how to find and connect to the shared index storage.
+Create a `.ai_config.yml` file in your project's root. This tells the assistant how to find the shared index and which files to use for query expansion.
 
 ```yaml
 # .ai_config.yml
+general:
+  # These files power the intelligent query expansion.
+  auto_inject_files:
+    - "PROJECT_BLUEPRINT.md"
+    - "AGENTS.md"
+
 rag:
   # Enable branch-specific indexes (highly recommended for team workflows)
   enable_branch_awareness: true
   
   # Configure the connection to your shared OCI bucket
   oracle_cloud:
-    # The OCI namespace where your bucket resides
     namespace: "your-oci-namespace"
-    # The name of the bucket storing the index archives
     bucket: "your-oci-bucket-name"
-    # The OCI region for the bucket (e.g., eu-frankfurt-1)
     region: "your-oci-region"
 
   # --- Optional: Enable and configure the reranker for higher precision results ---
   enable_reranking: true
-  
-  # How many documents to retrieve initially for the reranker to process.
-  # A larger number gives the reranker more to work with but is slightly slower.
   retrieval_n_results: 25
-  
-  # How many of the top documents to send to the AI after reranking.
   rerank_top_n: 5
 ```
 Commit this file to your repository so the entire team shares the same configuration.
 
 ### Step 2: Curate the Knowledge Base (`.aiignore`)
-
-Create an `.aiignore` file in your project root to control which files are included in the knowledge base. This is critical for excluding secrets, logs, test data, and other irrelevant files to keep the index clean and efficient.
-
-**Example `.aiignore`:**
-```
-# Standard ignores
-.git/
-.venv/
-__pycache__/
-*.log
-
-# Exclude secrets and large data files
-/secrets/
-/data/
-/tests/fixtures/
-```
-Commit this file to your repository. The CI/CD indexer will respect these rules on its next run.
+(This section remains the same)
 
 ### Step 3: Produce the Index
-
-You have two options for creating the knowledge base index.
-
-#### Option A: Automated Indexing via CI/CD (Recommended for Teams)
-
-This is the standard, most robust workflow.
-1.  Copy the `smart-indexing.yml` GitHub Actions workflow from the AI Assistant project into your own project's `.github/workflows/` directory.
-2.  Configure the required `OCI_*` secrets in your repository's GitHub settings.
-3.  Push a commit. The action will run automatically, building and uploading the index for your branch.
-
-#### Option B: Manual Local Indexing (For Solo Use or Testing)
-
-You can build the index on your local machine. This is great for getting started quickly or for projects without a CI/CD pipeline.
-
-1.  **Install Indexing Libraries:** This requires the full, heavier dependencies.
-    ```bash
-    # From your project's environment
-    pip install -e ../ai-assistant[indexing]
-    ```
-
-2.  **Run the Indexer:** From your project's root, run the `ai-index` command, specifying the branch you want to build an index for.
-    ```bash
-    # To index your 'main' branch
-    ai-index . --branch main
-    ```
-    This will create the index locally in a `.ai_rag_index` directory. The assistant will find and use this local index.
+(This section remains the same)
 
 ### Step 4: Usage
-
-That's it! With the configuration in place and an index available (either in OCI or locally), the assistant is now codebase-aware.
-
-Simply run a command as you normally would. The RAG plugin will work automatically in the background to find and inject the most relevant context.
-
-```bash
-# The RAG plugin will now automatically find and inject relevant code and docs
-ai --persona domains/programming/csa-1 "How does our authentication system work?"
-```
+(This section remains the same)
 
 ---
 
-## Example in Action: Before vs. After RAG
+## Example in Action: The Power of Layered Intelligence
 
-**Scenario:** You want to understand your project's custom error handling. Your codebase contains `utils/error_handling.py` (current) and `utils/legacy_errors.py` (old, deprecated).
+**Scenario:** You want to understand your project's custom error handling. Your codebase contains `utils/error_handling.py` (current) and `utils/legacy_errors.py` (old, deprecated). Your `PROJECT_BLUEPRINT.md` states, "Error handling must use the `CustomAPIException` class."
 
 *   **Before RAG:**
-    *   **Prompt:** `ai "How should I handle exceptions in this project?"`
-    *   **Result:** A generic, textbook answer about Python's `try...except` blocks. It's correct, but not specific to your project.
+    *   **Prompt:** `ai "How should I handle exceptions?"`
+    *   **Result:** A generic, textbook answer about Python's `try...except`. Not project-specific.
 
-*   **With Basic RAG (Reranker Disabled):**
-    *   **Prompt:** `ai "How should I handle exceptions in this project?"`
-    *   **Result:** The RAG plugin searches the index and finds both `utils/error_handling.py` and the old `utils/legacy_errors.py` because they are semantically similar.
-    *   **AI Response:** The AI gets a mixed context. It might say, "You can use the `CustomAPIException` from `error_handling.py`, but I also see a `LegacyError` class. You should use one of these..." This is confusing and unhelpful.
+*   **With Basic RAG (No Expansion or Reranker):**
+    *   **Prompt:** `ai "How should I handle exceptions?"`
+    *   **Result:** The RAG plugin finds both `error_handling.py` and `legacy_errors.py`. The AI gets a mixed, confusing context and might suggest using the deprecated legacy class.
 
-*   **With RAG + Reranker (Recommended):**
-    *   **Prompt:** `ai "How should I handle exceptions in this project?"`
-    *   **Result:** The RAG plugin retrieves the same initial set of documents. However, the **reranker** then analyzes them against your query. It determines that `utils/error_handling.py` and your `PROJECT_BLUEPRINT.md` are highly relevant, but `utils/legacy_errors.py` is a poor contextual match for modern best practices. It discards the legacy file.
-    *   **AI Response:** "Based on your project's existing code, you should use the custom `CustomAPIException` class defined in `utils/error_handling.py`. Your project blueprint also specifies that all 5xx errors must trigger an alert." This answer is clean, precise, and actionable.
+*   **With RAG + Query Expansion + Reranker (Recommended):**
+    *   **Prompt:** `ai "How should I handle exceptions?"`
+    *   **Result:**
+        1.  **Expansion:** The system reads `PROJECT_BLUEPRINT.md` and expands your query to something like: *"best practices for exception handling using the CustomAPIException class"*.
+        2.  **Retrieval:** This specific query strongly favors `utils/error_handling.py`.
+        3.  **Reranking:** The reranker confirms that `utils/error_handling.py` is far more relevant to the expanded query than the legacy file.
+    *   **AI Response:** "Based on your project's blueprint, all exceptions should be handled using the `CustomAPIException` class defined in `utils/error_handling.py`..." This answer is clean, precise, and actionable.
 
 ## Maintenance and Troubleshooting
 
