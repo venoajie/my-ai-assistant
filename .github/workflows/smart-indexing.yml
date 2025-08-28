@@ -124,11 +124,16 @@ jobs:
         id: mode
         run: |
           if [[ "${{ github.event.inputs.force_reindex }}" == "true" ]]; then
+            echo "Forcing full re-index due to manual trigger."
             echo "mode=full" >> $GITHUB_OUTPUT
-          else
+          elif [[ "${{ steps.download_previous.outputs.unpacked }}" == "true" ]]; then
+            echo "Previous index found. Performing delta index."
             echo "mode=delta" >> $GITHUB_OUTPUT
+          else
+            echo "No previous index. Performing full re-index."
+            echo "mode=full" >> $GITHUB_OUTPUT
           fi
-      
+
       # <<< FIX: Add this new step to satisfy the Pydantic validation >>>
       - name: Create CI-Specific AI Config
         run: |
