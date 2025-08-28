@@ -30,9 +30,11 @@ def get_instructor_client(model_name: str):
         raise ValueError(f"API key env var '{provider_config.api_key_env}' is not set.")
 
     # This single block now works for both DeepSeek and Gemini
+    # --- MODIFIED: Force JSON mode to prevent parallel tool-calling issues ---
     return instructor.from_openai(
         client=AsyncOpenAI(
             api_key=api_key,
             base_url=provider_config.api_endpoint,
-        )
+        ),
+        mode=instructor.Mode.JSON # This is the key change
     )
