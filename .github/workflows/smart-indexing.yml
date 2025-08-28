@@ -56,11 +56,26 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
-      - name: Install All Dependencies
+      - name: Install uv
         run: |
-          pip install -e ./my-ai-assistant[indexing]
-          pip install oci-cli
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        # This installs the uv binary and makes it available in the PATH
+        
+      - name: Configure uv Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml', '**/requirements.txt') }}
+        # This is the key step: it caches uv's global directory, which is much
+        # more effective than pip's cache for CI.
 
+      - name: Install All Dependencies with uv
+        run: |
+          # Use 'uv pip install' as a drop-in replacement for 'pip install'
+          uv pip install -e ./my-ai-assistant[indexing]
+          uv pip install oci-cli
+          
       - name: Configure Oracle Cloud CLI
         env:
           OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: true
