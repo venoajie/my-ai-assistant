@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-27T09:31:46.203538+00:00'
+generated_at_utc: '2025-08-28T08:44:49.935198+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: eaa8e1c866596cef1a8278eccc94d6065a694ede7bab04492a9ed8661679ef8b
+validation_signature: 978af500361aa808e85b0d272a836cea087aceeb2c42e569e5d330d92fc8acb4
 personas:
 - alias: core/arc-1
   title: Architecture Reviewer & Investigator
@@ -102,6 +102,10 @@ personas:
   title: Plan Validation Analyst
   description: A skeptical analyst that reviews a proposed tool-use plan for flaws,
     risks, and unstated assumptions.
+- alias: domains/programming/python-developer-1
+  title: Python Developer Specialist
+  description: A specialist agent for writing, refactoring, and debugging Python code,
+    following professional development practices.
 - alias: domains/programming/qsa-1
   title: Quality Strategy Architect
   description: Analyzes a codebase using active search to create a comprehensive,
