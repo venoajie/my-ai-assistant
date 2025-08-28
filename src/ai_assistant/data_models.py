@@ -4,10 +4,13 @@ from pydantic import BaseModel, Field, model_validator
 
 from .tools import TOOL_REGISTRY
 
+VALID_WORKFLOW_TOOLS = [
+    "execute_refactoring_workflow",
+]
+
 class PlanStepCondition(BaseModel):
     """Defines a condition for a plan step's execution."""
     from_step: int = Field(..., description="The step number whose output is being checked.")
-    # Use Literal for strict validation of the condition type
     in_output: Optional[str] = Field(None, description="The step runs if this string is in the previous step's output.")
     not_in_output: Optional[str] = Field(None, description="The step runs if this string is NOT in the previous step's output.")
 
@@ -29,7 +32,11 @@ class PlanStep(BaseModel):
     @model_validator(mode='after')
     def validate_tool_exists(self) -> 'PlanStep':
         tool_name = self.tool_name
-        if tool_name and tool_name.lower() != "null" and not TOOL_REGISTRY.get_tool(tool_name):
+        # --- The validator accepts real tools OR valid workflow tools ---
+        is_real_tool = TOOL_REGISTRY.get_tool(tool_name) is not None
+        is_workflow_tool = tool_name in VALID_WORKFLOW_TOOLS
+        
+        if tool_name and tool_name.lower() != "null" and not (is_real_tool or is_workflow_tool):
             raise ValueError(f"Tool '{tool_name}' is not a valid, registered tool.")
         return self
 
@@ -51,11 +58,9 @@ class ExecutionPlan(BaseModel):
         1. Returning a single dictionary for a single-step plan.
         2. Returning a raw list instead of a dictionary with a 'steps' key.
         """
-        # Case 1: LLM returns a raw list `[...]` instead of `{"steps": [...]}`
         if isinstance(data, list):
             return {"steps": data}
         
-        # Case 2: LLM returns a single step object `{...}` instead of `{"steps": [{...}]}`
         if isinstance(data, dict) and "steps" not in data:
             return {"steps": [data]}
             
