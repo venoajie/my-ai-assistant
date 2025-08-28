@@ -23,6 +23,19 @@ general:
   auto_inject_files:
     - "PROJECT_BLUEPRINT.md"
     - "AGENTS.md"
+
+# Configure the connection to your shared OCI bucket
+oracle_cloud:
+  namespace: "your-oci-namespace"
+  bucket: "your-oci-bucket-name"
+  region: "your-oci-region"
+
+tools:
+  shell:
+    # This list defines which shell commands the AI is allowed to plan.
+    # For a read-only user, this can be an empty list.
+    # For developers, you might add: ['ls', 'cat', 'grep', 'git']
+    allowed_commands: []
 ```
 
 ### 2. Configuring the RAG Client
@@ -54,3 +67,8 @@ rag:
 3.  **Commit the File:** Commit `.ai_config.yml` to your repository so that the entire team shares the same configuration.
 
 This simple configuration is the single most effective step you can take to create a powerful, project-aware AI workflow.
+
+
+> #### A Note on Configuration Integrity
+>
+> The AI Assistant uses a strict validation system to read its configuration. This ensures that all settings are correct and prevents unexpected behavior. If you upgrade the `ai-assistant` tool to a new version, its configuration requirements may change. If you see a `ValidationError` when running a command, it is a sign that your `.ai_config.yml` needs to be updated to match the new schema required by the tool.
