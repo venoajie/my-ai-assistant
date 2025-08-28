@@ -67,15 +67,22 @@ jobs:
         with:
           path: ~/.cache/uv
           key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml', '**/requirements.txt') }}
-        # This is the key step: it caches uv's global directory, which is much
-        # more effective than pip's cache for CI.
+          
+      - name: Create and Activate Virtual Environment
+        run: |
+          # Create a virtual environment in the standard .venv directory
+          uv venv
+          # Source the activation script to make it active for subsequent steps
+          source .venv/bin/activate
+          # Add the venv's bin to the GITHUB_PATH so commands like 'ai-index' are found
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
 
       - name: Install All Dependencies with uv
         run: |
           # Use 'uv pip install' as a drop-in replacement for 'pip install'
           uv pip install -e ./my-ai-assistant[indexing]
           uv pip install oci-cli
-          
+
       - name: Configure Oracle Cloud CLI
         env:
           OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: true
