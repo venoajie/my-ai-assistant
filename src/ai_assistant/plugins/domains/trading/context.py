@@ -1,5 +1,5 @@
 # src/ai_assistant/plugins/domains/trading/context.py
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 import yaml
 import re
@@ -24,17 +24,17 @@ class TradingContextPlugin(ContextPluginBase):
             'fix engine', 'oms', 'ems', 'service', 'latency', 'venue'
         ]
 
-    def get_context(self, query: str, files: List[str]) -> str:
+    def get_context(self, query: str, files: List[str]) -> Tuple[bool, str]:
         """
         Analyzes the query and files for trading-related keywords. If found,
         injects context about the project's trading services and architecture.
         """
         # Use regex for more robust keyword matching (whole words only)
         if not any(re.search(r'\b' + keyword + r'\b', query, re.IGNORECASE) for keyword in self.trigger_keywords):
-            return "" # No keywords found, provide no context.
+            return (True, "") # No keywords found, provide no context.
 
         if not self.services_map:
-            return "" # No services defined, nothing to add.
+            return (True, "") # No services defined, nothing to add.
 
         print(f"   - {self.name} plugin: Trading keywords detected. Injecting service context.")
         
@@ -65,7 +65,8 @@ class TradingContextPlugin(ContextPluginBase):
 
         context_parts.append("</TradingContext>\n")
         
-        return "\n".join(context_parts)
+        # --- MODIFIED: Return a tuple (bool, str) to match the contract ---
+        return (True, "\n".join(context_parts))
         
     def _load_project_config(self) -> Dict:
         """

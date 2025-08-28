@@ -1,16 +1,15 @@
 # src\ai_assistant\plugins\domains\finance\context.py
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 from ai_assistant.context_plugin import ContextPluginBase
 
 class FinanceContextPlugin(ContextPluginBase):
     name = "Finance"
 
-    # Add the __init__ method to accept the project_root
     def __init__(self, project_root: Path):
         super().__init__(project_root)
 
-    def get_context(self, query: str, files: List[str]) -> str:
+    def get_context(self, query: str, files: List[str]) -> Tuple[bool, str]:
         context = ""
         query_lower = query.lower()
 
@@ -21,4 +20,4 @@ class FinanceContextPlugin(ContextPluginBase):
             context += "  - All monetary values should be represented as integers (cents) to avoid floating-point errors.\n"
             context += "</Knowledge>\n"
         
-        return context
+        return (True, context)
