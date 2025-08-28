@@ -22,12 +22,14 @@ class Planner:
         self.prompt_builder = PromptBuilder()
         planning_model_name = ai_settings.model_selection.planning
         
-        # The constructor's ONLY job is to get the client from the factory.
         self.client = get_instructor_client(planning_model_name)
         
-        # We get the provider name directly from the client for logging.
-        # The client.provider attribute might be a string or an enum, so we convert to string.
-        self.provider_name = str(getattr(self.client, 'provider', 'unknown'))
+        # --- MODIFIED: Correctly determine the provider name for logging ---
+        self.provider_name = "unknown"
+        for provider, config in ai_settings.providers.items():
+            if planning_model_name in config.models:
+                self.provider_name = provider
+                break
 
 
     async def create_plan(
