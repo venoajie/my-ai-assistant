@@ -107,17 +107,18 @@ jobs:
         id: download_previous
         run: |
           INDEX_DIR=".ai_rag_index"
-          echo "Attempting to download previous index to enable smart indexing..."
+          echo "Attempting to download previous index..."
+          # The "|| true" prevents the workflow from failing if the index doesn't exist yet
           oci os object get --namespace "${OCI_NAMESPACE}" --bucket-name "${OCI_BUCKET}" --name "indexes/${BRANCH_NAME}/latest/index.tar.gz" --file index.tar.gz || true
           
           if [ -f "index.tar.gz" ]; then
             echo "Previous index found. Unpacking for incremental update."
             mkdir -p "${INDEX_DIR}"
             tar -xzf index.tar.gz -C "${INDEX_DIR}"
-            echo "unpacked=true" >> $GITHUB_OUTPUT
+            echo "unpacked=true" >> "$GITHUB_OUTPUT"
           else
             echo "No previous index found. A full re-index will be performed."
-            echo "unpacked=false" >> $GITHUB_OUTPUT
+            echo "unpacked=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Determine Indexing Mode
@@ -134,7 +135,6 @@ jobs:
             echo "mode=full" >> $GITHUB_OUTPUT
           fi
 
-      # <<< FIX: Add this new step to satisfy the Pydantic validation >>>
       - name: Create CI-Specific AI Config
         run: |
           cat > .ai_config.yml << EOF
@@ -145,11 +145,16 @@ jobs:
           EOF
           echo "Created .ai_config.yml to satisfy config validation."
 
+
       - name: Run Indexer
         run: |
-          ai-index . \
-            --branch "${{ env.BRANCH_NAME }}" \
-            ${{ steps.mode.outputs.mode == 'full' && '--force-reindex' || '' }}
+          # The mode is now correctly determined
+          INDEXER_ARGS=""
+          if [[ "${{ steps.mode.outputs.mode }}" == "full" ]]; then
+            INDEXER_ARGS="--force-reindex"
+          fi
+          
+          ai-index . --branch "${{ env.BRANCH_NAME }}" $INDEXER_ARGS
             
       - name: Upload Index to Object Storage
         run: |
