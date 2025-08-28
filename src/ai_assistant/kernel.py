@@ -32,12 +32,12 @@ logger = structlog.get_logger(__name__)
 async def _generate_refactored_code(
     file_path_str: str, 
     instructions: str,
-    ) -> Optional[str]:
+    ) -> str: # Modified to always return a string
     """Helper function to perform the LLM call for code refactoring."""
     file_path = Path(file_path_str)
     if not file_path.exists():
         logger.warning("File to refactor not found, skipping.", file=file_path_str)
-        return None
+        return "" # Return empty string on failure
     
     logger.info("Generating refactored content for plan...", file=file_path_str)
     original_content = file_path.read_text(encoding='utf-8')
@@ -57,11 +57,17 @@ Modified Code:"""
     handler = ResponseHandler()
     synthesis_model = ai_settings.model_selection.synthesis
     result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
+    
+    # --- MODIFIED: Check for API call failure indicated by "ERROR:" prefix ---
+    if result["content"].strip().startswith("❌ ERROR:"):
+        logger.error("Code generation API call failed.", file=file_path_str, error=result["content"])
+        return "" # Return empty string on failure
+
     refactored_content = result["content"].strip()
 
     if not refactored_content:
         logger.error("Refactoring agent returned empty content. Skipping file.", file=file_path_str)
-        return None
+        return "" # Return empty string on failure
     
     return refactored_content
 
@@ -93,9 +99,12 @@ async def _expand_refactoring_workflow_plan(
     ))
 
     # 2. Generate and Write Files
+    successful_files = 0
     for file_path in files_to_refactor:
         refactored_content = await _generate_refactored_code(file_path, instructions)
+        # --- MODIFIED: Explicitly check for non-empty content before adding steps ---
         if refactored_content:
+            successful_files += 1
             new_steps.append(PlanStep(
                 thought=f"Write the generated refactored content to '{file_path}'.",
                 tool_name="write_file",
@@ -107,12 +116,18 @@ async def _expand_refactoring_workflow_plan(
                 args={"path": file_path}
             ))
 
-    # 3. Commit
-    new_steps.append(PlanStep(
-        thought="Commit all staged changes with the planned message.",
-        tool_name="git_commit",
-        args={"commit_message": commit_message}
-    ))
+    # --- MODIFIED: Only commit if at least one file was successfully generated ---
+    if successful_files > 0:
+        # 3. Commit
+        new_steps.append(PlanStep(
+            thought="Commit all staged changes with the planned message.",
+            tool_name="git_commit",
+            args={"commit_message": commit_message}
+        ))
+    else:
+        logger.error("Code generation failed for all files. No commit will be made.")
+        # Return failure if no files were processed.
+        return False, []
     
     return True, new_steps
 
