@@ -26,6 +26,8 @@ context_optimizer:
 tools:
   git:
     branch_prefix: "ai"
+  shell:
+    allowed_commands: []  # Default empty list
 deepseek_discount:
   start_hour: 16
   start_minute: 30
