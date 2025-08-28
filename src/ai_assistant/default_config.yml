@@ -1,7 +1,7 @@
 # ai_assistant/default_config.yml
 config_version: "1.4.0"
 model_selection:
-  planning: "gemini-2.5-flash"
+  planning: "deepseek-coder"
   critique: "gemini-2.5-flash"
   synthesis: "deepseek-reasoner"
   json_corrector: "gemini-2.5-flash-lite"
