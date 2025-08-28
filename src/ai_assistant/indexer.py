@@ -33,7 +33,6 @@ logger = structlog.get_logger()
 EMBEDDING_BATCH_SIZE = 16
 DEFAULT_IGNORE_PATTERNS = [".git/", ".venv/", "venv/", "__pycache__/", "*.pyc", "*.log", ".DS_Store", "node_modules/", "build/", "dist/", ".idea/", ".vscode/", "*.egg-info/", "src/ai_assistant/personas/", ".ai/personas/", "src/ai_assistant/internal_data/"]
 
-# --- FIX 1: FULLY REFACTORED EmbeddingProvider CLASS ---
 class EmbeddingProvider:
     def __init__(self, provider_name: str = "local"):
         self.provider_name = provider_name
@@ -82,8 +81,7 @@ class Indexer:
         self.index_path = project_root / ai_settings.rag.local_index_path
         self.state_path = self.index_path / "state.json"
         self.index_path.mkdir(exist_ok=True)
-        self.embedding_provider_name = embedding_provider
-
+        
         if not chromadb:
             raise ImportError("ChromaDB is not installed. Please install with 'pip install -e .[indexing]'")
         
@@ -99,13 +97,26 @@ class Indexer:
         self.db_client = chromadb.PersistentClient(path=str(self.index_path))
         self.collection = self.db_client.get_or_create_collection(self.collection_name)
         
-        # --- FIX 2: PASS THE PROVIDER NAME TO THE CLASS ---
-        self.embed_provider = EmbeddingProvider(provider_name=self.embedding_provider_name)
+        # --- MODIFIED: Select a single, active provider for the entire run ---
+        provider_names_to_try = [embedding_provider] + ai_settings.rag.fallback_embedding_providers
+        self.active_provider = self._select_active_provider(provider_names_to_try)
+        if not self.active_provider:
+            raise RuntimeError("FATAL: No embedding providers could be initialized successfully.")
         
         self.state = self._load_state()
         self.ignore_patterns = self._load_ignore_patterns()
 
-    # ... (all other methods like _load_state, _walk_project, etc., are unchanged) ...
+    def _select_active_provider(self, provider_names: List[str]) -> Optional[EmbeddingProvider]:
+        """Tries to initialize providers in order and returns the first successful one."""
+        for name in provider_names:
+            try:
+                provider = EmbeddingProvider(name)
+                logger.info(f"Successfully selected '{name}' as the embedding provider for this run.")
+                return provider
+            except (ImportError, ValueError) as e:
+                logger.warning(f"Could not initialize provider '{name}', trying next.", reason=str(e))
+        return None
+
     def _load_state(self) -> Dict[str, str]:
         if self.state_path.exists():
             with open(self.state_path, 'r') as f: return json.load(f)
@@ -177,7 +188,7 @@ class Indexer:
         return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size - overlap)]
 
     def run(self, force_reindex: bool = False):
-        logger.info("Starting indexer for project", project_root=self.project_root, provider=self.embedding_provider_name)
+        logger.info("Starting indexer for project", project_root=self.project_root, active_provider=self.active_provider.provider_name)
         if force_reindex:
             logger.warning("Forcing re-index of all files and clearing collection.")
             self.state = {}
@@ -213,7 +224,7 @@ class Indexer:
         if not files_to_index:
             logger.info("No new or modified files to index. Project is up to date.")
             self._save_state()
-            self._create_manifest() # Still create manifest to update timestamp/commit
+            self._create_manifest()
             return
 
         logger.info("Found new or modified files to index", count=len(files_to_index))
@@ -248,15 +259,19 @@ class Indexer:
 
         logger.info("Total valid chunks to process", count=len(total_chunks_to_embed))  
 
+        # --- MODIFIED: Hardened batch processing loop with a single, pre-selected provider ---
         for i in range(0, len(total_chunks_to_embed), EMBEDDING_BATCH_SIZE):
             batch = total_chunks_to_embed[i:i+EMBEDDING_BATCH_SIZE]
             batch_texts = [item['document'] for item in batch]
             
             logger.info("Processing batch", current=i//EMBEDDING_BATCH_SIZE + 1, total=(len(total_chunks_to_embed) + EMBEDDING_BATCH_SIZE - 1)//EMBEDDING_BATCH_SIZE)
             
-            embeddings = self.embed_provider.get_embeddings(batch_texts)
-            
-            if embeddings and len(embeddings) == len(batch):
+            try:
+                embeddings = self.active_provider.get_embeddings(batch_texts)
+                if not embeddings:
+                    # This is a hard failure. Halt the entire run.
+                    raise RuntimeError(f"Provider '{self.active_provider.provider_name}' returned no embeddings for batch starting with chunk '{batch[0]['id']}'.")
+
                 self.collection.upsert(
                     ids=[item['id'] for item in batch],
                     embeddings=embeddings,
@@ -267,8 +282,14 @@ class Indexer:
                     source_file = item['metadata']['source']
                     if source_file in file_hashes_to_update:
                         self.state[source_file] = file_hashes_to_update[source_file]
-            else:
-                logger.error("Failed to get embeddings for batch", first_chunk_id=batch[0]['id'])
+            except Exception as e:
+                logger.critical(
+                    "Embedding provider failed mid-run. Halting to prevent index corruption.",
+                    batch_start_id=batch[0]['id'],
+                    error=str(e)
+                )
+                # Re-raise to stop the entire indexing process immediately.
+                raise
 
         self._save_state()
         self._create_manifest()
@@ -288,16 +309,15 @@ class Indexer:
             "branch": self.branch,
             "commit_sha": self._get_current_commit_sha(),
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
-            "embedding_provider": self.embedding_provider_name,
-            "embedding_model": self.embed_provider.model_name
+            "embedding_provider": self.active_provider.provider_name,
+            "embedding_model": self.active_provider.model_name
         }
         try:
             manifest_path.write_text(json.dumps(manifest_data, indent=2))
             logger.info("Created index manifest.", path=str(manifest_path))
         except Exception as e:
             logger.error("Failed to write index manifest", error=str(e))
-
-# --- FIX 3: FULLY REFACTORED main() FUNCTION ---
+            
 def main():
     setup_logging()
     parser = argparse.ArgumentParser(description="AI Assistant RAG Indexer")
@@ -322,8 +342,8 @@ def main():
             embedding_provider=args.embedding_provider
         )
         indexer.run(force_reindex=args.force_reindex)
-    except (ImportError, ConnectionError, ValueError) as e:
-        logger.critical("Failed to initialize indexer", error=str(e))
+    except (ImportError, ConnectionError, ValueError, RuntimeError) as e:
+        logger.critical("Failed to initialize or run indexer", error=str(e))
         
 if __name__ == "__main__":
     main()

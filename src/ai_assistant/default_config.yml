@@ -5,6 +5,7 @@ model_selection:
   critique: "gemini-2.5-flash"
   synthesis: "deepseek-reasoner"
   json_corrector: "gemini-2.5-flash-lite"
+  query_expander: "gemini-2.5-flash-lite"
 default_provider: "gemini"
 general:
   # Path to the user's global personas directory, relative to the home directory.

@@ -45,12 +45,18 @@ class ChromaDBClient:
 
     def connect(self) -> Tuple[bool, str]:
         if not chromadb:
-            return (False, "ChromaDB is not installed. Please run 'pip install -e .[client]'")
+            return (
+                False, 
+                "ChromaDB is not installed. Please run 'pip install -e .[client]'",
+                )
         
         try:
             self.local_path = self.project_root / ai_settings.rag.local_index_path
             if not self.local_path.exists():
-                return (False, f"Local index path does not exist: {self.local_path}.")
+                return (
+                    False, 
+                    f"Local index path does not exist: {self.local_path}.",
+                    )
             
             logger.debug("Connecting to local ChromaDB", path=str(self.local_path))
             self.client = chromadb.PersistentClient(path=str(self.local_path))
@@ -61,7 +67,6 @@ class ChromaDBClient:
             logger.debug("Getting collection", collection_name=collection_name)
             self.collection = self.client.get_collection(collection_name)
             
-            # --- FIX: Stricter model loading from the index manifest ---
             manifest_path = self.local_path / "index_manifest.json"
             if not manifest_path.exists():
                 return (False, "CRITICAL: index_manifest.json not found in the downloaded index. Cannot determine which embedding model to use.")
@@ -152,7 +157,10 @@ class RAGContextPlugin(ContextPluginBase):
         
         oci_client = _get_oci_client()
         if not oci_client:
-            return (False, "OCI client could not be initialized. Check your ~/.oci/config.")
+            return (
+                False, 
+                "OCI client could not be initialized. Check your ~/.oci/config.",
+                )
 
         branch = get_normalized_branch_name(self.project_root, ai_settings.rag.default_branch)
         object_name = f"indexes/{branch}/latest/index.tar.gz"

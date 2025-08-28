@@ -18,6 +18,7 @@ from .persona_loader import PersonaLoader
 from .plan_validator import generate_plan_expectation, check_plan_compliance
 from .planner import Planner
 from .prompt_builder import PromptBuilder
+from .query_expander import gather_high_level_context, expand_query_with_context
 from .response_handler import ResponseHandler
 from .plugins.rag_plugin import RAGContextPlugin
 from .tools import TOOL_REGISTRY
@@ -115,7 +116,6 @@ async def _expand_refactoring_workflow_plan(
     
     return True, new_steps
 
-
 async def orchestrate_agent_run(
     query: str,
     history: List[Dict[str, Any]],
@@ -140,13 +140,23 @@ async def orchestrate_agent_run(
             logger.error("Persona loading failed", persona=persona_alias, error=str(e))
             return {"response": error_msg, "metrics": metrics}
 
-    # --- RAG CONTEXT INJECTION ---
+
+    # --- CONTEXT-AWARE QUERY EXPANSION (REFACTORED) ---
+    # 1. Gather high-level context from auto-injected files
+    auto_inject_files = ai_settings.general.auto_inject_files or []
+    high_level_context_str = gather_high_level_context(auto_inject_files)
+
+    # 2. Expand the query using the centralized function
+    effective_query = await expand_query_with_context(query, high_level_context_str)
+
+    # --- RAG CONTEXT INJECTION ---            
     logger.info("Attempting to retrieve RAG context to enhance planning.")
     rag_content = "" # Ensure rag_content is always defined for direct response path
     system_note = None
     try:
         rag_plugin = RAGContextPlugin(project_root=Path.cwd())
-        success, rag_content_result = rag_plugin.get_context(query, [])
+        # Use the 'effective_query' instead of the original 'query'
+        success, rag_content_result = rag_plugin.get_context(effective_query, [])
                 
         if success and rag_content_result:
             rag_content = rag_content_result # Store the content for later use
@@ -277,20 +287,12 @@ async def orchestrate_agent_run(
             critique_client = get_instructor_client(critique_model_name)
             critique_gen_config = ai_settings.generation_params.critique.model_dump(exclude_none=True)
 
-            provider_name_str = str(critique_client.provider).lower()
-            if "gemini" in provider_name_str:
-                critique_response = await critique_client.create(
-                    response_model=CritiqueResponse,
-                    messages=[{"role": "user", "content": critique_prompt}],
-                    generation_config=critique_gen_config,
-                )
-            else:
-                critique_response = await critique_client.chat.completions.create(
-                    model=critique_model_name,
-                    response_model=CritiqueResponse,
-                    messages=[{"role": "user", "content": critique_prompt}],
-                    **critique_gen_config,
-                )
+            critique_response = await critique_client.chat.completions.create(
+                model=critique_model_name,
+                response_model=CritiqueResponse,
+                messages=[{"role": "user", "content": critique_prompt}],
+                **critique_gen_config,
+            )
 
             critique = critique_response.critique
             optimizer = ContextOptimizer()
@@ -303,7 +305,7 @@ async def orchestrate_agent_run(
         except Exception as e:
             critique = "Plan validation step failed due to an internal error."
             logger.warning("Could not perform plan validation.", error=str(e))
-
+            
     # --- DYNAMIC PLAN EXPANSION FOR WORKFLOWS ---
     # This is where we centralize the "thinking" for complex tools.
     # We check if the plan contains a workflow tool and expand it before execution.

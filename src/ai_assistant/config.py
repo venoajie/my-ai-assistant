@@ -16,7 +16,7 @@ class ModelSelectionConfig(BaseModel):
     synthesis: str
     critique: str
     json_corrector: str
-    
+    query_expander: str 
     
 class PathsConfig(BaseModel):
     """Holds all key resolved paths for the application."""
@@ -59,8 +59,14 @@ class ContextOptimizerConfig(BaseModel):
 class GitToolConfig(BaseModel):
     branch_prefix: str
 
+# --- NEW: Configuration model for the shell tool ---
+class ShellToolConfig(BaseModel):
+    allowed_commands: List[str] = Field(default_factory=list)
+
 class ToolsConfig(BaseModel):
     git: GitToolConfig
+    # --- ADDED: Shell tool config is now part of the main ToolsConfig ---
+    shell: ShellToolConfig
 
 class DeepSeekDiscountConfig(BaseModel):
     start_hour: int
