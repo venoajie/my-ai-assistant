@@ -144,14 +144,28 @@ class Indexer:
         return patterns
 
     def _is_ignored(self, path: Path) -> bool:
-        rel_path_str = os.path.normpath(str(path.relative_to(self.project_root)))
+        """
+        Checks if a given path should be ignored based on the loaded patterns.
+        This version correctly handles directory-specific patterns.
+        """
+        # Use POSIX-style paths for consistent matching, even on Windows.
+        rel_path_str = path.relative_to(self.project_root).as_posix()
+        
         for pattern in self.ignore_patterns:
-            norm_pattern = os.path.normpath(pattern)
-            if norm_pattern.endswith(os.sep):
-                if (rel_path_str + os.sep).startswith(norm_pattern): return True
-            elif fnmatch.fnmatch(rel_path_str, norm_pattern): return True
-        return False
+            # Also use POSIX-style paths for the pattern.
+            posix_pattern = pattern.replace('\\', '/')
 
+            if posix_pattern.endswith('/'):
+                # This is a directory pattern. It should match the directory itself
+                # or any file/directory inside it.
+                dir_pattern = posix_pattern.rstrip('/')
+                if rel_path_str == dir_pattern or rel_path_str.startswith(dir_pattern + '/'):
+                    return True
+            elif fnmatch.fnmatch(rel_path_str, posix_pattern):
+                # This is a file pattern, use standard glob matching.
+                return True
+        return False
+    
     def _walk_project(self) -> Generator[Path, None, None]:
         for root, dirs, files in os.walk(self.project_root, topdown=True):
             root_path = Path(root)
