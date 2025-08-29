@@ -146,34 +146,49 @@ class Indexer:
     def _is_ignored(self, path: Path) -> bool:
         """
         Checks if a given path should be ignored based on the loaded patterns.
-        This version correctly handles directory-specific patterns.
+        This version is specifically designed to work with the pruning logic in _walk_project.
         """
         # Use POSIX-style paths for consistent matching, even on Windows.
+        # This is the key to ensuring patterns match correctly across environments.
         rel_path_str = path.relative_to(self.project_root).as_posix()
         
         for pattern in self.ignore_patterns:
-            # Also use POSIX-style paths for the pattern.
             posix_pattern = pattern.replace('\\', '/')
 
-            if posix_pattern.endswith('/'):
-                # This is a directory pattern. It should match the directory itself
-                # or any file/directory inside it.
-                dir_pattern = posix_pattern.rstrip('/')
-                if rel_path_str == dir_pattern or rel_path_str.startswith(dir_pattern + '/'):
-                    return True
-            elif fnmatch.fnmatch(rel_path_str, posix_pattern):
-                # This is a file pattern, use standard glob matching.
+            # Use fnmatch for all pattern matching, as it handles file and directory globs correctly.
+            if fnmatch.fnmatch(rel_path_str, posix_pattern):
                 return True
+            
+            # This is the crucial part for directory pruning: if a pattern ends with '/',
+            # it should also match any path that STARTS with that directory path.
+            if posix_pattern.endswith('/') and rel_path_str.startswith(posix_pattern):
+                return True
+                
         return False
-    
+
     def _walk_project(self) -> Generator[Path, None, None]:
+        """
+        Walks the project directory, yielding non-ignored files.
+        This version uses a more explicit and robust method for pruning directories.
+        """
         for root, dirs, files in os.walk(self.project_root, topdown=True):
             root_path = Path(root)
-            dirs[:] = [d for d in dirs if not self._is_ignored(root_path / d)]
+            
+            # First, yield non-ignored files from the current directory
             for name in files:
                 file_path = root_path / name
-                if not self._is_ignored(file_path): yield file_path
-
+                if not self._is_ignored(file_path):
+                    yield file_path
+            
+            # Then, prune the list of directories to visit next
+            # We create a copy to iterate over while modifying the original `dirs` list
+            original_dirs = list(dirs)
+            for d in original_dirs:
+                dir_path = root_path / d
+                # If the directory path itself matches an ignore pattern, remove it from the list
+                if self._is_ignored(dir_path):
+                    dirs.remove(d)
+                    
     @staticmethod
     def _calculate_hash(file_path: Path) -> str:
         hasher = hashlib.sha256()
