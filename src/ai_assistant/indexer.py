@@ -143,7 +143,12 @@ class Indexer:
         logger.info("Loaded ignore patterns", count=len(patterns))
         return patterns
 
+
     def _is_ignored(self, path: Path) -> bool:
+        """
+        Checks if a given path should be ignored based on the loaded patterns.
+        This version is gitignore-compliant for robust directory matching.
+        """
         # Use POSIX-style paths for consistent matching, even on Windows.
         rel_path_str = path.relative_to(self.project_root).as_posix()
         
@@ -156,7 +161,7 @@ class Indexer:
 
             # This is the critical fix for directory pruning.
             # If the pattern is a directory pattern (ends with '/'),
-            # we check if the path is that directory OR is inside that directory.
+            # we check if the path IS that directory OR is INSIDE that directory.
             if posix_pattern.endswith('/'):
                 # Check if 'my-ai-assistant' matches 'my-ai-assistant/'
                 if rel_path_str == posix_pattern.rstrip('/'):
@@ -166,7 +171,7 @@ class Indexer:
                     return True
                     
         return False
-    
+
     def _walk_project(self) -> Generator[Path, None, None]:
         """
         Walks the project directory, yielding non-ignored files.
@@ -174,27 +179,8 @@ class Indexer:
         """
         for root, dirs, files in os.walk(self.project_root, topdown=True):
             root_path = Path(root)
-            
-            # First, yield non-ignored files from the current directory
-            for name in files:
-                file_path = root_path / name
-                if not self._is_ignored(file_path):
-                    yield file_path
-            
-            # Then, prune the list of directories to visit next
-            # We create a copy to iterate over while modifying the original `dirs` list
-            original_dirs = list(dirs)
-            for d in original_dirs:
-                dir_path = root_path / d
-                # If the directory path itself matches an ignore pattern, remove it from the list
-                if self._is_ignored(dir_path):
-                    dirs.remove(d)
 
-    def _walk_project(self) -> Generator[Path, None, None]:
-        for root, dirs, files in os.walk(self.project_root, topdown=True):
-            root_path = Path(root)
-
-            # If the directory we are currently visiting is itself ignored,
+            # CRITICAL CHECK: If the directory we are currently visiting is itself ignored,
             # we must skip it entirely. This prevents processing files in an already-entered
             # ignored directory (e.g., the nested 'my-ai-assistant' repo).
             # We exempt the project_root itself from this check.
@@ -204,7 +190,6 @@ class Indexer:
                 continue
 
             # Prune subdirectories from the list that os.walk will visit in future iterations.
-            # This is the standard and correct way to prune.
             dirs[:] = [d for d in dirs if not self._is_ignored(root_path / d)]
             
             # Now, yield the files from this valid (non-ignored) directory.
@@ -212,8 +197,7 @@ class Indexer:
                 file_path = root_path / name
                 # We still need to check individual files against file-specific patterns (e.g., *.pyc)
                 if not self._is_ignored(file_path):
-                    yield file_path
-                                        
+                    yield file_path                                        
     @staticmethod
     def _calculate_hash(file_path: Path) -> str:
         hasher = hashlib.sha256()
