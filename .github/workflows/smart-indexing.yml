@@ -50,6 +50,13 @@ jobs:
           ref: develop
           path: my-ai-assistant
 
+      - name: Create Dynamic .aiignore for CI
+        run: |
+          # This is the critical fix. We are telling the indexer to completely ignore
+          # the directory where its own source code was checked out, preventing self-indexing.
+          echo "my-ai-assistant/" >> .aiignore
+          echo "::notice:: Dynamically added 'my-ai-assistant/' to .aiignore to prevent self-indexing."
+          
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -229,7 +236,7 @@ jobs:
             DIFF=$((AFTER_COUNT - BEFORE_COUNT))
             
             echo "File count in state.json -> Before: $BEFORE_COUNT | After: $AFTER_COUNT | New Files Added: $DIFF"
-                      
+
       - name: Upload Indexer Log Artifact
         if: always() # This ensures the log is uploaded even if the indexer step fails
         uses: actions/upload-artifact@v4
