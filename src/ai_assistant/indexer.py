@@ -373,7 +373,14 @@ def main():
         help="The embedding provider to use (default: local)."
     )
     args = parser.parse_args()
+    
+    # --- THE CRITICAL FIX ---
+    # Resolve the input directory to an absolute path immediately.
+    # This ensures all subsequent path operations inside the Indexer class
+    # are unambiguous and robust, fixing the matching issue.
     project_path = Path(args.directory).resolve()
+    # --- END OF FIX ---
+
     if not project_path.is_dir():
         logger.error("Path is not a valid directory", path=project_path)
         return
