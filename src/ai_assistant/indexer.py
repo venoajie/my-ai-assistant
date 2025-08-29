@@ -189,6 +189,10 @@ class Indexer:
 
     def run(self, force_reindex: bool = False):
         logger.info("Starting indexer for project", project_root=self.project_root, active_provider=self.active_provider.provider_name)
+        
+        # Ensures that any dynamically created .aiignore file (like in CI) is respected.
+        self.ignore_patterns = self._load_ignore_patterns()
+
         if force_reindex:
             logger.warning("Forcing re-index of all files and clearing collection.")
             self.state = {}
@@ -259,7 +263,7 @@ class Indexer:
 
         logger.info("Total valid chunks to process", count=len(total_chunks_to_embed))  
 
-        # --- MODIFIED: Hardened batch processing loop with a single, pre-selected provider ---
+        # --- Batch processing loop with a single, pre-selected provider ---
         for i in range(0, len(total_chunks_to_embed), EMBEDDING_BATCH_SIZE):
             batch = total_chunks_to_embed[i:i+EMBEDDING_BATCH_SIZE]
             batch_texts = [item['document'] for item in batch]
@@ -294,7 +298,7 @@ class Indexer:
         self._save_state()
         self._create_manifest()
         logger.info("Indexing process complete and manifest created.")
-
+        
     def _get_current_commit_sha(self) -> Optional[str]:
         try:
             result = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, check=True, cwd=self.project_root)
