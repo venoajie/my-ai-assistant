@@ -144,28 +144,29 @@ class Indexer:
         return patterns
 
     def _is_ignored(self, path: Path) -> bool:
-        """
-        Checks if a given path should be ignored based on the loaded patterns.
-        This version is specifically designed to work with the pruning logic in _walk_project.
-        """
         # Use POSIX-style paths for consistent matching, even on Windows.
-        # This is the key to ensuring patterns match correctly across environments.
         rel_path_str = path.relative_to(self.project_root).as_posix()
         
         for pattern in self.ignore_patterns:
             posix_pattern = pattern.replace('\\', '/')
 
-            # Use fnmatch for all pattern matching, as it handles file and directory globs correctly.
+            # Standard file/path glob matching
             if fnmatch.fnmatch(rel_path_str, posix_pattern):
                 return True
-            
-            # This is the crucial part for directory pruning: if a pattern ends with '/',
-            # it should also match any path that STARTS with that directory path.
-            if posix_pattern.endswith('/') and rel_path_str.startswith(posix_pattern):
-                return True
-                
-        return False
 
+            # This is the critical fix for directory pruning.
+            # If the pattern is a directory pattern (ends with '/'),
+            # we check if the path is that directory OR is inside that directory.
+            if posix_pattern.endswith('/'):
+                # Check if 'my-ai-assistant' matches 'my-ai-assistant/'
+                if rel_path_str == posix_pattern.rstrip('/'):
+                    return True
+                # Check if 'my-ai-assistant/src/tools.py' starts with 'my-ai-assistant/'
+                if rel_path_str.startswith(posix_pattern):
+                    return True
+                    
+        return False
+    
     def _walk_project(self) -> Generator[Path, None, None]:
         """
         Walks the project directory, yielding non-ignored files.
