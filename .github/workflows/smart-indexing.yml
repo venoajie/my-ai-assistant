@@ -56,7 +56,7 @@ jobs:
           # the directory where its own source code was checked out, preventing self-indexing.
           echo "my-ai-assistant/" >> .aiignore
           echo "::notice:: Dynamically added 'my-ai-assistant/' to .aiignore to prevent self-indexing."
-          
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -86,9 +86,18 @@ jobs:
 
       - name: Install All Dependencies with uv
         run: |
-          # Use 'uv pip install' as a drop-in replacement for 'pip install'
-          uv pip install -e ./my-ai-assistant[indexing]
+          # Use --no-cache and --force-reinstall to ensure we are using the freshly
+          # checked-out source code and not a stale, cached version of the package.
+          # This is the critical fix for the stale code execution issue.
+          uv pip install --no-cache --force-reinstall -e ./my-ai-assistant[indexing]
           uv pip install oci-cli
+          
+      - name: Verify Indexer Source Code
+        run: |
+          echo "::group::Verifying the source code of indexer.py before execution"
+          echo "This will confirm that the CI runner is using the latest version of the file."
+          cat ./my-ai-assistant/src/ai_assistant/indexer.py
+          echo "::endgroup::"
 
       - name: Configure Oracle Cloud CLI
         env:
