@@ -75,15 +75,20 @@ jobs:
           path: ~/.cache/uv
           key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml', '**/requirements.txt') }}
           
-      - name: Create and Activate Virtual Environment
+      - name: Create Clean Environment and Install Dependencies
         run: |
-          # Create a virtual environment in the standard .venv directory
+          # Brute-force cache bust: remove the entire virtual environment if it exists.
+          rm -rf .venv
+          
+          # Create a fresh virtual environment
           uv venv
-          # Source the activation script to make it active for subsequent steps
           source .venv/bin/activate
-          # Add the venv's bin to the GITHUB_PATH so commands like 'ai-index' are found
           echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
 
+          # Install dependencies without using the uv cache to guarantee freshness.
+          uv pip install --no-cache -e ./my-ai-assistant[indexing]
+          uv pip install oci-cli
+          
       - name: Install All Dependencies with uv
         run: |
           # Use --no-cache and --force-reinstall to ensure we are using the freshly
