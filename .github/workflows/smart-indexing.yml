@@ -108,16 +108,29 @@ jobs:
         run: |
           INDEX_DIR=".ai_rag_index"
           echo "Attempting to download previous index..."
-          # The "|| true" prevents the workflow from failing if the index doesn't exist yet
-          oci os object get --namespace "${OCI_NAMESPACE}" --bucket-name "${OCI_BUCKET}" --name "indexes/${BRANCH_NAME}/latest/index.tar.gz" --file index.tar.gz || true
           
-          if [ -f "index.tar.gz" ]; then
-            echo "Previous index found. Unpacking for incremental update."
+          # Always start with a clean directory to prevent contamination
+          rm -rf "${INDEX_DIR}"
+
+          # Use a conditional to handle the download failing gracefully
+          if oci os object get --namespace "${OCI_NAMESPACE}" --bucket-name "${OCI_BUCKET}" --name "indexes/${BRANCH_NAME}/latest/index.tar.gz" --file index.tar.gz; then
+            echo "Previous index downloaded successfully. Unpacking..."
             mkdir -p "${INDEX_DIR}"
-            tar -xzf index.tar.gz -C "${INDEX_DIR}"
-            echo "unpacked=true" >> "$GITHUB_OUTPUT"
+            
+            # Unpack with verbose output for better logging (v flag)
+            tar -xzvf index.tar.gz -C "${INDEX_DIR}"
+            
+            # --- CRITICAL VERIFICATION ---
+            # Verify that the state file exists after extraction. If not, fail the delta logic.
+            if [ -f "${INDEX_DIR}/state.json" ]; then
+              echo "✅ state.json found. Incremental indexing is possible."
+              echo "unpacked=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::error::state.json NOT FOUND after unpacking the archive. This indicates a corrupted or badly formed index archive. Forcing a full re-index."
+              echo "unpacked=false" >> "$GITHUB_OUTPUT"
+            fi
           else
-            echo "No previous index found. A full re-index will be performed."
+            echo "No previous index found in Object Storage. A full re-index will be performed."
             echo "unpacked=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -146,23 +159,105 @@ jobs:
           echo "Created .ai_config.yml to satisfy config validation."
 
 
-      - name: Run Indexer
+      - name: Verify Index State Before Indexing
+        if: steps.download_previous.outputs.unpacked == 'true'
         run: |
-          # The mode is now correctly determined
+          INDEX_DIR=".ai_rag_index"
+          echo "::group::Inspecting Pre-run Index State for Delta Update"
+          
+          if [ -f "${INDEX_DIR}/state.json" ]; then
+            echo "✅ State file found."
+            # Use jq to safely parse and summarize the state file
+            echo "Number of files tracked in state.json: $(jq 'keys | length' ${INDEX_DIR}/state.json)"
+            echo "Sample of tracked files and hashes:"
+            jq 'to_entries | .[0:5]' "${INDEX_DIR}/state.json"
+          else
+            echo "::error::state.json is MISSING. The indexer will be forced into a full re-index."
+          fi
+
+          if [ -f "${INDEX_DIR}/index_manifest.json" ]; then
+            echo "✅ Manifest file found:"
+            cat "${INDEX_DIR}/index_manifest.json"
+          else
+            echo "::warning::index_manifest.json not found."
+          fi
+
+          # Check for the actual ChromaDB database file as a sanity check
+          if [ -f "${INDEX_DIR}/chroma.sqlite3" ]; then
+             echo "✅ ChromaDB database file (chroma.sqlite3) found."
+          else
+             echo "::warning::ChromaDB database file not found. The collection may be empty."
+          fi
+          
+          echo "::endgroup::"
+          
+
+      - name: Save Pre-run State for Comparison
+        if: steps.download_previous.outputs.unpacked == 'true'
+        run: |
+          if [ -f ".ai_rag_index/state.json" ]; then
+            cp .ai_rag_index/state.json before_state.json
+            echo "::notice::Backed up pre-run state.json for post-run comparison."
+          fi
+
+      - name: Run Indexer
+        id: indexer_run
+        env:
+          # Set log level to DEBUG for this step to see detailed file processing info
+          LOG_LEVEL: DEBUG
+        run: |
           INDEXER_ARGS=""
           if [[ "${{ steps.mode.outputs.mode }}" == "full" ]]; then
             INDEXER_ARGS="--force-reindex"
+            echo "::notice::Starting indexer in FULL RE-INDEX mode."
+          else
+            echo "::notice::Starting indexer in DELTA (incremental) mode."
           fi
           
-          ai-index . --branch "${{ env.BRANCH_NAME }}" $INDEXER_ARGS
+          # Execute the indexer. The '2>&1 | tee' command ensures that we see the log
+          # output live in the GitHub Actions runner AND save a complete copy to a file.
+          ai-index . --branch "${{ env.BRANCH_NAME }}" $INDEXER_ARGS 2>&1 | tee indexer_run.log
+          
+
+      - name: Report on Indexing Changes
+        if: steps.mode.outputs.mode == 'delta' && steps.indexer_run.outcome == 'success'
+        run: |
+          echo "::group::Analyzing Delta Indexing Results"
+          if [ -f "before_state.json" ] && [ -f ".ai_rag_index/state.json" ]; then
+            BEFORE_COUNT=$(jq 'keys | length' before_state.json)
+            AFTER_COUNT=$(jq 'keys | length' .ai_rag_index/state.json)
+            DIFF=$((AFTER_COUNT - BEFORE_COUNT))
             
+            echo "File count in state.json -> Before: $BEFORE_COUNT | After: $AFTER_COUNT | New Files Added: $DIFF"
+                      
+      - name: Upload Indexer Log Artifact
+        if: always() # This ensures the log is uploaded even if the indexer step fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: indexer-log-${{ github.sha }}
+          path: indexer_run.log
+
       - name: Upload Index to Object Storage
         run: |
           INDEX_DIR=".ai_rag_index"
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           
+          echo "Archiving the new index..."
+          # --- CRITICAL FIX ---
+          # Use -C to change directory, ensuring the archive contains the contents 
+          # of INDEX_DIR at the root, not the directory itself.
           tar -czf index.tar.gz -C "${INDEX_DIR}" .
           
+          # --- CRITICAL VERIFICATION ---
+          echo "Verifying archive contents before upload..."
+          if tar -tzf index.tar.gz | grep -q "state.json"; then
+             echo "✅ state.json confirmed to be in the archive."
+          else
+             echo "::error::CRITICAL FAILURE: state.json was NOT added to the archive. Halting upload."
+             exit 1
+          fi
+
+          echo "Uploading archive to OCI..."
           oci os object put --force \
             --namespace "${OCI_NAMESPACE}" \
             --bucket-name "${OCI_BUCKET}" \
