@@ -9,8 +9,6 @@ This document is the canonical tracker for known architectural and implementatio
 - - -
 
 ## Active Issues
-Of course. Here is a consolidated and organized report of all identified technical debt, combining both sets of findings. The issues have been grouped by theme and arranged by criticality, suitable for a `technical_debts.md` document.
-
 ---
 
 # Technical Debt & Architectural Review Findings
