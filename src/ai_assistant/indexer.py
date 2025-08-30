@@ -147,7 +147,6 @@ class Indexer:
     def _is_ignored(self, path: Path) -> bool:
         """
         Checks if a given path should be ignored based on the loaded patterns.
-        This version is gitignore-compliant for robust directory matching.
         """
         rel_path_str = os.path.normpath(str(path.relative_to(self.project_root)))
         for pattern in self.ignore_patterns:
@@ -155,31 +154,37 @@ class Indexer:
             # Check for directory patterns (e.g., "my-dir/")
             if norm_pattern.endswith(os.sep):
                 if (rel_path_str + os.sep).startswith(norm_pattern):
+                    # --- ADD THIS DEBUG LINE ---
+                    logger.debug("Ignoring path due to directory pattern", path=rel_path_str, pattern=norm_pattern)
                     return True
             # Check for file/glob patterns (e.g., "*.pyc")
             elif fnmatch.fnmatch(rel_path_str, norm_pattern):
+                # --- ADD THIS DEBUG LINE ---
+                logger.debug("Ignoring path due to file/glob pattern", path=rel_path_str, pattern=norm_pattern)
                 return True
         return False
-    
+
     def _walk_project(self) -> Generator[Path, None, None]:
         """
         Walks the project directory, yielding non-ignored files.
-        This version uses a more explicit and robust method for pruning directories.
         """
         for root, dirs, files in os.walk(self.project_root, topdown=True):
             root_path = Path(root)
 
-            # CRITICAL CHECK: If the directory we are currently visiting is itself ignored,
-            # we must skip it entirely. This prevents processing files in an already-entered
-            # ignored directory (e.g., the nested 'my-ai-assistant' repo).
-            # We exempt the project_root itself from this check.
             if root_path != self.project_root and self._is_ignored(root_path):
-                # By clearing the dirs list, we tell os.walk not to descend any further from this path.
+                # --- ADD THIS DEBUG LINE ---
+                logger.debug("Pruning ignored directory tree", directory=str(root_path))
                 dirs.clear() 
                 continue
 
-            # Prune subdirectories from the list that os.walk will visit in future iterations.
+            # --- ADD THIS DEBUG BLOCK ---
+            original_dirs = list(dirs)
             dirs[:] = [d for d in dirs if not self._is_ignored(root_path / d)]
+            pruned_dirs = set(original_dirs) - set(dirs)
+            if pruned_dirs:
+                for pruned in pruned_dirs:
+                    logger.debug("Pruning ignored subdirectory", directory=str(root_path / pruned))
+            # --- END OF DEBUG BLOCK ---
             
             # Now, yield the files from this valid (non-ignored) directory.
             for name in files:
