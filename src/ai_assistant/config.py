@@ -3,7 +3,7 @@
 import os
 import yaml
 from pathlib import Path
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 from pydantic import BaseModel, Field, model_validator
 from importlib import resources
 import structlog  
@@ -227,5 +227,15 @@ def deep_merge(base: Dict, update: Dict) -> Dict:
         else:
             base[key] = value
     return base
+
+def get_provider_info_for_model(model_name: str) -> Optional[Dict[str, Any]]:
+    """Finds the provider configuration for a given model name."""
+    for provider_name, provider_config in ai_settings.providers.items():
+        if model_name in provider_config.models:
+            return {
+                "provider_name": provider_name,
+                "config": provider_config,
+            }
+    return None
 
 ai_settings = load_ai_settings()
