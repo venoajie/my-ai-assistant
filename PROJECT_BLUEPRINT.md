@@ -217,3 +217,23 @@ Each project charter is a Markdown file that serves as the complete, version-con
 
 ### 9.3. Control Mechanism
 The `core/pmo-1` persona is the designated agent responsible for maintaining the integrity of the PMO system. All status updates to the program dashboard and project charters should be performed by this persona to ensure consistency.
+
+## 10. Governance for the RAG Indexing Pipeline
+
+The CI/CD-driven RAG pipeline is critical infrastructure. Its integrity is paramount. The following governance rules are enforced to prevent silent failures and ensure the completeness of the knowledge base.
+
+### 10.1. Index Scope and Isolation
+The indexer's scope MUST be strictly limited to the target project's version-controlled source code. To enforce this:
+
+1.  **Tool Self-Exclusion:** When the AI Assistant's source code is checked out into the target project (the "Tool-in-Project" pattern), its directory (`my-ai-assistant/`) **MUST** be added to the dynamic `.aiignore` file at runtime.
+2.  **CI Artifact Exclusion:** All transient files created by the CI workflow itself (e.g., `indexer_run.log`, `index.tar.gz`, `before_state.json`) **MUST** be added to the dynamic `.aiignore` file at runtime to prevent feedback loops.
+
+### 10.2. Curation via `.aiignore` Best Practices
+The project-level `.aiignore` file is a powerful tool for curation, but it carries the risk of silent data exclusion.
+
+-   **Favor Specificity:** Broad, ambiguous patterns (e.g., `data/`, `config/`) are forbidden. Patterns MUST be as specific as possible.
+-   **Anchor to Root:** For top-level directories, always anchor the pattern with a leading and trailing slash (e.g., `/market_data/`) to avoid accidentally matching subdirectories with the same name.
+-   **Use Extension-Based Ignores:** For non-code files scattered throughout the repository (e.g., datasets), prefer ignoring by extension (`*.csv`, `*.parquet`) over directory patterns.
+
+### 10.3. CI Sanity Checks
+To protect against silent failures from overly aggressive ignore patterns, the CI workflow **MUST** include a "Sanity Check" step after a successful indexing run. This step will parse the final `state.json` and fail the build if the total number of indexed files falls below a project-specific, reasonable threshold. This ensures that a misconfiguration cannot result in an empty or incomplete knowledge base being deployed.
