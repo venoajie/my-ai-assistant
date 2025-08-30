@@ -1,6 +1,6 @@
-generated_at_utc: '2025-08-28T08:44:49.935198+00:00'
+generated_at_utc: '2025-08-30T10:28:37.874722+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: 978af500361aa808e85b0d272a836cea087aceeb2c42e569e5d330d92fc8acb4
+validation_signature: 1949e317800455abf80631107a6c7f68ed59a613df05c9de9e19da29234d3054
 personas:
 - alias: core/arc-1
   title: Architecture Reviewer & Investigator
@@ -134,6 +134,10 @@ personas:
   title: Test Automation Engineer
   description: Generates automated tests (unit, integration, or end-to-end) for a
     given source code file.
+- alias: domains/quality/rqa-1
+  title: RAG Quality Architect
+  description: Designs, builds, and maintains the automated pipeline for testing the
+    quality, effectiveness, and performance of the RAG system.
 - alias: domains/trading/qtsa-1
   title: Quantitative Strategy Analyst
   description: Guides the development of formal, testable trading strategy blueprints
