@@ -1,13 +1,10 @@
 # src/ai_assistant/prompt_builder.py
 from typing import Dict, List, Any, Optional
 import json
-import yaml
-from importlib import resources
 from .data_models import ExecutionPlan
+from .governance import GOVERNANCE_RULES 
 
-# --- ADDED: Load governance rules at module level for efficiency ---
-governance_text = resources.files('ai_assistant').joinpath('internal_data/governance.yml').read_text(encoding='utf-8')
-GOVERNANCE_RULES = yaml.safe_load(governance_text)
+# Load planning heuristics from the already-parsed constant.
 PLANNING_HEURISTICS = GOVERNANCE_RULES.get("planning_heuristics", [])
 
 
