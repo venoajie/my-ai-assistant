@@ -166,29 +166,24 @@ async def orchestrate_agent_run(
 
 
     # --- CONTEXT-AWARE QUERY EXPANSION (REFACTORED) ---
-    # 1. Gather high-level context from auto-injected files
     auto_inject_files = ai_settings.general.auto_inject_files or []
     high_level_context_str = gather_high_level_context(auto_inject_files)
-
-    # 2. Expand the query using the centralized function
     effective_query = await expand_query_with_context(query, high_level_context_str)
 
     # --- RAG CONTEXT INJECTION ---            
     logger.info("Attempting to retrieve RAG context to enhance planning.")
-    rag_content = "" # Ensure rag_content is always defined for direct response path
+    rag_content = ""
     system_note = None
     try:
         rag_plugin = RAGContextPlugin(project_root=Path.cwd())
-        # Use the 'effective_query' instead of the original 'query'
         success, rag_content_result = rag_plugin.get_context(effective_query, [])
                 
         if success and rag_content_result:
-            rag_content = rag_content_result # Store the content for later use
+            rag_content = rag_content_result
             logger.info("Injecting RAG context into planning history.")
             system_note = f"<SystemNote>The following context was retrieved from the RAG system to aid in planning:\n{rag_content}</SystemNote>"
         elif not success:
             print(f"{Colors.YELLOW}⚠️  RAG Warning: {rag_content_result}{Colors.RESET}", file=sys.stderr)
-            # Explicitly inform the AI planner of the failure.
             system_note = f"<SystemNote>CRITICAL: The RAG context retrieval system failed with the following error: {rag_content_result}. You must proceed without this information.</SystemNote>"
             
     except Exception as e:
@@ -263,7 +258,6 @@ async def orchestrate_agent_run(
      
     prompt_builder = PromptBuilder()
 
-    # --- DIRECT RESPONSE (NO TOOLS) ---
     if not plan or not plan.steps or all(not step.tool_name for step in plan):
         print("📝 No tool execution required. Generating direct response...")
         
@@ -288,7 +282,6 @@ async def orchestrate_agent_run(
         metrics["tokens"]["synthesis"] = synthesis_result["tokens"]        
         return {"response": synthesis_result["content"], "metrics": metrics}
     
-    # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
     critique = None
     if plan and plan.steps and any(step.tool_name for step in plan):
 
@@ -330,9 +323,6 @@ async def orchestrate_agent_run(
             critique = "Plan validation step failed due to an internal error."
             logger.warning("Could not perform plan validation.", error=str(e))
             
-    # --- DYNAMIC PLAN EXPANSION FOR WORKFLOWS ---
-    # This is where we centralize the "thinking" for complex tools.
-    # We check if the plan contains a workflow tool and expand it before execution.
     if len(plan) == 1 and plan[0].tool_name == "execute_refactoring_workflow":
         logger.info("Detected refactoring workflow. Expanding plan with generated code...")
         success, expanded_steps = await _expand_refactoring_workflow_plan(plan[0])
@@ -352,7 +342,6 @@ async def orchestrate_agent_run(
             output_dir,
             )
 
-    # --- LIVE MODE (TOOL EXECUTION) ---
     print("🚀 Executing adaptive plan...")
     
     observations = []
@@ -430,12 +419,16 @@ async def orchestrate_agent_run(
             }
             
     observation_text = "\n".join(observations)
+    
+    # --- More specific failure detection logic ---
     is_failure_state = False
     for obs in observations:
-        if obs.startswith("<Observation") and ("Error:" in obs or "Critical Error:" in obs):
+        # Check for the specific failure markers injected by the kernel,
+        # not just the word "Error" which could appear in legitimate tool output (e.g., source code).
+        if ">\nError: " in obs or ">\nCritical Error: " in obs:
             is_failure_state = True
             break
-
+    
     use_compact_protocol = False
     if threshold > 0:
         temp_history_str = " ".join(turn['content'] for turn in history)
@@ -497,7 +490,7 @@ async def orchestrate_agent_run(
         "response": final_response,
         "metrics": metrics,
     }
-    
+        
 async def _handle_output_first_mode(
     plan: ExecutionPlan,
     persona_alias: str,
