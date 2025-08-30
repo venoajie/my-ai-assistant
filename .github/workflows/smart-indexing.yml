@@ -52,10 +52,20 @@ jobs:
 
       - name: Create Dynamic .aiignore for CI
         run: |
-          # This is the critical fix. We are telling the indexer to completely ignore
+          # We are telling the indexer to completely ignore
           # the directory where its own source code was checked out, preventing self-indexing.
           echo "my-ai-assistant/" >> .aiignore
-          echo "::notice:: Dynamically added 'my-ai-assistant/' to .aiignore to prevent self-indexing."
+          
+          # Ignore all transient files created by the CI workflow itself.
+          # This prevents the indexer from hashing its own artifacts.
+          echo "index.tar.gz" >> .aiignore
+          echo "before_state.json" >> .aiignore
+          echo "indexer_run.log" >> .aiignore
+
+          echo "::notice:: Dynamically added CI artifacts and self-source to .aiignore."
+          echo "::group::Generated .aiignore content"
+          cat .aiignore
+          echo "::endgroup::"
 
       - name: Setup Python
         uses: actions/setup-python@v5
