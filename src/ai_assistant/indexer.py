@@ -149,29 +149,18 @@ class Indexer:
         Checks if a given path should be ignored based on the loaded patterns.
         This version is gitignore-compliant for robust directory matching.
         """
-        # Use POSIX-style paths for consistent matching, even on Windows.
-        rel_path_str = path.relative_to(self.project_root).as_posix()
-        
+        rel_path_str = os.path.normpath(str(path.relative_to(self.project_root)))
         for pattern in self.ignore_patterns:
-            posix_pattern = pattern.replace('\\', '/')
-
-            # Standard file/path glob matching
-            if fnmatch.fnmatch(rel_path_str, posix_pattern):
+            norm_pattern = os.path.normpath(pattern)
+            # Check for directory patterns (e.g., "my-dir/")
+            if norm_pattern.endswith(os.sep):
+                if (rel_path_str + os.sep).startswith(norm_pattern):
+                    return True
+            # Check for file/glob patterns (e.g., "*.pyc")
+            elif fnmatch.fnmatch(rel_path_str, norm_pattern):
                 return True
-
-            # This is the critical fix for directory pruning.
-            # If the pattern is a directory pattern (ends with '/'),
-            # we check if the path IS that directory OR is INSIDE that directory.
-            if posix_pattern.endswith('/'):
-                # Check if 'my-ai-assistant' matches 'my-ai-assistant/'
-                if rel_path_str == posix_pattern.rstrip('/'):
-                    return True
-                # Check if 'my-ai-assistant/src/tools.py' starts with 'my-ai-assistant/'
-                if rel_path_str.startswith(posix_pattern):
-                    return True
-                    
         return False
-
+    
     def _walk_project(self) -> Generator[Path, None, None]:
         """
         Walks the project directory, yielding non-ignored files.
@@ -374,12 +363,8 @@ def main():
     )
     args = parser.parse_args()
     
-    # --- THE CRITICAL FIX ---
-    # Resolve the input directory to an absolute path immediately.
-    # This ensures all subsequent path operations inside the Indexer class
-    # are unambiguous and robust, fixing the matching issue.
-    project_path = Path(args.directory).resolve()
-    # --- END OF FIX ---
+    # keep the path relative.
+    project_path = Path(args.directory)
 
     if not project_path.is_dir():
         logger.error("Path is not a valid directory", path=project_path)
