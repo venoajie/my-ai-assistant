@@ -99,12 +99,12 @@ async def _expand_refactoring_workflow_plan(
     ))
 
     # 2. Generate and Write Files
-    successful_files = 0
+    # --- Track successful file paths instead of just a count ---
+    successful_file_paths = []
     for file_path in files_to_refactor:
         refactored_content = await _generate_refactored_code(file_path, instructions)
-        # --- MODIFIED: Explicitly check for non-empty content before adding steps ---
         if refactored_content:
-            successful_files += 1
+            successful_file_paths.append(file_path)
             new_steps.append(PlanStep(
                 thought=f"Write the generated refactored content to '{file_path}'.",
                 tool_name="write_file",
@@ -116,17 +116,26 @@ async def _expand_refactoring_workflow_plan(
                 args={"path": file_path}
             ))
 
-    # --- MODIFIED: Only commit if at least one file was successfully generated ---
-    if successful_files > 0:
+    # ---Dynamically create an accurate commit message ---
+    if successful_file_paths:
         # 3. Commit
+        final_commit_message = commit_message
+        # If not all files were refactored successfully, amend the commit message.
+        if len(successful_file_paths) != len(files_to_refactor):
+            changed_files_str = ", ".join(f"`{f}`" for f in successful_file_paths)
+            final_commit_message = (
+                f"{commit_message}\n\n"
+                f"[AI-NOTE]: This change was partially applied. Only the following files were "
+                f"successfully modified: {changed_files_str}"
+            )
+
         new_steps.append(PlanStep(
-            thought="Commit all staged changes with the planned message.",
+            thought="Commit all staged changes with an accurate message.",
             tool_name="git_commit",
-            args={"commit_message": commit_message}
+            args={"commit_message": final_commit_message}
         ))
     else:
         logger.error("Code generation failed for all files. No commit will be made.")
-        # Return failure if no files were processed.
         return False, []
     
     return True, new_steps
