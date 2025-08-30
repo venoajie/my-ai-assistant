@@ -50,21 +50,60 @@ jobs:
           ref: develop
           path: my-ai-assistant
 
+      - name: Create Dynamic .aiignore for CI
+        run: |
+          # This is the critical fix. We are telling the indexer to completely ignore
+          # the directory where its own source code was checked out, preventing self-indexing.
+          echo "my-ai-assistant/" >> .aiignore
+          echo "::notice:: Dynamically added 'my-ai-assistant/' to .aiignore to prevent self-indexing."
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
 
-
-      - name: Install Dependencies
+      - name: Install uv
         run: |
-          python -m pip install --upgrade pip wheel setuptools
-          cd my-ai-assistant
-          pip install -e .[indexing]
-          cd ..
-          pip install oci-cli
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        # This installs the uv binary and makes it available in the PATH
+        
+      - name: Configure uv Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml', '**/requirements.txt') }}
           
+      - name: Create Clean Environment and Install Dependencies
+        run: |
+          # Brute-force cache bust: remove the entire virtual environment if it exists.
+          rm -rf .venv
+          
+          # Create a fresh virtual environment
+          uv venv
+          source .venv/bin/activate
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+
+          # Install dependencies without using the uv cache to guarantee freshness.
+          uv pip install --no-cache -e ./my-ai-assistant[indexing]
+          uv pip install oci-cli
+          
+      - name: Install All Dependencies with uv
+        run: |
+          # Use --no-cache and --force-reinstall to ensure we are using the freshly
+          # checked-out source code and not a stale, cached version of the package.
+          # This is the critical fix for the stale code execution issue.
+          uv pip install --no-cache --force-reinstall -e ./my-ai-assistant[indexing]
+          uv pip install oci-cli
+          
+      - name: Verify Indexer Source Code
+        run: |
+          echo "::group::Verifying the source code of indexer.py before execution"
+          echo "This will confirm that the CI runner is using the latest version of the file."
+          cat ./my-ai-assistant/src/ai_assistant/indexer.py
+          echo "::endgroup::"
+
       - name: Configure Oracle Cloud CLI
         env:
           OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: true
@@ -80,94 +119,179 @@ jobs:
           EOF
           
           echo "${{ secrets.OCI_API_KEY }}" > ~/.oci/api_key.pem
-          chmod 600 ~/.oci/api_key.pem ~/.oci/config
+          chmod 600 ~/.oci/api_key.pem
+          chmod 600 ~/.oci/config
           
-          # Verify OCI connectivity
-          oci os ns get > /dev/null
+          oci os ns get
         
-      - name: Manage Previous Index
-        id: previous_index
+      - name: Download Previous Index (for incremental update)
+        id: download_previous
         run: |
           INDEX_DIR=".ai_rag_index"
-          INDEX_ARCHIVE="indexes/${BRANCH_NAME}/latest/index.tar.gz"
+          echo "Attempting to download previous index..."
           
-          # Clean any existing index directory
+          # Always start with a clean directory to prevent contamination
           rm -rf "${INDEX_DIR}"
-          
-          # Try to download previous index
-          if oci os object get \
-            --namespace "${OCI_NAMESPACE}" \
-            --bucket-name "${OCI_BUCKET}" \
-            --name "${INDEX_ARCHIVE}" \
-            --file index.tar.gz 2>/dev/null; then
-            
+
+          # Use a conditional to handle the download failing gracefully
+          if oci os object get --namespace "${OCI_NAMESPACE}" --bucket-name "${OCI_BUCKET}" --name "indexes/${BRANCH_NAME}/latest/index.tar.gz" --file index.tar.gz; then
+            echo "Previous index downloaded successfully. Unpacking..."
             mkdir -p "${INDEX_DIR}"
-            tar -xzf index.tar.gz -C "${INDEX_DIR}"
             
-            # Verify the index is valid
-            if [ -f "${INDEX_DIR}/state.json" ] && [ -f "${INDEX_DIR}/chroma.sqlite3" ]; then
-              echo "has_valid_index=true" >> "$GITHUB_OUTPUT"
-              echo "Index restored successfully"
+            # Unpack with verbose output for better logging (v flag)
+            tar -xzvf index.tar.gz -C "${INDEX_DIR}"
+            
+            # --- CRITICAL VERIFICATION ---
+            # Verify that the state file exists after extraction. If not, fail the delta logic.
+            if [ -f "${INDEX_DIR}/state.json" ]; then
+              echo "✅ state.json found. Incremental indexing is possible."
+              echo "unpacked=true" >> "$GITHUB_OUTPUT"
             else
-              echo "has_valid_index=false" >> "$GITHUB_OUTPUT"
-              echo "Index files incomplete, will perform full index"
-              rm -rf "${INDEX_DIR}"
+              echo "::error::state.json NOT FOUND after unpacking the archive. This indicates a corrupted or badly formed index archive. Forcing a full re-index."
+              echo "unpacked=false" >> "$GITHUB_OUTPUT"
             fi
           else
-            echo "has_valid_index=false" >> "$GITHUB_OUTPUT"
-            echo "No previous index found"
+            echo "No previous index found in Object Storage. A full re-index will be performed."
+            echo "unpacked=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine Indexing Mode
+        id: mode
+        run: |
+          if [[ "${{ github.event.inputs.force_reindex }}" == "true" ]]; then
+            echo "Forcing full re-index due to manual trigger."
+            echo "mode=full" >> $GITHUB_OUTPUT
+          elif [[ "${{ steps.download_previous.outputs.unpacked }}" == "true" ]]; then
+            echo "Previous index found. Performing delta index."
+            echo "mode=delta" >> $GITHUB_OUTPUT
+          else
+            echo "No previous index. Performing full re-index."
+            echo "mode=full" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create CI-Specific AI Config
+        run: |
+          cat > .ai_config.yml << EOF
+          # This file provides the minimum required configuration for the CI indexing job.
+          tools:
+            shell:
+              allowed_commands: [] # The indexer doesn't use the shell tool, so an empty list is fine.
+          EOF
+          echo "Created .ai_config.yml to satisfy config validation."
+
+
+      - name: Verify Index State Before Indexing
+        if: steps.download_previous.outputs.unpacked == 'true'
+        run: |
+          INDEX_DIR=".ai_rag_index"
+          echo "::group::Inspecting Pre-run Index State for Delta Update"
+          
+          if [ -f "${INDEX_DIR}/state.json" ]; then
+            echo "✅ State file found."
+            # Use jq to safely parse and summarize the state file
+            echo "Number of files tracked in state.json: $(jq 'keys | length' ${INDEX_DIR}/state.json)"
+            echo "Sample of tracked files and hashes:"
+            jq 'to_entries | .[0:5]' "${INDEX_DIR}/state.json"
+          else
+            echo "::error::state.json is MISSING. The indexer will be forced into a full re-index."
+          fi
+
+          if [ -f "${INDEX_DIR}/index_manifest.json" ]; then
+            echo "✅ Manifest file found:"
+            cat "${INDEX_DIR}/index_manifest.json"
+          else
+            echo "::warning::index_manifest.json not found."
+          fi
+
+          # Check for the actual ChromaDB database file as a sanity check
+          if [ -f "${INDEX_DIR}/chroma.sqlite3" ]; then
+             echo "✅ ChromaDB database file (chroma.sqlite3) found."
+          else
+             echo "::warning::ChromaDB database file not found. The collection may be empty."
+          fi
+          
+          echo "::endgroup::"
+          
+
+      - name: Save Pre-run State for Comparison
+        if: steps.download_previous.outputs.unpacked == 'true'
+        run: |
+          if [ -f ".ai_rag_index/state.json" ]; then
+            cp .ai_rag_index/state.json before_state.json
+            echo "::notice::Backed up pre-run state.json for post-run comparison."
           fi
 
       - name: Run Indexer
+        id: indexer_run
+        env:
+          # Set log level to DEBUG for this step to see detailed file processing info
+          LOG_LEVEL: DEBUG
         run: |
-          # Dynamic .aiignore for CI
-          echo "my-ai-assistant/" >> .aiignore
-          
-          # Determine mode
-          if [[ "${{ github.event.inputs.force_reindex }}" == "true" ]] || [[ "${{ steps.previous_index.outputs.has_valid_index }}" != "true" ]]; then
-            echo "Running full index..."
-            ai-index . --branch "${{ env.BRANCH_NAME }}" --force-reindex
+          INDEXER_ARGS=""
+          if [[ "${{ steps.mode.outputs.mode }}" == "full" ]]; then
+            INDEXER_ARGS="--force-reindex"
+            echo "::notice::Starting indexer in FULL RE-INDEX mode."
           else
-            echo "Running incremental index..."
-            ai-index . --branch "${{ env.BRANCH_NAME }}"
+            echo "::notice::Starting indexer in DELTA (incremental) mode."
           fi
+          
+          # Execute the module directly from source.
+          python -m ai_assistant.indexer . --branch "${{ env.BRANCH_NAME }}" $INDEXER_ARGS 2>&1 | tee indexer_run.log
+          
+
+      - name: Report on Indexing Changes
+        if: steps.mode.outputs.mode == 'delta' && steps.indexer_run.outcome == 'success'
+        run: |
+          echo "::group::Analyzing Delta Indexing Results"
+          if [ -f "before_state.json" ] && [ -f ".ai_rag_index/state.json" ]; then
+            BEFORE_COUNT=$(jq 'keys | length' before_state.json)
+            AFTER_COUNT=$(jq 'keys | length' .ai_rag_index/state.json)
+            DIFF=$((AFTER_COUNT - BEFORE_COUNT))
+            
+            echo "File count in state.json -> Before: $BEFORE_COUNT | After: $AFTER_COUNT | New Files Added: $DIFF"
+
+      - name: Upload Indexer Log Artifact
+        if: always() # This ensures the log is uploaded even if the indexer step fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: indexer-log-${{ github.sha }}
+          path: indexer_run.log
 
       - name: Upload Index to Object Storage
-        if: success()
         run: |
-          # Create archive
-          tar -czf index.tar.gz -C .ai_rag_index .
-          
-          # Upload with versioning
+          INDEX_DIR=".ai_rag_index"
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           
-          # Upload timestamped version (for history)
-          oci os object put \
+          echo "Archiving the new index..."
+          # --- CRITICAL FIX ---
+          # Use -C to change directory, ensuring the archive contains the contents 
+          # of INDEX_DIR at the root, not the directory itself.
+          tar -czf index.tar.gz -C "${INDEX_DIR}" .
+          
+          # --- CRITICAL VERIFICATION ---
+          echo "Verifying archive contents before upload..."
+          if tar -tzf index.tar.gz | grep -q "state.json"; then
+             echo "✅ state.json confirmed to be in the archive."
+          else
+             echo "::error::CRITICAL FAILURE: state.json was NOT added to the archive. Halting upload."
+             exit 1
+          fi
+
+          echo "Uploading archive to OCI..."
+          oci os object put --force \
             --namespace "${OCI_NAMESPACE}" \
             --bucket-name "${OCI_BUCKET}" \
-            --name "indexes/${BRANCH_NAME}/${TIMESTAMP}/index.tar.gz" \
+            --name "indexes/${{ env.BRANCH_NAME }}/archive/${TIMESTAMP}_${{ github.sha }}.tar.gz" \
             --file index.tar.gz
           
-          # Upload as latest (for next run)
-          oci os object put \
+          oci os object put --force \
             --namespace "${OCI_NAMESPACE}" \
             --bucket-name "${OCI_BUCKET}" \
-            --name "indexes/${BRANCH_NAME}/latest/index.tar.gz" \
-            --file index.tar.gz \
-            --force
+            --name "indexes/${{ env.BRANCH_NAME }}/latest/index.tar.gz" \
+            --file index.tar.gz
           
-          # Upload manifest for debugging
-          if [ -f ".ai_rag_index/index_manifest.json" ]; then
-            oci os object put \
-              --namespace "${OCI_NAMESPACE}" \
-              --bucket-name "${OCI_BUCKET}" \
-              --name "indexes/${BRANCH_NAME}/latest/manifest.json" \
-              --file .ai_rag_index/index_manifest.json \
-              --force
-          fi
-          
-          echo "Index uploaded successfully"
-          
+          echo "::notice::Successfully uploaded index for branch ${{ env.BRANCH_NAME }}"
+
       - name: Create Failure Issue
         if: failure()
         uses: actions/github-script@v6
