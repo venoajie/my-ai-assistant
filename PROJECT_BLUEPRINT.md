@@ -237,3 +237,39 @@ The project-level `.aiignore` file is a powerful tool for curation, but it carri
 
 ### 10.3. CI Sanity Checks
 To protect against silent failures from overly aggressive ignore patterns, the CI workflow **MUST** include a "Sanity Check" step after a successful indexing run. This step will parse the final `state.json` and fail the build if the total number of indexed files falls below a project-specific, reasonable threshold. This ensures that a misconfiguration cannot result in an empty or incomplete knowledge base being deployed.
+
+## 11. Governance for RAG Pipeline Integrity & Testing
+
+The project formally recognizes that ensuring the health and effectiveness of the RAG pipeline is a distinct engineering discipline, separate from traditional software testing. A successful execution of the Python codebase (e.g., passing all unit tests) does not guarantee the success or relevance of the knowledge base it produces.
+
+This distinction can be understood through an analogy:
+-   **Code Correctness (The Mechanic):** Traditional testing ensures the machinery works. Does the engine start? Do the wheels turn? This is the domain of `unittest`, linters, and static analysis.
+-   **Knowledge Relevance (The Librarian):** RAG pipeline testing ensures the quality of the library's content and the skill of the research assistant. Are the books relevant? Is the card catalog accurate? Can the assistant find the right passage to answer a complex question?
+
+To govern this second discipline, the project mandates the following RAG Pipeline Testing Protocol.
+
+### 11.1. The RAG Pipeline Testing Protocol
+
+This protocol is a set of required checks and evaluations designed to monitor and validate the entire lifecycle of the RAG knowledge base, from creation to consumption.
+
+#### 11.1.1. Health & Robustness (Is the library open and the catalog intact?)
+This layer ensures the data pipeline is functional and complete.
+
+-   **CI Sanity Check:** The `smart-indexing.yml` workflow **MUST** include a "Sanity Check" step after every indexing run. This step parses the final `state.json` and **MUST** fail the build if the total number of indexed files falls below a project-specific, reasonable threshold. This is a critical guardrail against silent failures caused by overly aggressive `.aiignore` patterns.
+-   **Data Pipeline Integrity:** The indexing and retrieval processes **MUST** be robust against common data errors, such as unreadable files or transient network failures, failing gracefully without crashing the entire system.
+
+#### 11.1.2. Effectiveness (Can the assistant find the right information?)
+This layer measures the *quality* and *relevance* of the RAG system's output. It serves as a regression test for the knowledge base itself.
+
+-   **The "Golden Set" Evaluation:** The project **MUST** maintain a curated "golden set" of questions and expected outcomes in a version-controlled file (e.g., `tests/rag_evaluation_set.yml`). This set represents the core knowledge the RAG system is expected to possess.
+-   **Automated Evaluation:** An automated script (`scripts/evaluate_rag.py`) **MUST** be created to test the RAG pipeline against this golden set. This script will programmatically query the RAG system and measure key metrics, including:
+    -   **Retrieval Precision:** Did the retrieved context chunks originate from the expected source files?
+    -   **Context Relevance:** Did the content of the retrieved chunks contain the expected keywords or concepts?
+-   **CI Quality Gate:** The automated evaluation script **MUST** be run as a job in the CI pipeline after a new index is built. A drop in precision or relevance below a defined threshold **MUST** fail the build. This prevents the deployment of a "dumber" or less effective version of the RAG system.
+
+#### 11.1.3. Efficiency (How fast and expensive is the library?)
+This layer monitors the performance and resource consumption of the RAG pipeline to prevent regressions.
+
+-   **Indexing Time:** The duration of the `smart-indexing.yml` workflow **SHOULD** be monitored over time to detect significant performance degradations.
+-   **Retrieval Latency:** The "Golden Set" evaluation script **SHOULD** measure and report the average query-to-context latency to ensure a responsive user experience.
+-   **Resource Footprint:** The size of the final `index.tar.gz` archive and the client-side memory usage **SHOULD** be monitored to manage costs and resource requirements.
