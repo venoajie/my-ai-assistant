@@ -76,7 +76,12 @@ class EmbeddingProvider:
         return []
 
 class Indexer:
-    def __init__(self, project_root: Path, branch_override: Optional[str] = None, embedding_provider: str = "local"):
+    def __init__(
+        self, 
+        project_root: Path, 
+        branch_override: Optional[str] = None, 
+        embedding_provider: str = "local",
+        ):
         self.project_root = project_root
         self.index_path = project_root / ai_settings.rag.local_index_path
         self.state_path = self.index_path / "state.json"
@@ -88,7 +93,18 @@ class Indexer:
         if ai_settings.rag.chroma_server_host:
             raise ConnectionError("Indexer is configured to connect to a remote server, which is not allowed.")
 
-        self.branch = branch_override or get_normalized_branch_name(self.project_root, ai_settings.rag.default_branch)
+        # prevents the creation of an index that the client cannot use.
+        if embedding_provider != "local":
+            raise ValueError(
+                "FATAL: The indexer is configured to use a non-local embedding provider "
+                f"('{embedding_provider}'), but the client-side RAG plugin only supports indexes built with a 'local' provider. "
+                "Halting to prevent creation of an incompatible index."
+            )
+
+        self.branch = branch_override or get_normalized_branch_name(
+            self.project_root, 
+            ai_settings.rag.default_branch,
+            )
         
         base_collection_name = ai_settings.rag.collection_name
         self.collection_name = f"{base_collection_name}_{self.branch}"
@@ -97,7 +113,6 @@ class Indexer:
         self.db_client = chromadb.PersistentClient(path=str(self.index_path))
         self.collection = self.db_client.get_or_create_collection(self.collection_name)
         
-        # --- MODIFIED: Select a single, active provider for the entire run ---
         provider_names_to_try = [embedding_provider] + ai_settings.rag.fallback_embedding_providers
         self.active_provider = self._select_active_provider(provider_names_to_try)
         if not self.active_provider:
@@ -105,7 +120,7 @@ class Indexer:
         
         self.state = self._load_state()
         self.ignore_patterns = self._load_ignore_patterns()
-
+        
     def _select_active_provider(self, provider_names: List[str]) -> Optional[EmbeddingProvider]:
         """Tries to initialize providers in order and returns the first successful one."""
         for name in provider_names:
