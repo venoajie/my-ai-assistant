@@ -169,12 +169,10 @@ class Indexer:
             # Check for directory patterns (e.g., "my-dir/")
             if norm_pattern.endswith(os.sep):
                 if (rel_path_str + os.sep).startswith(norm_pattern):
-                    # --- ADD THIS DEBUG LINE ---
                     logger.debug("Ignoring path due to directory pattern", path=rel_path_str, pattern=norm_pattern)
                     return True
             # Check for file/glob patterns (e.g., "*.pyc")
             elif fnmatch.fnmatch(rel_path_str, norm_pattern):
-                # --- ADD THIS DEBUG LINE ---
                 logger.debug("Ignoring path due to file/glob pattern", path=rel_path_str, pattern=norm_pattern)
                 return True
         return False
@@ -186,27 +184,23 @@ class Indexer:
         for root, dirs, files in os.walk(self.project_root, topdown=True):
             root_path = Path(root)
 
+            # If the entire directory we are in is ignored, clear the subdirectories
+            # list to stop os.walk from going deeper, and continue to the next item.
             if root_path != self.project_root and self._is_ignored(root_path):
-                # --- ADD THIS DEBUG LINE ---
-                logger.debug("Pruning ignored directory tree", directory=str(root_path))
                 dirs.clear() 
                 continue
 
-            # --- ADD THIS DEBUG BLOCK ---
-            original_dirs = list(dirs)
+            # Filter the list of subdirectories in-place. os.walk will only visit
+            # the directories that remain in this list.
             dirs[:] = [d for d in dirs if not self._is_ignored(root_path / d)]
-            pruned_dirs = set(original_dirs) - set(dirs)
-            if pruned_dirs:
-                for pruned in pruned_dirs:
-                    logger.debug("Pruning ignored subdirectory", directory=str(root_path / pruned))
-            # --- END OF DEBUG BLOCK ---
             
             # Now, yield the files from this valid (non-ignored) directory.
             for name in files:
                 file_path = root_path / name
                 # We still need to check individual files against file-specific patterns (e.g., *.pyc)
                 if not self._is_ignored(file_path):
-                    yield file_path                                        
+                    yield file_path
+                        
     @staticmethod
     def _calculate_hash(file_path: Path) -> str:
         hasher = hashlib.sha256()
