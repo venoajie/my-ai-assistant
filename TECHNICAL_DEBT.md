@@ -81,6 +81,21 @@ This technical debt is considered "repaid" when:
 -   [ ] A new job in the `smart-indexing.yml` workflow successfully runs the evaluation script.
 -   [ ] The CI job correctly fails if the precision metric drops below a defined threshold.
 
+
+```
+
+### Next Command
+
+To formally begin this task, you should use the **`si-1` (Session Initiator)** persona to create an instance file that assigns this mission to our new `rqa-1` specialist.
+
+**Example command to start the work:**
+```bash
+ai --persona core/si-1 \
+  -f technical_debt.md \
+  -f persona_manifest.yml \
+  "Use the attached technical debt item to create a new work instance for the appropriate specialist to build the RAG quality assurance pipeline."
+```
+
 # Technical Debt & Architectural Review Findings
 
 This document is a consolidated list of identified technical debt, architectural inconsistencies, and recommended improvements for the AI Assistant project. The findings are grouped by functional area and ordered by criticality to guide remediation efforts.
