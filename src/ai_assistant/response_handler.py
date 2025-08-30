@@ -7,6 +7,7 @@ import time
 from pydantic import ValidationError
 
 from .config import ai_settings
+from .config import ai_settings, get_provider_info_for_model
 from .utils.context_optimizer import ContextOptimizer
 
 class APIKeyNotFoundError(Exception):
@@ -16,13 +17,7 @@ class APIKeyNotFoundError(Exception):
 class ResponseHandler:
     def __init__(self):
         """Initializes the ResponseHandler using settings from the config file."""
-        self.model_to_provider_map = {}
-        for provider_name, provider_config in ai_settings.providers.items():
-            for model_name in provider_config.models:
-                self.model_to_provider_map[model_name] = {
-                    "provider_name": provider_name,
-                    "config": provider_config,
-                }
+        pass
 
     def check_api_keys(self):
         """Checks that API keys for all configured models are present."""
@@ -42,7 +37,6 @@ class ResponseHandler:
         """Calls the specified AI model asynchronously with enhanced error handling."""
         start_time = time.monotonic()
                 
-        # Centralized function to create a consistent error response
         def _create_error_response(
             content: str, 
             provider: str,
@@ -58,7 +52,9 @@ class ResponseHandler:
                     }
             }
 
-        if model not in self.model_to_provider_map:
+        # --- REFACTORED: Use the centralized helper function ---
+        provider_info = get_provider_info_for_model(model)
+        if not provider_info:
             return _create_error_response(
                 f"❌ ERROR: Model '{model}' is not configured.", 
                 "internal",
@@ -70,7 +66,6 @@ class ResponseHandler:
                 "internal",
                 )
         
-        provider_info = self.model_to_provider_map[model]
         provider_name = provider_info["provider_name"]
         provider_config = provider_info["config"]
         final_gen_config = generation_config or \
@@ -110,7 +105,6 @@ class ResponseHandler:
                     error_msg = f"API call for model {model} failed on attempt {attempt + 1}/{max_retries}. Reason: {e}"
                     print(f"\n   ...❌ ERROR: {error_msg}")
                     
-                    # Check if the error is non-retriable or if we've exhausted retries
                     is_retriable = isinstance(e, (aiohttp.ClientResponseError, asyncio.TimeoutError)) and (not hasattr(e, 'status') or 500 <= e.status <= 599)
                     
                     if not is_retriable or attempt >= max_retries - 1:
@@ -121,12 +115,10 @@ class ResponseHandler:
                     print(f"   ...Waiting {wait_time}s before retrying.")
                     await asyncio.sleep(wait_time)
 
-        # Fallback in case the loop exits unexpectedly
         return _create_error_response(
             f"❌ ERROR: API call for model {model} failed unexpectedly after {max_retries} attempts.", 
             provider_name,
             )
-    
     
     async def _call_openai_compatible(
         self, 
