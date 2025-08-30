@@ -1,15 +1,8 @@
 # src/ai_assistant/prompt_analyzer.py
-
-# src/ai_assistant/prompt_analyzer.py
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Callable
 import re
-from importlib import resources
-import yaml
-
-# --- Load the single source of truth once at module level ---
-governance_text = resources.files('ai_assistant').joinpath('internal_data/governance.yml').read_text(encoding='utf-8')
-GOVERNANCE_RULES = yaml.safe_load(governance_text)
+from .governance import GOVERNANCE_RULES 
 
 @dataclass
 class PromptViolation:
