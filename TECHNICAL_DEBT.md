@@ -11,6 +11,76 @@ This document is the canonical tracker for known architectural and implementatio
 ## Active Issues
 ---
 
+## TD-001: Lack of Automated RAG Quality Assurance
+
+**Date Identified:** 2025-08-30
+**Severity:** Critical
+**Owner:** @your-github-handle
+
+### Problem Statement
+The current CI/CD pipeline validates the *functional correctness* of the RAG indexing code (i.e., it runs without errors), but it provides no assurance of the *quality or effectiveness* of the resulting knowledge base. A change to the indexing logic, chunking strategy, embedding model, or even a poorly written `.aiignore` pattern could silently degrade the RAG system's ability to retrieve relevant context. This creates a major blind spot where the AI assistant could become less effective ("dumber") without any failing tests to indicate a regression.
+
+### Risk of Not Repaying
+-   **Silent Regressions:** We could deploy changes that significantly harm the RAG system's performance, leading to irrelevant answers and a loss of user trust in the AI assistant.
+-   **Inability to Experiment Safely:** We cannot confidently experiment with new embedding models, rerankers, or chunking strategies because we have no objective, quantitative way to measure if a change is an improvement or a regression.
+-   **Increased Manual Labor:** All RAG-related changes require slow, subjective, and non-scalable manual testing to "get a feel" for whether the system is still working correctly.
+
+### Proposed Solution: Implement a "Golden Set" Evaluation Pipeline
+To repay this debt, we will build an automated RAG evaluation pipeline that acts as a quality gate in our CI process. This involves three main components:
+
+**1. The "Golden Set" Dataset**
+This is the industry-standard practice for RAG evaluation. We will create a small, curated set of questions with known, expected outcomes. This becomes our RAG regression test suite.
+
+-   **Action:** Create a new file at `tests/rag_evaluation_set.yml`.
+-   **Example Content:**
+    ```yaml
+    - query: "How does the system handle adversarial validation?"
+      expected_sources:
+        - "PROJECT_BLUEPRINT.md"
+      expected_keywords_in_context:
+        - "critic persona"
+        - "red team"
+        - "reject"
+    - query: "What is the command to create a new service from a template?"
+      expected_sources:
+        - "src/ai_assistant/tools.py"
+      expected_keywords_in_context:
+        - "CreateServiceFromTemplateTool"
+        - "template_service_name"
+    ```
+
+**2. Automated Evaluation Script**
+A new script will be created to programmatically test the RAG pipeline against the Golden Set.
+
+-   **Action:** Create a new script at `scripts/evaluate_rag.py`.
+-   **Responsibilities:**
+    1.  Load the `tests/rag_evaluation_set.yml` file.
+    2.  For each item, programmatically call the `RAGContextPlugin.get_context()` method.
+    3.  Calculate and report on key quality metrics:
+        -   **Retrieval Precision:** Did the returned sources include the `expected_sources`? (e.g., 1/1 = 100%)
+        -   **Context Relevance:** Did the returned text chunks contain the `expected_keywords_in_context`?
+
+**3. CI Integration as a Quality Gate**
+The evaluation script will be integrated into the `smart-indexing.yml` workflow.
+
+-   **Action:** Add a new job to the workflow that runs after the index is built and uploaded.
+-   **Behavior:** This job will execute the `scripts/evaluate_rag.py` script. If the calculated precision or relevance score drops below a configurable threshold (e.g., 90%), the CI job **must fail**. This prevents a degraded knowledge base from being implicitly approved.
+
+**4. Efficiency Monitoring (Performance)**
+As part of the evaluation script and CI workflow, we will log and monitor key performance indicators to track regressions over time.
+
+-   **Indexing Time:** The total duration of the `smart-indexing.yml` workflow.
+-   **Retrieval Latency:** The average time taken for `RAGContextPlugin.get_context()` to return a result, as measured by the evaluation script.
+-   **Index Size:** The file size of the final `index.tar.gz` artifact.
+
+### Acceptance Criteria
+This technical debt is considered "repaid" when:
+-   [ ] The `tests/rag_evaluation_set.yml` file is created with at least 5 representative test cases.
+-   [ ] The `scripts/evaluate_rag.py` script is implemented and can be run from the command line.
+-   [ ] The script outputs clear, understandable metrics for precision and relevance.
+-   [ ] A new job in the `smart-indexing.yml` workflow successfully runs the evaluation script.
+-   [ ] The CI job correctly fails if the precision metric drops below a defined threshold.
+
 # Technical Debt & Architectural Review Findings
 
 This document is a consolidated list of identified technical debt, architectural inconsistencies, and recommended improvements for the AI Assistant project. The findings are grouped by functional area and ordered by criticality to guide remediation efforts.
