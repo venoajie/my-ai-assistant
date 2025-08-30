@@ -175,6 +175,24 @@ jobs:
           # Execute the module directly from source to ensure the latest code is run.
           python -m ai_assistant.indexer . --branch "${{ env.BRANCH_NAME }}" $INDEXER_ARGS 2>&1 | tee indexer_run.log
           
+      - name: Sanity Check Indexing Results
+        if: steps.indexer_run.outcome == 'success'
+        run: |
+          echo "::group::Performing Sanity Check on Indexing Output"
+          FILE_COUNT=$(jq '. | length' .ai_rag_index/state.json)
+          MINIMUM_EXPECTED_FILES=100 # Adjust this threshold for your project
+
+          echo "Files indexed: $FILE_COUNT"
+          echo "Minimum expected: $MINIMUM_EXPECTED_FILES"
+
+          if [ "$FILE_COUNT" -lt "$MINIMUM_EXPECTED_FILES" ]; then
+            echo "::error::Sanity check failed! The number of indexed files is suspiciously low. This could indicate an overly aggressive .aiignore pattern."
+            exit 1
+          else
+            echo "✅ Sanity check passed."
+          fi
+          echo "::endgroup::"
+          
       - name: Report on Indexing Changes
         if: steps.mode.outputs.mode == 'delta' && steps.indexer_run.outcome == 'success'
         run: |
