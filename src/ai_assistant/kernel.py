@@ -22,9 +22,9 @@ from .query_expander import gather_high_level_context, expand_query_with_context
 from .response_handler import ResponseHandler
 from .plugins.rag_plugin import RAGContextPlugin
 from .tools import TOOL_REGISTRY
+from .utils.colors import Colors
 from .utils.context_optimizer import ContextOptimizer
 from .utils.result_presenter import highlight_critique
-from .utils.colors import Colors
 
 logger = structlog.get_logger(__name__)
 
@@ -32,12 +32,12 @@ logger = structlog.get_logger(__name__)
 async def _generate_refactored_code(
     file_path_str: str, 
     instructions: str,
-    ) -> str: # Modified to always return a string
+    ) -> str: 
     """Helper function to perform the LLM call for code refactoring."""
     file_path = Path(file_path_str)
     if not file_path.exists():
         logger.warning("File to refactor not found, skipping.", file=file_path_str)
-        return "" # Return empty string on failure
+        return "" 
     
     logger.info("Generating refactored content for plan...", file=file_path_str)
     original_content = file_path.read_text(encoding='utf-8')
@@ -56,18 +56,17 @@ Modified Code:"""
     
     handler = ResponseHandler()
     synthesis_model = ai_settings.model_selection.synthesis
-    result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
+    success, result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
     
-    # --- MODIFIED: Check for API call failure indicated by "ERROR:" prefix ---
-    if result["content"].strip().startswith("❌ ERROR:"):
+    if not success:
         logger.error("Code generation API call failed.", file=file_path_str, error=result["content"])
-        return "" # Return empty string on failure
+        return "" 
 
     refactored_content = result["content"].strip()
 
     if not refactored_content:
         logger.error("Refactoring agent returned empty content. Skipping file.", file=file_path_str)
-        return "" # Return empty string on failure
+        return "" 
     
     return refactored_content
 
@@ -99,7 +98,6 @@ async def _expand_refactoring_workflow_plan(
     ))
 
     # 2. Generate and Write Files
-    # --- Track successful file paths instead of just a count ---
     successful_file_paths = []
     for file_path in files_to_refactor:
         refactored_content = await _generate_refactored_code(file_path, instructions)
@@ -116,11 +114,9 @@ async def _expand_refactoring_workflow_plan(
                 args={"path": file_path}
             ))
 
-    # ---Dynamically create an accurate commit message ---
     if successful_file_paths:
         # 3. Commit
         final_commit_message = commit_message
-        # If not all files were refactored successfully, amend the commit message.
         if len(successful_file_paths) != len(files_to_refactor):
             changed_files_str = ", ".join(f"`{f}`" for f in successful_file_paths)
             final_commit_message = (
@@ -165,12 +161,10 @@ async def orchestrate_agent_run(
             return {"response": error_msg, "metrics": metrics}
 
 
-    # --- CONTEXT-AWARE QUERY EXPANSION (REFACTORED) ---
     auto_inject_files = ai_settings.general.auto_inject_files or []
     high_level_context_str = gather_high_level_context(auto_inject_files)
     effective_query = await expand_query_with_context(query, high_level_context_str)
 
-    # --- RAG CONTEXT INJECTION ---            
     logger.info("Attempting to retrieve RAG context to enhance planning.")
     rag_content = ""
     system_note = None
@@ -276,7 +270,7 @@ async def orchestrate_agent_run(
         
         synthesis_model = ai_settings.model_selection.synthesis
         
-        synthesis_result = await response_handler.call_api(direct_prompt, model=synthesis_model)
+        _success, synthesis_result = await response_handler.call_api(direct_prompt, model=synthesis_model)
         
         metrics["timings"]["synthesis"] = synthesis_result["duration"]
         metrics["tokens"]["synthesis"] = synthesis_result["tokens"]        
@@ -420,11 +414,8 @@ async def orchestrate_agent_run(
             
     observation_text = "\n".join(observations)
     
-    # --- More specific failure detection logic ---
     is_failure_state = False
     for obs in observations:
-        # Check for the specific failure markers injected by the kernel,
-        # not just the word "Error" which could appear in legitimate tool output (e.g., source code).
         if ">\nError: " in obs or ">\nCritical Error: " in obs:
             is_failure_state = True
             break
@@ -481,7 +472,7 @@ async def orchestrate_agent_run(
     )
     response_handler = ResponseHandler()
     synthesis_model = ai_settings.model_selection.synthesis
-    synthesis_result = await response_handler.call_api(synthesis_prompt, model=synthesis_model)
+    _success, synthesis_result = await response_handler.call_api(synthesis_prompt, model=synthesis_model)
     metrics["timings"]["synthesis"] = synthesis_result["duration"]
     metrics["tokens"]["synthesis"] = synthesis_result["tokens"]
     final_response = synthesis_result["content"]
@@ -532,7 +523,6 @@ async def _handle_output_first_mode(
         "git_push": "git_push",
     }
     
-    # --- REFACTORED: The plan is now always deterministic, so this logic is simpler ---
     for step in plan:
         tool_name = step.tool_name
         args = step.args
@@ -602,3 +592,4 @@ async def _handle_output_first_mode(
         "manifest": manifest,
         "metrics": metrics,
     }
+
