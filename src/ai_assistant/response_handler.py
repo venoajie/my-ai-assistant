@@ -1,7 +1,7 @@
 # src/ai_assistant/response_handler.py
 import os
 import aiohttp 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 import asyncio
 import time
 
@@ -30,9 +30,12 @@ class ResponseHandler:
         model: str, 
         generation_config: Optional[Dict[str, Any]] = None, 
         max_retries: int = 3,
-        ) -> Dict[str, Any]:
+        ) -> Tuple[bool, Dict[str, Any]]:
         
-        """Calls the specified AI model asynchronously with enhanced error handling."""
+        """
+        Calls the specified AI model asynchronously with enhanced error handling.
+        Returns a tuple: (success: bool, result_data: dict).
+        """
         start_time = time.monotonic()
                 
         def _create_error_response(
@@ -50,16 +53,15 @@ class ResponseHandler:
                     }
             }
 
-        # --- REFACTORED: Use the centralized helper function ---
         provider_info = get_provider_info_for_model(model)
         if not provider_info:
-            return _create_error_response(
+            return False, _create_error_response(
                 f"❌ ERROR: Model '{model}' is not configured.", 
                 "internal",
                 )
         
         if not prompt or not prompt.strip():
-            return _create_error_response(
+            return False, _create_error_response(
                 "❌ ERROR: Empty prompt provided to call_api.", 
                 "internal",
                 )
@@ -72,7 +74,6 @@ class ResponseHandler:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=180.0)) as session:
             for attempt in range(max_retries):
                 try:
-
                     print(
                         f"🤖 Calling {provider_name.capitalize()} API (Model: {model}, T: {final_gen_config.get('temperature')}, "
                         f"Attempt: {attempt + 1}/{max_retries})...", end="", flush=True
@@ -89,7 +90,7 @@ class ResponseHandler:
                     prompt_tokens = optimizer.estimate_tokens(prompt)
                     response_tokens = optimizer.estimate_tokens(content)
                     
-                    return {
+                    result_data = {
                         "content": content, 
                         "duration": time.monotonic() - start_time, 
                         "provider_name": provider_name,
@@ -99,6 +100,8 @@ class ResponseHandler:
                             "total": prompt_tokens + response_tokens,
                         },
                     }
+                    return True, result_data
+
                 except Exception as e:
                     error_msg = f"API call for model {model} failed on attempt {attempt + 1}/{max_retries}. Reason: {e}"
                     print(f"\n   ...❌ ERROR: {error_msg}")
@@ -107,13 +110,13 @@ class ResponseHandler:
                     
                     if not is_retriable or attempt >= max_retries - 1:
                         print("\n   ...API call failed. No more retries.")
-                        return _create_error_response(error_msg, provider_name)
+                        return False, _create_error_response(error_msg, provider_name)
                                         
                     wait_time = 2 ** (attempt + 1)
                     print(f"   ...Waiting {wait_time}s before retrying.")
                     await asyncio.sleep(wait_time)
 
-        return _create_error_response(
+        return False, _create_error_response(
             f"❌ ERROR: API call for model {model} failed unexpectedly after {max_retries} attempts.", 
             provider_name,
             )
@@ -137,7 +140,6 @@ class ResponseHandler:
             "Authorization": f"Bearer {api_key}",
         }
 
-        # Define the set of parameters supported by the OpenAI Chat Completions standard.
         SUPPORTED_PARAMS = {
             "temperature",
             "top_p",
@@ -150,14 +152,13 @@ class ResponseHandler:
             "user",
         }
         
-        # Filter the provided gen_config to only include supported parameters.
         filtered_gen_config = {k: v for k, v in gen_config.items() if k in SUPPORTED_PARAMS}
 
         request_body = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}], 
             "stream": False, 
-            **filtered_gen_config, # Use the filtered config
+            **filtered_gen_config,
         }
 
         async with session.post(api_url, headers=headers, json=request_body) as response:
@@ -167,7 +168,6 @@ class ResponseHandler:
         content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
         if not content or not content.strip():
-            # Raise a specific, retriable error for the main loop to catch.
             raise aiohttp.ClientResponseError(
                 request_info=response.request_info, 
                 history=response.history, 

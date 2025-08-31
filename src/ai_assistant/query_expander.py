@@ -48,17 +48,21 @@ Optimized Search Query:"""
 
     try:
         handler = ResponseHandler()
-        # Use a fast and cheap model for this task
         expansion_model = ai_settings.model_selection.query_expander
-        result = await handler.call_api(expansion_prompt, model=expansion_model, generation_config={"temperature": 0.0})
-        expanded_query = result["content"].strip()
+        success, result = await handler.call_api(expansion_prompt, model=expansion_model, generation_config={"temperature": 0.0})
         
-        if expanded_query:
-             logger.info("Successfully expanded user query.", original=query, expanded=expanded_query)
-             return expanded_query
+        if success:
+            expanded_query = result["content"].strip()
+            if expanded_query:
+                 logger.info("Successfully expanded user query.", original=query, expanded=expanded_query)
+                 return expanded_query
+            else:
+                 logger.warning("Query expansion returned an empty string. Falling back to original query.")
+                 return query
         else:
-             logger.warning("Query expansion returned an empty string. Falling back to original query.")
-             return query
+            logger.warning("Query expansion API call failed. Falling back to original query.", error=result["content"])
+            return query
+            
     except Exception as e:
-        logger.warning("Query expansion failed. Falling back to original query.", error=str(e))
+        logger.warning("Query expansion failed with an unexpected exception. Falling back to original query.", error=str(e))
         return query

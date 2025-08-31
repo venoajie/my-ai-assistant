@@ -24,7 +24,6 @@ class Planner:
         
         self.client = get_instructor_client(planning_model_name)
         
-        # --- MODIFIED: Correctly determine the provider name for logging ---
         self.provider_name = "unknown"
         for provider, config in ai_settings.providers.items():
             if planning_model_name in config.models:
@@ -58,8 +57,6 @@ class Planner:
         planning_gen_config = ai_settings.generation_params.planning.model_dump(exclude_none=True)
 
         try:
-            # REFACTORED: This single, standardized call now works for all 
-            # OpenAI-compatible providers, removing the need for special "gemini" logic.
             plan = await self.client.chat.completions.create(
                 model=planning_model_name,
                 response_model=ExecutionPlan,
@@ -74,9 +71,7 @@ class Planner:
         except ValidationError as e:
             logger.warning("Initial plan generation failed Pydantic validation.", error=str(e))
             
-            # --- REFACTORED: Robustly extract raw LLM output ---
             raw_llm_output = None
-            # The `instructor` library attaches the original response to the exception
             if hasattr(e, 'body') and e.body and 'choices' in e.body:
                 try:
                     raw_llm_output = e.body['choices'][0]['message']['content']
@@ -84,11 +79,9 @@ class Planner:
                 except (KeyError, IndexError):
                     logger.debug("Could not find raw response in exception body structure.")
 
-            # Fallback to brittle string parsing only if the robust method fails
             if not raw_llm_output:
                 logger.warning("Could not extract raw response from exception body. Falling back to brittle string parsing.")
                 try:
-                    # This is fragile and should be avoided.
                     raw_llm_output = str(e).split("Invalid JSON:")[1].split("[type=json_invalid")[0].strip()
                 except IndexError:
                     logger.error("Failed to parse raw output from exception string. Cannot self-correct.")
@@ -108,17 +101,21 @@ CORRECTED JSON:"""
                     
                     handler = ResponseHandler()
                     corrector_model = ai_settings.model_selection.json_corrector
-                    correction_result = await handler.call_api(correction_prompt, model=corrector_model, generation_config={"temperature": 0.0})
-                    corrected_json_str = correction_result["content"].strip().replace("```json", "").replace("```", "").strip()
+                    success, correction_result = await handler.call_api(correction_prompt, model=corrector_model, generation_config={"temperature": 0.0})
                     
-                    plan = ExecutionPlan.model_validate_json(corrected_json_str)
-                    logger.info("Successfully self-corrected and validated the plan.", step_count=len(plan))
-                    return plan, {"duration": 0, "tokens": {}}
+                    if success:
+                        corrected_json_str = correction_result["content"].strip().replace("```json", "").replace("```", "").strip()
+                        plan = ExecutionPlan.model_validate_json(corrected_json_str)
+                        logger.info("Successfully self-corrected and validated the plan.", step_count=len(plan))
+                        return plan, {"duration": 0, "tokens": {}}
+                    else:
+                        logger.error("JSON self-correction API call failed.", error=correction_result["content"])
+
                 except Exception as correction_error:
-                    logger.error("JSON self-correction failed.", error=str(correction_error))
+                    logger.error("JSON self-correction failed during validation.", error=str(correction_error))
                     return None, {"duration": 0, "tokens": {}}
             
-            return None, {"duration": 0, "tokens": {}} # Return None if corrector is disabled or fails
+            return None, {"duration": 0, "tokens": {}}
         
         except Exception as e:
              logger.error("Failed to generate a valid plan with instructor.", error=str(e))
