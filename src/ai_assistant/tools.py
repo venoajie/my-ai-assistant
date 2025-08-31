@@ -1,4 +1,4 @@
-# src\ai_assistant\tools.py
+# src/ai_assistant/tools.py
 import asyncio
 import os
 import re
@@ -8,13 +8,8 @@ import subprocess
 from typing import List, Dict, Any, Tuple
 
 from ._security_guards import SHELL_COMMAND_BLOCKLIST
-from .response_handler import ResponseHandler
 from .config import ai_settings
 from .plugins.rag_plugin import RAGContextPlugin
-from .query_expander import gather_high_level_context, expand_query_with_context
-
-
-# --- REMOVED: The hard-coded allowlist is no longer needed here. ---
 
 # --- The base Tool class MUST be defined first and be async ---
 class Tool:
@@ -103,17 +98,8 @@ class CodebaseSearchTool(Tool):
 
     async def __call__(self, query: str) -> Tuple[bool, str]:
         try:
-            # --- ADDED: Replicate the kernel's query expansion workflow for consistency ---
-            # 1. Gather high-level context from auto-injected files
-            auto_inject_files = ai_settings.general.auto_inject_files or []
-            high_level_context_str = gather_high_level_context(auto_inject_files)
-
-            # 2. Expand the query
-            effective_query = await expand_query_with_context(query, high_level_context_str)
-            
-            # 3. Use the expanded query for the search
             rag_plugin = RAGContextPlugin(Path.cwd())
-            success, result = rag_plugin.get_context(effective_query, files=[])
+            success, result = rag_plugin.get_context(query, files=[])
             
             if not success:
                 return (False, f"Codebase search failed: {result}")
@@ -204,7 +190,7 @@ class RunShellCommandTool(Tool):
             return (False, "🚫 ERROR: Empty command provided.")
         
         command = command_parts[0]
-        # --- MODIFIED: Check against the configurable allowlist ---
+        # --- Check against the configurable allowlist ---
         if command not in ai_settings.tools.shell.allowed_commands:
             return (False, f"🚫 SECURITY BLOCK: Command '{command}' is not in the allowed list.")
         
