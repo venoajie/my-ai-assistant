@@ -93,7 +93,9 @@ class Indexer:
         if ai_settings.rag.chroma_server_host:
             raise ConnectionError("Indexer is configured to connect to a remote server, which is not allowed.")
 
-        # prevents the creation of an index that the client cannot use.
+        # --- MODIFIED: Simplified provider logic ---
+        # The indexer's contract is to ONLY build with a local provider to ensure client compatibility.
+        # This check is now the primary guard.
         if embedding_provider != "local":
             raise ValueError(
                 "FATAL: The indexer is configured to use a non-local embedding provider "
@@ -113,10 +115,12 @@ class Indexer:
         self.db_client = chromadb.PersistentClient(path=str(self.index_path))
         self.collection = self.db_client.get_or_create_collection(self.collection_name)
         
-        provider_names_to_try = [embedding_provider] + ai_settings.rag.fallback_embedding_providers
-        self.active_provider = self._select_active_provider(provider_names_to_try)
-        if not self.active_provider:
-            raise RuntimeError("FATAL: No embedding providers could be initialized successfully.")
+        # The complex fallback mechanism has been removed. We now initialize directly and fail fast.
+        try:
+            self.active_provider = EmbeddingProvider(embedding_provider)
+            logger.info(f"Successfully selected '{embedding_provider}' as the embedding provider.")
+        except (ImportError, ValueError) as e:
+            raise RuntimeError(f"FATAL: Could not initialize the required '{embedding_provider}' embedding provider. Reason: {e}")
         
         self.state = self._load_state()
         self.ignore_patterns = self._load_ignore_patterns()
