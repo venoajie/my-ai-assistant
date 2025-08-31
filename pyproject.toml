@@ -53,6 +53,7 @@ indexing = [
     "my-ai-assistant[rag-base]",
     "sentence-transformers==5.1.0",
     "torch==2.8.0 ",
+    "oci",
 ]
 # For lightweight developer environments that only query the remote index
 client = [
