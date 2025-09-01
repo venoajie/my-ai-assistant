@@ -6,7 +6,7 @@ import structlog
 
 from ..config import ai_settings
 from ..context_plugin import ContextPluginBase
-from ..clients.librarian_client import get_context_from_librarian
+from ai_assistant.clients.librarian_client import get_context_from_librarian
 
 logger = structlog.get_logger()
 
