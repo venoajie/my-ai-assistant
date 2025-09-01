@@ -17,10 +17,3 @@ my_custom_sessions/
 
 # Ignore temporary output packages
 rag_*_package/
-
- # The base URL of the deployed Librarian service
- LIBRARIAN_API_URL="http://<your_prod_server_ip>:8000"
-
-
-# The secret API key for authenticating with the service
-LIBRARIAN_API_KEY="your-super-secret-and-long-api-key-for-dev"
