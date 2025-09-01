@@ -18,7 +18,7 @@ dependencies = [
       "python-dotenv==1.1.1",
       "protobuf<6.0",
       "click==8.0.4",
-      ]
+]
 
 [build-system]
 requires = ["setuptools>=65.0", "wheel", "setuptools-scm>=8.0"]
@@ -37,18 +37,22 @@ ai-index = "ai_assistant.indexer:main"
 
 [project.optional-dependencies]
 test = [
+    "my-ai-assistant", # Installs the dependencies from the main [project] section
     "unittest-xml-reporting",
     "pytest",
     "jsonschema",
-     "my-ai-assistant[client]",
 ]
 
-
-# For the production/indexing environment
+# The 'indexing' extra is now self-contained. It installs the base package
+# PLUS all the heavy libraries needed ONLY for building the index in a CI/CD environment.
 indexing = [
-    "my-ai-assistant[rag-base]",
-    "sentence-transformers==5.1.0",
-    "torch==2.8.0 ",
+    "my-ai-assistant",
+    "sentence-transformers==2.7.0",
+    "torch==2.3.0",
+    "chromadb==0.4.24",
+    "oci==2.123.0",
+    "langchain", # The indexer script might use this for text splitting
+    "tqdm",      # For progress bars
 ]
 
 [tool.setuptools]
