@@ -170,7 +170,7 @@ async def orchestrate_agent_run(
     system_note = None
     try:
         rag_plugin = RAGContextPlugin(project_root=Path.cwd())
-        success, rag_content_result = rag_plugin.get_context(effective_query, [])
+        success, rag_content_result = await rag_plugin.get_context(effective_query, [])
                 
         if success and rag_content_result:
             rag_content = rag_content_result
