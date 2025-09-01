@@ -1,5 +1,4 @@
-# src\ai_assistant\internal_data\governance.yml
-
+# src/ai_assistant/internal_data/governance.yml
 # This file is the single source of truth for governance rules
 # that need to be shared between runtime code and documentation.
 
@@ -20,39 +19,6 @@ prompting_best_practices:
     - "apply"
     - "generate"
     - "implement"
-
-# This section is now the single source of truth for the PromptAnalyzer.
-prompt_analysis_rules:
-  - name: "Batch Processing Anti-Pattern"
-    description: "Detects attempts to modify multiple files in one explicit ACTION, which is a known anti-pattern."
-    detector:
-      type: "multi_file_action" 
-      threshold: 1
-      keywords: ["refactor", "fix", "modify", "commit", "change", "add", "create", "write", "remove", "delete", "update", "apply", "generate", "implement"]
-      required_tags: ["<ACTION>", "<action>"]
-    severity: "warning"
-    message: "You have attached {file_count} files and are requesting a modification within a single <ACTION>. This is a known anti-pattern and is likely to fail."
-    suggestion: "Please decompose your goal into multiple, single-file <ACTION> steps for higher reliability."
-
-  - name: "Vague Instructions Detected"
-    description: "Detects vague or conversational language that leads to unpredictable results."
-    detector:
-      type: "vague_instructions"
-      patterns: ["make it better", "clean this up", "I think maybe", "could you please"]
-    severity: "warning"
-    message: "Your prompt contains vague, conversational language. The AI works best with specific, imperative commands."
-    suggestion: "Replace vague phrases with direct actions. For example, instead of 'make it better,' try 'Refactor the function X to use a connection pool.'"
-
-  - name: "Missing Action Tag for Modification"
-    description: "Detects modification requests that are not properly wrapped in <ACTION> tags."
-    detector:
-      type: "missing_structure"
-      trigger_keywords: ["refactor", "modify", "commit", "delete", "write", "apply", "implement"]
-      required_tags: ["<ACTION>", "<action>"]
-    severity: "warning"
-    message: "Your prompt appears to request a system modification but is missing the <ACTION> tag."
-    suggestion: "For clarity and safety, please wrap your primary goal in <ACTION>...</ACTION> tags."
-
 
 adversarial_critique:
   # This list is read by the result presenter to highlight words
@@ -78,9 +44,10 @@ adversarial_critique:
     - "warning"
     - "sensitive"
 
+# --- Rules for Deterministic Plan Validation ---
 # Maps user intent keywords to expected plan structures.
 plan_compliance_rules:
-  # This rule MUST come BEFORE the general "Code Modification" rule.
+  # This rule MUST come BEFORE the general "Code Modification" rule to be matched first.
   - intent: "Create Service from Template"
     trigger_keywords:
       - "from the 'receiver' service as a template"
@@ -93,7 +60,6 @@ plan_compliance_rules:
         - "create_service_from_template"
 
   - intent: "Code Modification Workflow"
-    # Keywords that trigger this rule.
     trigger_keywords:
       - "refactor"
       - "modify"
@@ -103,7 +69,10 @@ plan_compliance_rules:
       - "create file"
       - "implement"
       - "add file"
-    # The machine-readable "Expected Plan Signature".
+      - "improve"
+      - "rewrite"
+      - "clean up"
+      - "restructure"
     expected_signature:
       max_steps: 1
       allowed_tools:
@@ -118,4 +87,45 @@ plan_compliance_rules:
       max_steps: 1
       allowed_tools:
         - "read_file"
-        
+
+# --- Rules for Prompting Best Practices Analysis ---
+prompt_analysis_rules:
+  - name: "Multi-File Action Ambiguity"
+    detector:
+      type: "multi_file_action"
+      threshold: 1
+      keywords: ["modify", "change", "update", "edit", "refactor"]
+      required_tags: ["<ACTION>"]
+    severity: "warning"
+    message: "You are requesting a modification across {file_count} files. This can be ambiguous."
+    suggestion: "For complex changes, consider using the `core/pmo-1` persona to create a multi-phase project plan first."
+
+  - name: "Vague Instructions"
+    detector:
+      type: "vague_instructions"
+      patterns:
+        - "\\b(fix|correct|improve|enhance|optimize|clean up) it\\b"
+        - "\\bmake it better\\b"
+        - "\\b(figure it out|do what's needed)\\b"
+        - "I think maybe"
+        - "could you please"
+    severity: "warning"
+    message: "Your prompt contains vague, conversational language. The AI works best with specific, imperative commands."
+    suggestion: "Replace vague phrases with direct actions. For example, instead of 'make it better,' try 'Refactor the function X to use a connection pool.'"
+
+  - name: "Missing Action Structure"
+    detector:
+      type: "missing_structure"
+      trigger_words: ["refactor", "modify", "change", "update", "edit", "implement", "create", "add", "delete", "commit", "write", "apply"]
+      required_tags: ["<ACTION>", "<action>"]
+    severity: "warning"
+    message: "Your prompt appears to request a system modification but is missing the <ACTION> tag."
+    suggestion: "For clarity and safety, please wrap your primary goal in <ACTION>...</ACTION> tags."
+
+# --- Centralized Heuristics for the AI Planner ---
+planning_heuristics:
+  - "**Conditional Branching:** For uncertainty, use a read-only tool first, then use a `condition` block on subsequent steps that references the first step's output."
+  - "**Handle Ignored Files:** When using `git_add` on a potentially ignored file, use the `force=True` parameter."
+  - "**CRITICAL: Use Pre-loaded Context for Code Generation:** When modifying a file provided in an `<AttachedFile>` tag, your `write_file` step MUST contain the ENTIRE, new, complete file content. Do not use placeholders."
+  - "**Answer from Context:** If the user's question can be fully answered by information already present in the conversation history or attached context (like RAG results), your goal is to signal that no tools are needed. To do this, generate an empty plan: `[]`. Do not use tools to re-process information you already have."
+  - "**MANDATORY: Codebase Search Protocol:** If you need to search the codebase, you MUST use the `codebase_search` tool. The `query` argument for this tool MUST be a string containing your best guess about the user's core technical question. For example, for a user request 'how does config work?', a good query would be 'how is configuration loaded and merged'."

@@ -1,9 +1,10 @@
 # src/ai_assistant/config.py
 
+import os
 import yaml
 from pathlib import Path
-from typing import Dict, Optional, List
-from pydantic import BaseModel, Field
+from typing import Dict, Optional, List, Any
+from pydantic import BaseModel, Field, model_validator
 from importlib import resources
 import structlog  
 
@@ -15,7 +16,7 @@ class ModelSelectionConfig(BaseModel):
     synthesis: str
     critique: str
     json_corrector: str
-    
+    query_expander: str 
     
 class PathsConfig(BaseModel):
     """Holds all key resolved paths for the application."""
@@ -58,8 +59,14 @@ class ContextOptimizerConfig(BaseModel):
 class GitToolConfig(BaseModel):
     branch_prefix: str
 
+# --- NEW: Configuration model for the shell tool ---
+class ShellToolConfig(BaseModel):
+    allowed_commands: List[str] = Field(default_factory=list)
+
 class ToolsConfig(BaseModel):
     git: GitToolConfig
+    # --- ADDED: Shell tool config is now part of the main ToolsConfig ---
+    shell: ShellToolConfig
 
 class DeepSeekDiscountConfig(BaseModel):
     start_hour: int
@@ -83,11 +90,11 @@ class OracleCloudConfig(BaseModel):
     bucket: Optional[str] = Field(None, description="OCI bucket name")
     region: Optional[str] = Field(None, description="OCI region")
     enable_caching: bool = Field(True, description="Enable local caching of downloaded indexes")
-    cache_ttl_hours: int = Field(24, description="Cache TTL in hours")
-
+    cache_ttl_hours: int = Field(24, description="Cache TTL in hours before re-downloading")
+    
 class RAGConfig(BaseModel):
     """Configuration for the RAG subsystem."""
-    embedding_model_name: str = 'all-MiniLM-L6-v2'
+    embedding_model_name: str = 'BAAI/bge-large-en-v1.5'
     collection_name: str = Field("codebase_collection", description="Default collection name for ChromaDB.")
     chroma_server_host: Optional[str] = Field(None, description="Hostname of the ChromaDB server.")
     chroma_server_port: Optional[int] = Field(None, description="Port of the ChromaDB server.")
@@ -128,6 +135,17 @@ class RAGConfig(BaseModel):
         description="How many of the top documents to return after the reranking step."
     )
 
+    # --- NEW: Add the validator to enforce the configuration contract ---
+    @model_validator(mode='after')
+    def validate_reranking_counts(self) -> 'RAGConfig':
+        if self.enable_reranking and self.rerank_top_n > self.retrieval_n_results:
+            raise ValueError(
+                f"'rerank_top_n' ({self.rerank_top_n}) cannot be greater than "
+                f"'retrieval_n_results' ({self.retrieval_n_results})."
+            )
+        return self
+
+
 
 class ProviderConfig(BaseModel):
     api_key_env: str
@@ -148,7 +166,6 @@ class AIConfig(BaseModel):
     providers: Dict[str, ProviderConfig]
     paths: PathsConfig
 
-
 # --- Configuration Loading Logic
 def load_ai_settings() -> AIConfig:
     """Loads and merges config from package defaults, user config, and project config"""
@@ -160,7 +177,10 @@ def load_ai_settings() -> AIConfig:
         print(f"FATAL: Could not load or parse the default package configuration. Error: {e}")
         exit(1)
     
-    user_config_path = Path.home() / ".config" / "ai_assistant" / "config.yml"
+    user_config_dir_str = os.getenv('AI_ASSISTANT_CONFIG_DIR', str(Path.home() / ".config" / "ai_assistant"))
+    user_config_dir = Path(user_config_dir_str)
+    
+    user_config_path = user_config_dir / "config.yml"
     if user_config_path.exists():
         with open(user_config_path, 'r') as f:
             user_config = yaml.safe_load(f)
@@ -175,21 +195,27 @@ def load_ai_settings() -> AIConfig:
             logger.info("Applying project-level configuration override.", path=str(project_config_path)) 
             config_data = deep_merge(config_data, project_config)
     
+    # 1. First, calculate all runtime paths based on the merged config dictionary.
     project_root = Path.cwd()
-    user_config_dir = Path.home() / ".config" / "ai_assistant"
-    general_conf = config_data.get("general", {})
+    general_config = config_data.get("general", {})
+    
+    # 2. Create the PathsConfig object manually.
+    paths_obj = PathsConfig(
+        project_root=project_root,
+        sessions_dir=project_root / general_config.get("sessions_directory", ".ai_sessions"),
+        user_personas_dir=user_config_dir / general_config.get("personas_directory", "personas"),
+        project_local_personas_dir=project_root / ".ai" / "personas",
+        local_plugins_dir=project_root / general_config.get("local_plugins_directory", ".ai/plugins"),
+    )
+    
+    # 3. Inject the fully formed PathsConfig object into our main config dictionary.
+    config_data["paths"] = paths_obj.model_dump()
 
-    config_data["paths"] = {
-        "project_root": project_root,
-        "sessions_dir": project_root / general_conf.get("sessions_directory", ".ai_sessions"),
-        "user_personas_dir": user_config_dir / general_conf.get("personas_directory", "personas"),
-        "project_local_personas_dir": project_root / ".ai" / "personas",
-        "local_plugins_dir": project_root / general_conf.get("local_plugins_directory", ".ai/plugins"),
-    }
-
+    # 4. NOW, with a complete dictionary, ask Pydantic to validate everything at once.
+    # This will succeed because the 'paths' field is now present and correctly structured.
     return AIConfig.model_validate(config_data)
 
- 
+
 def deep_merge(base: Dict, update: Dict) -> Dict:
     """Deep merge two dictionaries"""
     if not isinstance(update, dict):
@@ -201,5 +227,15 @@ def deep_merge(base: Dict, update: Dict) -> Dict:
         else:
             base[key] = value
     return base
+
+def get_provider_info_for_model(model_name: str) -> Optional[Dict[str, Any]]:
+    """Finds the provider configuration for a given model name."""
+    for provider_name, provider_config in ai_settings.providers.items():
+        if model_name in provider_config.models:
+            return {
+                "provider_name": provider_name,
+                "config": provider_config,
+            }
+    return None
 
 ai_settings = load_ai_settings()

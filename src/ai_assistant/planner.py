@@ -22,12 +22,14 @@ class Planner:
         self.prompt_builder = PromptBuilder()
         planning_model_name = ai_settings.model_selection.planning
         
-        # The constructor's ONLY job is to get the client from the factory.
         self.client = get_instructor_client(planning_model_name)
         
-        # We get the provider name directly from the client for logging.
-        # The client.provider attribute might be a string or an enum, so we convert to string.
-        self.provider_name = str(self.client.provider)
+        self.provider_name = "unknown"
+        for provider, config in ai_settings.providers.items():
+            if planning_model_name in config.models:
+                self.provider_name = provider
+                break
+
 
     async def create_plan(
         self,
@@ -55,35 +57,39 @@ class Planner:
         planning_gen_config = ai_settings.generation_params.planning.model_dump(exclude_none=True)
 
         try:
-            # we check if the lowercase provider string CONTAINS "gemini".
-            # This correctly handles 'Provider.GEMINI' and 'gemini'.
-            if "gemini" in self.provider_name.lower():
-                plan = await self.client.create(
-                    response_model=ExecutionPlan,
-                    messages=[{"role": "user", "content": prompt}],
-                    generation_config=planning_gen_config
-                )
-            else: # Assumes OpenAI-compatible (like DeepSeek)
-                plan = await self.client.chat.completions.create(
-                    model=planning_model_name,
-                    response_model=ExecutionPlan,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_retries=2,
-                    **planning_gen_config,
-                )
+            plan = await self.client.chat.completions.create(
+                model=planning_model_name,
+                response_model=ExecutionPlan,
+                messages=[{"role": "user", "content": prompt}],
+                max_retries=2,
+                **planning_gen_config,
+            )
 
             logger.info("Plan generated and validated successfully.", step_count=len(plan))
             return plan, {"duration": 0, "tokens": {}}
 
         except ValidationError as e:
             logger.warning("Initial plan generation failed Pydantic validation.", error=str(e))
+            
+            raw_llm_output = None
+            if hasattr(e, 'body') and e.body and 'choices' in e.body:
+                try:
+                    raw_llm_output = e.body['choices'][0]['message']['content']
+                    logger.debug("Successfully extracted raw response from exception body.")
+                except (KeyError, IndexError):
+                    logger.debug("Could not find raw response in exception body structure.")
+
+            if not raw_llm_output:
+                logger.warning("Could not extract raw response from exception body. Falling back to brittle string parsing.")
+                try:
+                    raw_llm_output = str(e).split("Invalid JSON:")[1].split("[type=json_invalid")[0].strip()
+                except IndexError:
+                    logger.error("Failed to parse raw output from exception string. Cannot self-correct.")
+                    return None, {"duration": 0, "tokens": {}}
+
             if ai_settings.general.enable_llm_json_corrector:
                 logger.info("Attempting to self-correct invalid JSON with a corrector model.")
                 try:
-                    # Extract the raw, broken JSON string from the exception
-                    # This is a bit of a hack, but it's how we get the source material
-                    raw_llm_output = str(e).split("Invalid JSON:")[1].split("[type=json_invalid")[0].strip()
-
                     correction_prompt = f"""The following JSON is broken. Please fix it. Return ONLY the corrected JSON, with no other text or explanation.
 
 BROKEN JSON:
@@ -95,17 +101,21 @@ CORRECTED JSON:"""
                     
                     handler = ResponseHandler()
                     corrector_model = ai_settings.model_selection.json_corrector
-                    correction_result = await handler.call_api(correction_prompt, model=corrector_model, generation_config={"temperature": 0.0})
-                    corrected_json_str = correction_result["content"].strip().replace("```json", "").replace("```", "").strip()
+                    success, correction_result = await handler.call_api(correction_prompt, model=corrector_model, generation_config={"temperature": 0.0})
                     
-                    plan = ExecutionPlan.model_validate_json(corrected_json_str)
-                    logger.info("Successfully self-corrected and validated the plan.", step_count=len(plan))
-                    return plan, {"duration": 0, "tokens": {}}
+                    if success:
+                        corrected_json_str = correction_result["content"].strip().replace("```json", "").replace("```", "").strip()
+                        plan = ExecutionPlan.model_validate_json(corrected_json_str)
+                        logger.info("Successfully self-corrected and validated the plan.", step_count=len(plan))
+                        return plan, {"duration": 0, "tokens": {}}
+                    else:
+                        logger.error("JSON self-correction API call failed.", error=correction_result["content"])
+
                 except Exception as correction_error:
-                    logger.error("JSON self-correction failed.", error=str(correction_error))
+                    logger.error("JSON self-correction failed during validation.", error=str(correction_error))
                     return None, {"duration": 0, "tokens": {}}
             
-            return None, {"duration": 0, "tokens": {}} # Return None if corrector is disabled or fails
+            return None, {"duration": 0, "tokens": {}}
         
         except Exception as e:
              logger.error("Failed to generate a valid plan with instructor.", error=str(e))

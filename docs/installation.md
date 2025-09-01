@@ -9,7 +9,40 @@ This guide provides the recommended installation methods for the AI Assistant.
 
 It is critical to understand that the **AI Assistant is a tool** you install, and **your project is the code you run it on**. The best practice is to install the assistant directly into your project's dedicated virtual environment.
 
----
+
+## A Critical Note for Teams: Consistent Line Endings
+
+To ensure the RAG "delta" indexing feature works correctly in a team environment (especially with mixed Windows/Linux/macOS developers), you **MUST** create a `.gitattributes` file in the root of your project.
+
+**Why is this mandatory?**
+Git can automatically change line endings (LF vs. CRLF). This causes the SHA256 hash of every text file to change, tricking the indexer into thinking every file has been modified. This forces a slow, full re-index on every commit.
+
+**The Fix:** Create a file named `.gitattributes` in your project root with the following content. This enforces consistent line endings for everyone, guaranteeing that delta indexing works as expected.
+
+```
+# .gitattributes
+
+# Set default behavior for all files to be text and use LF line endings.
+* text=auto eol=lf
+
+# Explicitly declare file types that should always have LF line endings.
+*.py eol=lf
+*.md eol=lf
+*.yml eol=lf
+*.yaml eol=lf
+*.json eol=lf
+*.toml eol=lf
+*.sh eol=lf
+*.gitignore eol=lf
+*.gitattributes eol=lf
+
+# Declare file types that are binary and should not be modified.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.gz binary
 
 ## Method 1: Standard User Installation (Recommended)
 
@@ -84,3 +117,24 @@ Check the version of the tool to confirm the update was successful.
 
 ```bash
 ai --version
+```
+
+## Method 3: Project Bootstrap (Automated Setup)
+
+The fastest way to configure your project is to use the provided `Makefile`. This will interactively prompt you for necessary details and create all the required configuration files for you.
+
+1.  **Copy the Makefile:** Copy the `Makefile` from the AI Assistant repository into the root of your project.
+2.  **Run the Setup Command:**
+
+    ```bash
+    make ai-setup
+    ```
+
+This command will:
+*   Ask for your project name and OCI details.
+*   Create a `.ai_config.yml` file configured for the RAG workflow.
+*   Create a `.aiignore` file to control what gets indexed.
+*   Create a `.github/workflows/smart-indexing.yml` file tailored for a project that uses the AI Assistant as a separate tool.
+*   Create the `.ai/personas` and `.ai/plugins` directories to encourage best practices.
+
+After running the command, your project is configured. The next step is to provide the CI/CD system with the necessary secrets.

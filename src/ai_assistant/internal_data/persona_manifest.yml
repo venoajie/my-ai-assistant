@@ -1,11 +1,11 @@
-generated_at_utc: '2025-08-21T03:50:14.234985+00:00'
+generated_at_utc: '2025-08-30T10:28:37.874722+00:00'
 manifest_version: 7.3-central-validator
-validation_signature: 5e1fa4ec655807f0bf100ab92edf95ca84e8560d08a1248759f22a8954c56f10
+validation_signature: 1949e317800455abf80631107a6c7f68ed59a613df05c9de9e19da29234d3054
 personas:
 - alias: core/arc-1
-  title: Architecture Reviewer & Consultant
-  description: Performs rigorous, evidence-based audits to identify architectural
-    deviations and provide actionable recommendations.
+  title: Architecture Reviewer & Investigator
+  description: Performs rigorous, evidence-based audits by actively searching the
+    codebase to identify architectural deviations and provide actionable recommendations.
 - alias: core/cia-1
   title: Contextual Intelligence Analyst
   description: Automatically discovers and injects project-specific context from a
@@ -60,20 +60,20 @@ personas:
     to established best practices.
 - alias: domains/programming/coder-1
   title: Software Engineer
-  description: A general-purpose software engineer that can write, refactor, explain,
-    and debug code across multiple languages.
+  description: A context-aware software engineer that actively investigates the codebase
+    before writing, refactoring, or debugging code.
 - alias: domains/programming/csa-1
   title: Collaborative Systems Architect
-  description: Designs new systems or refactors existing ones, ensuring all changes
-    are harmonious with the established architecture.
+  description: Designs and refactors systems by actively investigating the codebase
+    to ensure all changes are harmonious with the established architecture.
 - alias: domains/programming/da-1
   title: Debugging Analyst
-  description: Diagnoses the root cause of bugs from error reports, stack traces,
-    and relevant source code.
+  description: Actively investigates the codebase to diagnose the root cause of bugs
+    from error reports and stack traces.
 - alias: domains/programming/dbre-1
   title: Database Reliability Engineer
   description: Specializes in PostgreSQL schema management, migration generation using
-    Alembic, and query performance optimization.
+    Alembic, and query performance optimization by actively investigating the codebase.
 - alias: domains/programming/dca-1
   title: Documentation & Content Architect
   description: Creates clear, accurate, and user-centric documentation based on the
@@ -92,8 +92,8 @@ personas:
     ready for handoff.
 - alias: domains/programming/pba-1
   title: Performance Bottleneck Analyst
-  description: Analyzes system behavior and metrics to identify and diagnose performance
-    bottlenecks.
+  description: Actively investigates the codebase to diagnose performance bottlenecks
+    based on system metrics.
 - alias: domains/programming/ppa-1
   title: Performance & Pipeline Analyst
   description: Analyzes and profiles distributed data pipelines to identify bottlenecks
@@ -102,10 +102,14 @@ personas:
   title: Plan Validation Analyst
   description: A skeptical analyst that reviews a proposed tool-use plan for flaws,
     risks, and unstated assumptions.
+- alias: domains/programming/python-developer-1
+  title: Python Developer Specialist
+  description: A specialist agent for writing, refactoring, and debugging Python code,
+    following professional development practices.
 - alias: domains/programming/qsa-1
   title: Quality Strategy Architect
-  description: Provides a comprehensive, risk-mitigated deployment plan for production
-    releases.
+  description: Analyzes a codebase using active search to create a comprehensive,
+    risk-based testing plan.
 - alias: domains/programming/rce-1
   title: Resilience & Chaos Engineer
   description: Designs and generates tests to proactively validate the system's resilience
@@ -116,12 +120,12 @@ personas:
     declared 'source of truth' document.
 - alias: domains/programming/sre-1
   title: Site Reliability Engineer
-  description: Optimizes the host environment, container runtime, and infrastructure
-    configuration for high-performance applications.
+  description: Analyzes and optimizes infrastructure by actively searching the codebase
+    for configurations like Dockerfiles and deployment manifests.
 - alias: domains/programming/ssa-1
   title: Systems Security Auditor
-  description: Audits containerized applications for security misconfigurations, secret
-    management flaws, and network policy issues.
+  description: Actively investigates a codebase to audit for security misconfigurations,
+    secret management flaws, and network policy issues.
 - alias: domains/programming/sva-1
   title: Security Vulnerability Auditor
   description: Reviews code with an adversarial mindset to find potential security
@@ -130,6 +134,10 @@ personas:
   title: Test Automation Engineer
   description: Generates automated tests (unit, integration, or end-to-end) for a
     given source code file.
+- alias: domains/quality/rqa-1
+  title: RAG Quality Architect
+  description: Designs, builds, and maintains the automated pipeline for testing the
+    quality, effectiveness, and performance of the RAG system.
 - alias: domains/trading/qtsa-1
   title: Quantitative Strategy Analyst
   description: Guides the development of formal, testable trading strategy blueprints

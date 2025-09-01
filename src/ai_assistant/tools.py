@@ -1,4 +1,4 @@
-# src\ai_assistant\tools.py
+# src/ai_assistant/tools.py
 import asyncio
 import os
 import re
@@ -8,9 +8,8 @@ import subprocess
 from typing import List, Dict, Any, Tuple
 
 from ._security_guards import SHELL_COMMAND_BLOCKLIST
-from .response_handler import ResponseHandler
 from .config import ai_settings
-
+from .plugins.rag_plugin import RAGContextPlugin
 
 # --- The base Tool class MUST be defined first and be async ---
 class Tool:
@@ -89,117 +88,30 @@ class CreateServiceFromTemplateTool(Tool):
             return (False, f"An unexpected error occurred during service creation: {e}")
         
 # --- Core Asynchronous Tools ---
-
-class RefactorFileContentTool(Tool):
-    name = "refactor_file_content"
+class CodebaseSearchTool(Tool):
+    name = "codebase_search"
     description = (
-        "Reads a file, applies a set of refactoring instructions to its content, and writes the result back to the same file. "
-        "This is a specialized sub-tool, typically called by a larger workflow."
+        "Performs a semantic search against the project's codebase to find relevant context. "
+        "Use this to gather information before planning modifications. Usage: codebase_search(query: str)"
     )
-    is_risky = True
+    is_risky = False
 
-    async def __call__(self, path: str, instructions: str) -> Tuple[bool, str]:
-        p = Path(path)
-        if not p.exists() or not p.is_file():
-            return (False, f"Error: File not found at {path}")
-
+    async def __call__(self, query: str) -> Tuple[bool, str]:
         try:
-            original_content = p.read_text(encoding='utf-8')
-
-            prompt = f"""You are an expert code refactoring agent. Your sole task is to modify the provided source code based on the user's instructions. You must return only the complete, final, modified code file. Do not add any commentary, explanations, or markdown formatting.
-
-<Instructions>
-{instructions}
-</Instructions>
-
-<OriginalCode path="{path}">
-{original_content}
-</OriginalCode>
-
-Modified Code:"""
-
-            handler = ResponseHandler()
-            synthesis_model =  ai_settings.model_selection.synthesis
-            result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
+            rag_plugin = RAGContextPlugin(Path.cwd())
+            success, result = rag_plugin.get_context(query, files=[])
             
-            modified_content = result["content"].strip()
+            if not success:
+                return (False, f"Codebase search failed: {result}")
+            
+            if "<Context>No relevant documents found" in result:
+                return (True, "No relevant documents were found for your query.")
 
-            if not modified_content:
-                return (False, "Error: Refactoring agent returned an empty response. No changes were made.")
-
-            p.write_text(modified_content, encoding='utf-8')
-            return (True, f"Successfully refactored and wrote new content to {path}")
-
+            return (True, result)
         except Exception as e:
-            return (False, f"Error refactoring file {path}: {e}")
+            return (False, f"An unexpected error occurred during codebase search: {e}")
 
-class ExecuteRefactoringWorkflowTool(Tool):
-    name = "execute_refactoring_workflow"
-    description = (
-        "Executes a complete, safe refactoring workflow for existing code within a new git branch. "
-        "It creates a branch, removes specified files, refactors content in other files, and commits all changes. "
-        "This is the mandatory tool for any development task that modifies the codebase. "
-        "Do NOT use this for creating a new service from a template; use 'create_service_from_template' for that specific task."
-    )
-    is_risky = True
-
-    async def __call__(
-        self, 
-        branch_name: str, 
-        commit_message: str, 
-        refactoring_instructions: str, 
-        files_to_remove: List[str] = None, 
-        files_to_refactor: List[str] = None,
-        ) -> Tuple[bool, str]:
-        try:
-            # Step 1: Create Branch
-            success, result = await _run_git_command(["git", "checkout", "-b", branch_name])
-            if not success:
-                return (False, f"Failed to create branch: {result}")
-            print(f"   - ✅ Branched: {branch_name}")
-
-            # Step 2: Remove Files
-            if files_to_remove:
-                for file_path in files_to_remove:
-                    p = Path(file_path)
-                    if p.exists():
-                        success, result = await _run_git_command(["git", "rm", file_path])
-                        if not success:
-                            return (False, f"Failed to remove file {file_path}: {result}")
-                        print(f"   - ✅ Removed: {file_path}")
-                    else:
-                        print(f"   - ℹ️ Skipped removal (file not found): {file_path}")
-
-            # Step 3: Refactor Files
-            if files_to_refactor:
-                for path in files_to_refactor:
-                    if not path or not refactoring_instructions:
-                        return (False, "Invalid arguments. 'path' in files_to_refactor and 'refactoring_instructions' are required.")
-                    
-                    refactor_tool = RefactorFileContentTool()
-                    success, result = await refactor_tool(path, refactoring_instructions)
-                    if not success:
-                        return (False, f"Failed to refactor file {path}: {result}")
-                    print(f"   - ✅ Refactored: {path}")
-
-            # Step 4: Stage All Changes
-            success, result = await _run_git_command(["git", "add", "."])
-            if not success:
-                return (False, f"Failed to stage changes: {result}")
-            print("   - ✅ Staged all changes.")
-
-            # Step 5: Commit
-            success, result = await _run_git_command(["git", "commit", "-m", commit_message])
-            if not success:
-                return (False, f"Failed to commit changes: {result}")
-            print("   - ✅ Committed.")
-
-            return (True, f"Workflow completed successfully on branch '{branch_name}'.")
-
-        except Exception as e:
-            return (False, f"An unexpected error occurred during the workflow: {e}")
-
-# --- Granular Synchronous Tools (Still useful for simple, one-off tasks) ---
+# --- Granular Tools ---
 
 class ReadFileTool(Tool):
     name = "read_file"; description = "Reads the entire content of a specified file. Usage: read_file(path: str)"; is_risky = False
@@ -263,46 +175,61 @@ class MoveFileTool(Tool):
         
 class RunShellCommandTool(Tool):
     name = "run_shell"
-    description = "Executes a shell command in the project's root directory. Usage: run_shell(command: str)"
+    description = "Executes a shell command in the project's root directory. The command must be provided as a list of strings. Usage: run_shell(command_parts: List[str])"
     is_risky = True
     
     async def __call__(
         self, 
-        command: str,
+        command_parts: List[str],
         ) -> Tuple[bool, str]:
-        if not isinstance(command, str):
-            return (False, "🚫 SECURITY: Command must be a string.")
-        command = command.strip()
-        if not command:
+        
+        if not isinstance(command_parts, list) or not all(isinstance(i, str) for i in command_parts):
+            return (False, "🚫 SECURITY: Command must be a list of strings.")
+        
+        if not command_parts:
             return (False, "🚫 ERROR: Empty command provided.")
         
+        command = command_parts[0]
+        # --- Check against the configurable allowlist ---
+        if command not in ai_settings.tools.shell.allowed_commands:
+            return (False, f"🚫 SECURITY BLOCK: Command '{command}' is not in the allowed list.")
+        
+        command_str_for_checking = " ".join(command_parts)
         for pattern in SHELL_COMMAND_BLOCKLIST:
             if re.search(
                 pattern, 
-                command, 
+                command_str_for_checking, 
                 re.IGNORECASE,
                 ):
                 return (
                     False, 
-                    f"🚫 SECURITY BLOCK: Command '{command}' matches a dangerous pattern.",
+                    f"🚫 SECURITY BLOCK: Command '{command_str_for_checking}' matches a dangerous pattern.",
                     )
         
         try:
-            result = subprocess.run(
-                command, shell=True, capture_output=True, text=True, 
-                check=False, timeout=60, cwd=Path.cwd()
+            proc = await asyncio.create_subprocess_exec(
+                *command_parts,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=Path.cwd()
             )
-            stdout = result.stdout[:10000] if result.stdout else ""
-            stderr = result.stderr[:10000] if result.stderr else ""
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=60)
+            
+            stdout = stdout_bytes.decode('utf-8', errors='ignore')[:10000]
+            stderr = stderr_bytes.decode('utf-8', errors='ignore')[:10000]
+            
             output = f"STDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
-            if result.returncode == 0:
+            
+            if proc.returncode == 0:
                 return (True, output)
             else:
-                return (False, f"Command failed with return code {result.returncode}\n\n{output}")
-        except subprocess.TimeoutExpired:
-            return (False, f"Error: Command '{command}' timed out after 60 seconds.")
+                return (False, f"Command failed with return code {proc.returncode}\n\n{output}")
+        except asyncio.TimeoutError:
+            return (False, f"Error: Command '{command_str_for_checking}' timed out after 60 seconds.")
+        except FileNotFoundError:
+            return (False, f"Error: Command not found: '{command_parts[0]}'. Please ensure it is installed and in your PATH.")
         except Exception as e:
-            return (False, f"Error executing command '{command}': {str(e)}")
+            return (False, f"Error executing command '{command_str_for_checking}': {str(e)}")
 
 class GitCreateBranchTool(Tool):
     name = "git_create_branch"; description = "Creates and checks out a new local branch. Usage: git_create_branch(branch_name: str)"; is_risky = True
@@ -390,7 +317,6 @@ class GitRemoveFileTool(Tool):
         ) -> Tuple[bool, str]:
         p = Path(path)
         if not p.exists():
-            # This is not an error in a workflow; the desired state is "file is gone".
             return (True, f"File not found at {path}. No action needed.")
         return await _run_git_command([
             "git", 
@@ -414,12 +340,11 @@ class ToolRegistry:
         self.register(GitAddTool())
         self.register(GitCommitTool()) 
         self.register(GitPushTool())
-        self.register(RefactorFileContentTool())
-        self.register(ExecuteRefactoringWorkflowTool())
         self.register(GitListBranchesTool())
         self.register(GitCheckoutTool())
         self.register(GitRemoveFileTool())
         self.register(CreateServiceFromTemplateTool())
+        self.register(CodebaseSearchTool())
 
     def register(self, tool: Tool):
         self._tools[tool.name] = tool
@@ -432,6 +357,8 @@ class ToolRegistry:
 
     def get_tool_descriptions(self) -> str:
         descriptions = "<Tools>\n"
+        # This tells the planner that the workflow exists, even though the implementation is in the kernel.
+        descriptions += "  <Tool name='execute_refactoring_workflow' signature='Executes a complete, safe refactoring workflow for existing code within a new git branch. It creates a branch, removes specified files, refactors content in other files, and commits all changes. This is the mandatory tool for any development task that modifies the codebase. Usage: execute_refactoring_workflow(branch_name: str, commit_message: str, refactoring_instructions: str, files_to_remove: List[str] = None, files_to_refactor: List[str] = None)' />\n"
         for tool in self.get_all_tools():
             descriptions += f"  <Tool name='{tool.name}' signature='{tool.description}' />\n"
         descriptions += "</Tools>"

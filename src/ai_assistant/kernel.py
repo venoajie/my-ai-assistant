@@ -1,4 +1,5 @@
 # src/ai_assistant/kernel.py
+
 import asyncio
 import json
 import sys
@@ -10,21 +11,130 @@ import time
 import structlog
 
 from .config import ai_settings
-from .data_models import ExecutionPlan
+from .data_models import ExecutionPlan, PlanStep
 from .data_models import ExecutionPlan, CritiqueResponse
 from .llm_client_factory import get_instructor_client 
 from .persona_loader import PersonaLoader
 from .plan_validator import generate_plan_expectation, check_plan_compliance
 from .planner import Planner
 from .prompt_builder import PromptBuilder
+from .query_expander import gather_high_level_context, expand_query_with_context
 from .response_handler import ResponseHandler
 from .plugins.rag_plugin import RAGContextPlugin
 from .tools import TOOL_REGISTRY
+from .utils.colors import Colors
 from .utils.context_optimizer import ContextOptimizer
 from .utils.result_presenter import highlight_critique
-from .utils.colors import Colors
 
 logger = structlog.get_logger(__name__)
+
+
+async def _generate_refactored_code(
+    file_path_str: str, 
+    instructions: str,
+    ) -> str: 
+    """Helper function to perform the LLM call for code refactoring."""
+    file_path = Path(file_path_str)
+    if not file_path.exists():
+        logger.warning("File to refactor not found, skipping.", file=file_path_str)
+        return "" 
+    
+    logger.info("Generating refactored content for plan...", file=file_path_str)
+    original_content = file_path.read_text(encoding='utf-8')
+    
+    prompt = f"""You are an expert code refactoring agent. Your sole task is to modify the provided source code based on the user's instructions. You must return only the complete, final, modified code file. Do not add any commentary, explanations, or markdown formatting.
+
+<Instructions>
+{instructions}
+</Instructions>
+
+<OriginalCode path="{file_path_str}">
+{original_content}
+</OriginalCode>
+
+Modified Code:"""
+    
+    handler = ResponseHandler()
+    synthesis_model = ai_settings.model_selection.synthesis
+    success, result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
+    
+    if not success:
+        logger.error("Code generation API call failed.", file=file_path_str, error=result["content"])
+        return "" 
+
+    refactored_content = result["content"].strip()
+
+    if not refactored_content:
+        logger.error("Refactoring agent returned empty content. Skipping file.", file=file_path_str)
+        return "" 
+    
+    return refactored_content
+
+
+async def _expand_refactoring_workflow_plan(
+    workflow_step: PlanStep,
+    ) -> Tuple[bool, List[PlanStep]]:
+    """
+    Expands a single 'execute_refactoring_workflow' step into a sequence of
+    deterministic steps by calling the LLM to generate code.
+    """
+    args = workflow_step.args
+    branch_name = args.get("branch_name")
+    commit_message = args.get("commit_message")
+    instructions = args.get("refactoring_instructions")
+    files_to_refactor = args.get("files_to_refactor", [])
+    
+    if not all([branch_name, commit_message, instructions, files_to_refactor]):
+        logger.error("Invalid refactoring workflow step, missing required arguments.")
+        return False, []
+
+    new_steps = []
+    
+    # 1. Create Branch
+    new_steps.append(PlanStep(
+        thought="Start the workflow by creating a new git branch.",
+        tool_name="git_create_branch",
+        args={"branch_name": branch_name}
+    ))
+
+    # 2. Generate and Write Files
+    successful_file_paths = []
+    for file_path in files_to_refactor:
+        refactored_content = await _generate_refactored_code(file_path, instructions)
+        if refactored_content:
+            successful_file_paths.append(file_path)
+            new_steps.append(PlanStep(
+                thought=f"Write the generated refactored content to '{file_path}'.",
+                tool_name="write_file",
+                args={"path": file_path, "content": refactored_content}
+            ))
+            new_steps.append(PlanStep(
+                thought=f"Stage the modified file '{file_path}' for commit.",
+                tool_name="git_add",
+                args={"path": file_path}
+            ))
+
+    if successful_file_paths:
+        # 3. Commit
+        final_commit_message = commit_message
+        if len(successful_file_paths) != len(files_to_refactor):
+            changed_files_str = ", ".join(f"`{f}`" for f in successful_file_paths)
+            final_commit_message = (
+                f"{commit_message}\n\n"
+                f"[AI-NOTE]: This change was partially applied. Only the following files were "
+                f"successfully modified: {changed_files_str}"
+            )
+
+        new_steps.append(PlanStep(
+            thought="Commit all staged changes with an accurate message.",
+            tool_name="git_commit",
+            args={"commit_message": final_commit_message}
+        ))
+    else:
+        logger.error("Code generation failed for all files. No commit will be made.")
+        return False, []
+    
+    return True, new_steps
 
 async def orchestrate_agent_run(
     query: str,
@@ -50,21 +160,24 @@ async def orchestrate_agent_run(
             logger.error("Persona loading failed", persona=persona_alias, error=str(e))
             return {"response": error_msg, "metrics": metrics}
 
-    # --- RAG CONTEXT INJECTION ---
+
+    auto_inject_files = ai_settings.general.auto_inject_files or []
+    high_level_context_str = gather_high_level_context(auto_inject_files)
+    effective_query = await expand_query_with_context(query, high_level_context_str)
+
     logger.info("Attempting to retrieve RAG context to enhance planning.")
-    rag_content = "" # Ensure rag_content is always defined for direct response path
+    rag_content = ""
     system_note = None
     try:
         rag_plugin = RAGContextPlugin(project_root=Path.cwd())
-        success, rag_content_result = rag_plugin.get_context(query, [])
+        success, rag_content_result = rag_plugin.get_context(effective_query, [])
                 
         if success and rag_content_result:
-            rag_content = rag_content_result # Store the content for later use
+            rag_content = rag_content_result
             logger.info("Injecting RAG context into planning history.")
             system_note = f"<SystemNote>The following context was retrieved from the RAG system to aid in planning:\n{rag_content}</SystemNote>"
         elif not success:
             print(f"{Colors.YELLOW}⚠️  RAG Warning: {rag_content_result}{Colors.RESET}", file=sys.stderr)
-            # Explicitly inform the AI planner of the failure.
             system_note = f"<SystemNote>CRITICAL: The RAG context retrieval system failed with the following error: {rag_content_result}. You must proceed without this information.</SystemNote>"
             
     except Exception as e:
@@ -139,7 +252,6 @@ async def orchestrate_agent_run(
      
     prompt_builder = PromptBuilder()
 
-    # --- DIRECT RESPONSE (NO TOOLS) ---
     if not plan or not plan.steps or all(not step.tool_name for step in plan):
         print("📝 No tool execution required. Generating direct response...")
         
@@ -156,17 +268,14 @@ async def orchestrate_agent_run(
         )
         response_handler = ResponseHandler()
         
-        # Ensure we explicitly use the model configured for synthesis.
         synthesis_model = ai_settings.model_selection.synthesis
         
-        synthesis_result = await response_handler.call_api(direct_prompt, model=synthesis_model)
+        _success, synthesis_result = await response_handler.call_api(direct_prompt, model=synthesis_model)
         
-        # Update metrics with the results
         metrics["timings"]["synthesis"] = synthesis_result["duration"]
         metrics["tokens"]["synthesis"] = synthesis_result["tokens"]        
         return {"response": synthesis_result["content"], "metrics": metrics}
     
-    # --- ADVERSARIAL VALIDATION (CRITIQUE) ---
     critique = None
     if plan and plan.steps and any(step.tool_name for step in plan):
 
@@ -189,20 +298,12 @@ async def orchestrate_agent_run(
             critique_client = get_instructor_client(critique_model_name)
             critique_gen_config = ai_settings.generation_params.critique.model_dump(exclude_none=True)
 
-            provider_name_str = str(critique_client.provider).lower()
-            if "gemini" in provider_name_str:
-                critique_response = await critique_client.create(
-                    response_model=CritiqueResponse,
-                    messages=[{"role": "user", "content": critique_prompt}],
-                    generation_config=critique_gen_config,
-                )
-            else:
-                critique_response = await critique_client.chat.completions.create(
-                    model=critique_model_name,
-                    response_model=CritiqueResponse,
-                    messages=[{"role": "user", "content": critique_prompt}],
-                    **critique_gen_config,
-                )
+            critique_response = await critique_client.chat.completions.create(
+                model=critique_model_name,
+                response_model=CritiqueResponse,
+                messages=[{"role": "user", "content": critique_prompt}],
+                **critique_gen_config,
+            )
 
             critique = critique_response.critique
             optimizer = ContextOptimizer()
@@ -215,6 +316,17 @@ async def orchestrate_agent_run(
         except Exception as e:
             critique = "Plan validation step failed due to an internal error."
             logger.warning("Could not perform plan validation.", error=str(e))
+            
+    if len(plan) == 1 and plan[0].tool_name == "execute_refactoring_workflow":
+        logger.info("Detected refactoring workflow. Expanding plan with generated code...")
+        success, expanded_steps = await _expand_refactoring_workflow_plan(plan[0])
+        if success:
+            plan.steps = expanded_steps
+            logger.info("Plan successfully expanded into deterministic steps.", step_count=len(plan))
+        else:
+            error_msg = "Failed to expand refactoring workflow. Halting execution."
+            logger.error(error_msg)
+            return {"response": error_msg, "metrics": metrics}
 
     if output_dir:
         return await _handle_output_first_mode(
@@ -224,15 +336,11 @@ async def orchestrate_agent_run(
             output_dir,
             )
 
-    # --- LIVE MODE (TOOL EXECUTION) ---
     print("🚀 Executing adaptive plan...")
     
-    # *** START OF KEY CHANGE FOR LIVE MODE ***
-    # Initialize observations and pre-populate with any RAG context.
     observations = []
     if rag_content:
         observations.append(f"<Observation step='0' tool='RAG_retrieval'>\n{rag_content}\n</Observation>")
-    # *** END OF KEY CHANGE FOR LIVE MODE ***
 
     step_results: Dict[int, str] = {}
     any_risky_action_denied = False
@@ -248,9 +356,9 @@ async def orchestrate_agent_run(
             else:
                 prev_result = step_results.get(from_step_num, "")
                 condition_met = True
-                if "in" in cond and (prev_result is None or str(cond["in"]) not in str(prev_result)):
+                if cond.in_output and (prev_result is None or str(cond.in_output) not in str(prev_result)):
                     condition_met = False
-                if "not_in" in cond and (prev_result is not None and str(cond["not_in"]) in str(prev_result)):
+                if cond.not_in_output and (prev_result is not None and str(cond.not_in_output) in str(prev_result)):
                     condition_met = False
                 if not condition_met:
                     print(f"  - Skipping Step {step_num} because condition was not met.")
@@ -305,12 +413,13 @@ async def orchestrate_agent_run(
             }
             
     observation_text = "\n".join(observations)
+    
     is_failure_state = False
     for obs in observations:
-        if obs.startswith("<Observation") and ("Error:" in obs or "Critical Error:" in obs):
+        if ">\nError: " in obs or ">\nCritical Error: " in obs:
             is_failure_state = True
             break
-
+    
     use_compact_protocol = False
     if threshold > 0:
         temp_history_str = " ".join(turn['content'] for turn in history)
@@ -363,7 +472,7 @@ async def orchestrate_agent_run(
     )
     response_handler = ResponseHandler()
     synthesis_model = ai_settings.model_selection.synthesis
-    synthesis_result = await response_handler.call_api(synthesis_prompt, model=synthesis_model)
+    _success, synthesis_result = await response_handler.call_api(synthesis_prompt, model=synthesis_model)
     metrics["timings"]["synthesis"] = synthesis_result["duration"]
     metrics["tokens"]["synthesis"] = synthesis_result["tokens"]
     final_response = synthesis_result["content"]
@@ -372,7 +481,7 @@ async def orchestrate_agent_run(
         "response": final_response,
         "metrics": metrics,
     }
-    
+        
 async def _handle_output_first_mode(
     plan: ExecutionPlan,
     persona_alias: str,
@@ -418,76 +527,6 @@ async def _handle_output_first_mode(
         tool_name = step.tool_name
         args = step.args
         thought = step.thought
-        
-        if tool_name == "execute_refactoring_workflow":
-            logger.debug("Unpacking execute_refactoring_workflow for manifest.")
-            
-            branch_name = args.get("branch_name")
-            if branch_name:
-                manifest["actions"].append({
-                    "type": "create_branch",
-                    "comment": f"Part of workflow: Create branch for '{args.get('commit_message')}'",
-                    "branch_name": branch_name,
-                })
-
-            instructions = args.get("refactoring_instructions")
-            files_to_refactor = args.get("files_to_refactor", [])
-            
-            for file_path_str in files_to_refactor:
-                file_path = Path(file_path_str)
-                if not file_path.exists():
-                    logger.warning("File to refactor not found, skipping.", file=file_path_str)
-                    continue
-                
-                logger.info("Generating refactored content for package...", file=file_path_str)
-                original_content = file_path.read_text(encoding='utf-8')
-                
-                prompt = f"""You are an expert code refactoring agent. Your sole task is to modify the provided source code based on the user's instructions. You must return only the complete, final, modified code file. Do not add any commentary, explanations, or markdown formatting.
-
-<Instructions>
-{instructions}
-</Instructions>
-
-<OriginalCode path="{file_path_str}">
-{original_content}
-</OriginalCode>
-
-Modified Code:"""
-                
-                handler = ResponseHandler()
-                synthesis_model = ai_settings.model_selection.synthesis
-                result = await handler.call_api(prompt, model=synthesis_model, generation_config={"temperature": 0.0})
-                refactored_content = result["content"].strip()
-
-                if not refactored_content:
-                    logger.error("Refactoring agent returned empty content. Skipping file.", file=file_path_str)
-                    continue
-
-                target_path_in_workspace = workspace_dir / file_path_str
-                target_path_in_workspace.parent.mkdir(parents=True, exist_ok=True)
-                target_path_in_workspace.write_text(refactored_content, encoding='utf-8')
-                
-                manifest["actions"].append({
-                    "type": "apply_file_change",
-                    "comment": f"Part of workflow: Refactor file '{file_path_str}'.",
-                    "source": f"workspace/{file_path_str}",
-                    "target": file_path_str,
-                })
-                manifest["actions"].append({
-                    "type": "git_add",
-                    "comment": f"Part of workflow: Stage refactored file.",
-                    "path": file_path_str,
-                })
-
-            commit_message = args.get("commit_message")
-            if commit_message:
-                manifest["actions"].append({
-                    "type": "git_commit",
-                    "comment": "Part of workflow: Commit all staged changes.",
-                    "message": commit_message,
-                })
-
-            continue
         
         action_type = tool_map.get(tool_name)
         if not action_type:
@@ -553,3 +592,4 @@ Modified Code:"""
         "manifest": manifest,
         "metrics": metrics,
     }
+

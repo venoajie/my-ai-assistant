@@ -1,0 +1,23 @@
+# .gitattributes
+
+# Set default behavior for all files to be text and use LF line endings.
+* text=auto eol=lf
+
+# Explicitly declare file types that should always have LF line endings.
+*.py eol=lf
+*.md eol=lf
+*.yml eol=lf
+*.yaml eol=lf
+*.json eol=lf
+*.toml eol=lf
+*.sh eol=lf
+*.gitignore eol=lf
+*.gitattributes eol=lf
+
+# Declare file types that are binary and should not be modified.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.gz binary

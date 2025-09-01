@@ -2,6 +2,11 @@
 from typing import Dict, List, Any, Optional
 import json
 from .data_models import ExecutionPlan
+from .governance import GOVERNANCE_RULES 
+
+# Load planning heuristics from the already-parsed constant.
+PLANNING_HEURISTICS = GOVERNANCE_RULES.get("planning_heuristics", [])
+
 
 class PromptBuilder:
     """
@@ -51,9 +56,22 @@ CRITICAL: Based on an automated analysis of the user's request, you MUST adhere 
 </ComplianceRequirements>
 """
 
-        output_mode_heuristic = ""
+        # --- REFACTORED: Dynamically build the heuristics section ---
+        # Start with the static heuristics loaded from governance.yml
+        heuristics_list = [f"{i+1}. {h}" for i, h in enumerate(PLANNING_HEURISTICS)]
+        
+        # Dynamically add the context-dependent heuristic for output-first mode
         if is_output_mode:
-            output_mode_heuristic = """5.  **OUTPUT-FIRST MODE:** You are in a special mode where your plan will NOT be executed directly. Instead, it will be saved to a manifest file. Your plan must be a complete, end-to-end sequence of actions (e.g., create branch, write file, add, commit, push) that can be executed by a separate, non-AI tool. Do not use read-only tools like `list_files` unless their output is critical for a subsequent step's condition. Your primary goal is to generate a complete and executable action plan."""
+            output_mode_heuristic = (
+                "**OUTPUT-FIRST MODE:** You are in a special mode where your plan will NOT be executed directly. "
+                "Instead, it will be saved to a manifest file. Your plan must be a complete, end-to-end sequence of "
+                "actions (e.g., create branch, write file, add, commit, push) that can be executed by a separate, "
+                "non-AI tool. Do not use read-only tools like `list_files` unless their output is critical for a "
+                "subsequent step's condition. Your primary goal is to generate a complete and executable action plan."
+            )
+            heuristics_list.append(f"{len(heuristics_list) + 1}. {output_mode_heuristic}")
+        
+        heuristics_section = "\n".join(heuristics_list)
 
         prompt = f"""{persona_section}
 <Task>
@@ -68,11 +86,7 @@ You are a planning agent. Your SOLE purpose is to convert a user's request into 
 </AvailableTools>
 
 <PlanningHeuristics>
-1.  **Conditional Branching:** For uncertainty, use a read-only tool first, then use a `condition` block on subsequent steps that references the first step's output.
-2.  **Handle Ignored Files:** When using `git_add` on a potentially ignored file, use the `force=True` parameter.
-3.  **CRITICAL: Use Pre-loaded Context for Code Generation:** When modifying a file provided in an `<AttachedFile>` tag, your `write_file` step MUST contain the ENTIRE, new, complete file content. Do not use placeholders.
-4.  **Answer from Context:** If the user's question can be fully answered by information already present in the conversation history or attached context (like RAG results), your goal is to signal that no tools are needed. To do this, generate an empty plan: `[]`. Do not use tools to re-process information you already have.
-{output_mode_heuristic}
+{heuristics_section}
 </PlanningHeuristics>
 
 {history_section}

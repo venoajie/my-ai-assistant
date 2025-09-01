@@ -1,10 +1,11 @@
 # ai_assistant/default_config.yml
 config_version: "1.4.0"
 model_selection:
-  planning: "gemini-2.5-flash"
+  planning: "deepseek-coder"
   critique: "gemini-2.5-flash"
-  synthesis: "deepseek-reasoner"
+  synthesis: "gemini-2.5-pro"
   json_corrector: "gemini-2.5-flash-lite"
+  query_expander: "gemini-2.5-flash-lite"
 default_provider: "gemini"
 general:
   # Path to the user's global personas directory, relative to the home directory.
@@ -25,6 +26,8 @@ context_optimizer:
 tools:
   git:
     branch_prefix: "ai"
+  shell:
+    allowed_commands: []  # Default empty list
 deepseek_discount:
   start_hour: 16
   start_minute: 30

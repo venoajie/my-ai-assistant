@@ -1,12 +1,10 @@
 # src/ai_assistant/plan_validator.py
-import yaml
 from typing import Dict, Any, Optional, Tuple
-from importlib import resources
 
 from .data_models import ExecutionPlan
-# Load the rules once at startup
-governance_text = resources.files('ai_assistant').joinpath('internal_data/governance.yml').read_text(encoding='utf-8')
-GOVERNANCE_RULES = yaml.safe_load(governance_text)
+from .governance import GOVERNANCE_RULES
+
+# Load the rules from the already-parsed constant.
 COMPLIANCE_RULES = GOVERNANCE_RULES.get("plan_compliance_rules", [])
 
 def generate_plan_expectation(prompt: str) -> Optional[Dict[str, Any]]:

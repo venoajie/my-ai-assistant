@@ -16,6 +16,7 @@ from . import kernel
 from .config import ai_settings
 from .context_plugin import ContextPluginBase
 from .logging_config import setup_logging 
+from .plugins.rag_plugin import RAGContextPlugin
 from .persona_loader import PersonaLoader
 from .prompt_analyzer import PromptAnalyzer 
 from .response_handler import ResponseHandler, APIKeyNotFoundError
@@ -334,7 +335,6 @@ async def async_main():
     parser.add_argument('--context', help='The name of the context plugin to use (e.g., Trading).')
     parser.add_argument('--output-dir', help='Activates Output-First mode, generating an execution package in the specified directory instead of executing live.')
     parser.add_argument('--show-context', action='store_true', help='Build and display the context from files and plugins, then exit without running the agent.')
-    # --- NEW: Add model override arguments ---
     model_group = parser.add_argument_group('Model Overrides', 'Temporarily override the models used for a single run.')
     model_group.add_argument('--planning-model', help='Override the model used for the planning phase.')
     model_group.add_argument('--synthesis-model', help='Override the model used for the synthesis phase.')
@@ -349,7 +349,6 @@ async def async_main():
     
     setup_logging(log_level=args.log_level)
      
-    # --- CORRECTED PLACEMENT: Apply model overrides FIRST ---
     if args.planning_model:
         ai_settings.model_selection.planning = args.planning_model
     if args.synthesis_model:
@@ -357,7 +356,6 @@ async def async_main():
     if args.critique_model:
         ai_settings.model_selection.critique = args.critique_model
 
-    # --- CORRECTED PLACEMENT: Now, inform the user of the FINAL configuration ---
     print(f"{Colors.BLUE}╔{'═' * 60}╗{Colors.RESET}")
     print(f"{Colors.BLUE}║{Colors.BOLD} Model Configuration for this Run{' ' * (60 - 32)}{Colors.BLUE}║{Colors.RESET}")
     print(f"{Colors.BLUE}╠{'═' * 60}╣{Colors.RESET}")
@@ -366,24 +364,17 @@ async def async_main():
     print(f"{Colors.BLUE}║{Colors.CYAN} Critique:{Colors.RESET}  {ai_settings.model_selection.critique:<49}{Colors.BLUE}║{Colors.RESET}")
     print(f"{Colors.BLUE}╚{'═' * 60}╝{Colors.RESET}")
 
-
     user_query = ' '.join(args.query).strip()
-    # --- Read from stdin if no query is provided on the command line ---
     if not user_query and not sys.stdin.isatty():
         print(f"{Colors.DIM}Reading prompt from stdin...{Colors.RESET}")
-        user_query = sys.stdin.read()    # Initialize args.files as a list if it's None. This must be done first.
+        user_query = sys.stdin.read()
 
     if args.files is None:
         args.files = []
 
-    # Only perform auto-injection if a specific context plugin is NOT requested.
     if not args.context:
-        # Prepend auto-injected files from config, ensuring no duplicates
         auto_injected_files = ai_settings.general.auto_inject_files or []
-        # Use a set for efficient duplicate checking of already present files
         seen_files = set(args.files)
-        
-        # We prepend in reverse order so the final list has the config order correct
         for f_path in reversed(auto_injected_files):
             if f_path not in seen_files:
                 args.files.insert(0, f_path)
@@ -391,7 +382,6 @@ async def async_main():
             
     if args.persona:
         try:
-            # Find the manifest inside the installed package
             manifest_traversable = resources.files('ai_assistant').joinpath('internal_data/persona_manifest.yml')
             manifest_path = Path(str(manifest_traversable))
         except (ModuleNotFoundError, FileNotFoundError):
@@ -417,34 +407,21 @@ async def async_main():
     if args.list_personas:
         loader = PersonaLoader()
         all_personas = loader.list_all_personas()
-        
         if all_personas.get("project"):
             print(f"{Colors.BOLD}Project-Local Personas (in .ai/personas):{Colors.RESET}")
-            for p in all_personas["project"]:
-                print(f" - {p}")
-        
+            for p in all_personas["project"]: print(f" - {p}")
         if all_personas.get("user"):
             print(f"{Colors.BOLD}User-Global Personas (in ~/.config/ai_assistant/personas):{Colors.RESET}")
-            for p in all_personas["user"]:
-                print(f" - {p}")
-
+            for p in all_personas["user"]: print(f" - {p}")
         if all_personas.get("builtin"):
             print(f"{Colors.BOLD}Built-in Personas:{Colors.RESET}")
-            for p in all_personas["builtin"]:
-                print(f" - {p}")
-
+            for p in all_personas["builtin"]: print(f" - {p}")
         if not any(all_personas.values()):
             print("No personas found.")
-
         sys.exit(0)
         
-    # --- Sanity checks now run only when proceeding with a query ---
-    # Don't run sanity checks if we are just showing context
     if not args.show_context:
        run_prompt_analyzer(args, user_query)
-
-    if args.critique_model:
-        ai_settings.model_selection.critique = args.critique_model
  
     session_manager = SessionManager()
     history = []
@@ -463,46 +440,44 @@ async def async_main():
     full_context_str = ""
     context_plugin = None
     
-    # --- MODIFIED: Made auto-loader more graceful ---
-    # Get a list of available plugins once to avoid multiple discoveries
     available_plugins = list_available_plugins()
 
-    # --- Automatic Domain-Based Plugin Loading ---                
     if args.persona and args.persona.startswith('domains/'):
         parts = args.persona.split('/')
         if len(parts) > 1:
             domain_name = parts[1]
             plugin_name_to_load = f"domains-{domain_name}"
-            
-            # Only attempt to load if the plugin actually exists
             if plugin_name_to_load in available_plugins:
-                # --- REFACTORED: Load first, then print explicit message ---
                 temp_plugin = load_context_plugin(plugin_name_to_load)
                 if temp_plugin:
                     print(f"{Colors.MAGENTA}🔌 Persona '{args.persona}' triggered auto-loading of the '{temp_plugin.name}' context plugin.{Colors.RESET}")
                     context_plugin = temp_plugin
-            
             else:
-                # --- Feedback when an auto-plugin is not found ---
                 print(f"{Colors.DIM}   - Searched for plugin '{plugin_name_to_load}' (triggered by persona '{args.persona}') but it was not found.{Colors.RESET}")
              
-             
-    # --- Manual Override ---
-    # If the user specifies --context, it overrides any auto-loaded plugin.
     if args.context:
         print(f"{Colors.YELLOW}--context flag provided, overriding any auto-loaded plugin.{Colors.RESET}")
         context_plugin = load_context_plugin(args.context)
+        if not context_plugin:
+            print(f"{Colors.RED}🛑 HALTING: The requested context plugin '{args.context}' could not be loaded.{Colors.RESET}", file=sys.stderr)
+            sys.exit(1)
 
+    if context_plugin and isinstance(context_plugin, RAGContextPlugin):
+        status_message = context_plugin.get_status_message()
+        if status_message:
+            print(f"{Colors.DIM}{status_message}{Colors.RESET}")
+            
     if context_plugin:
-        print(f"   - {Colors.GREEN}✅ Plugin loaded successfully.{Colors.RESET}")
-        plugin_context = context_plugin.get_context(user_query, args.files or [])
-        full_context_str += plugin_context
+        success, plugin_context_or_error = context_plugin.get_context(user_query, args.files or [])
+        if success:
+            full_context_str += plugin_context_or_error
+        else:
+            print(f"{Colors.YELLOW}⚠️  Warning: Context plugin '{context_plugin.name}' failed: {plugin_context_or_error}{Colors.RESET}", file=sys.stderr)
                 
     if args.files:
-        file_context = build_file_context(args.files, user_query)
+        file_context = build_file_context(args.files, user_query, args.extract_symbols)
         full_context_str += file_context
 
-    # --- NEW: Handle --show-context flag ---
     if args.show_context:
         print(f"\n{Colors.BOLD}{Colors.CYAN}--- Generated Context Preview ---{Colors.RESET}")
         if full_context_str.strip():
@@ -510,11 +485,8 @@ async def async_main():
         else:
             print(f"{Colors.YELLOW}No context was generated from the provided files or plugins.{Colors.RESET}")
         print(f"{Colors.BOLD}{Colors.CYAN}---------------------------------{Colors.RESET}")
-        sys.exit(0) # Exit after showing context
+        sys.exit(0)
 
-    # --- UNIFIED CONTEXT INJECTION (TD-001 FIX) ---
-    # If any context was built, inject it into the history now. This ensures
-    # both interactive and one-shot modes start with the same context.
     if full_context_str:
         print(f"{Colors.BLUE}Injecting file/plugin context into session history.{Colors.RESET}")
         context_message = "The following context from files and/or plugins has been attached to our session:\n\n" + full_context_str
@@ -523,10 +495,10 @@ async def async_main():
 
     if args.interactive:
         await run_interactive_session(
-            history,
-            session_id,
-            args.persona,
-            args.autonomous,
+            history=history,
+            session_id=session_id,
+            persona_alias=args.persona,
+            is_autonomous=args.autonomous,
         )
     else:
         if not user_query.strip() and not full_context_str:
@@ -541,7 +513,8 @@ async def async_main():
             is_autonomous=args.autonomous,
             output_dir=args.output_dir,
         )
-    
+
+        
 def print_summary_metrics(
     start_time: float,
     end_time: float,
