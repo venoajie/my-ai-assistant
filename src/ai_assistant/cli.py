@@ -11,6 +11,9 @@ import structlog
 import sys
 import time
 import yaml
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from . import kernel 
 from .config import ai_settings
