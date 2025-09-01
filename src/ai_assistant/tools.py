@@ -99,7 +99,7 @@ class CodebaseSearchTool(Tool):
     async def __call__(self, query: str) -> Tuple[bool, str]:
         try:
             rag_plugin = RAGContextPlugin(Path.cwd())
-            success, result = rag_plugin.get_context(query, files=[])
+            success, result = await rag_plugin.get_context(query, files=[])
             
             if not success:
                 return (False, f"Codebase search failed: {result}")
