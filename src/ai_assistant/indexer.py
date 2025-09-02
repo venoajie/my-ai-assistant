@@ -108,8 +108,11 @@ class Indexer:
             ai_settings.rag.default_branch,
             )
         
+        # Sanitize the branch name to make it compatible with ChromaDB collection naming rules.
+        sanitized_branch = self.branch.replace('/', '-')
+        
         base_collection_name = ai_settings.rag.collection_name
-        self.collection_name = f"{base_collection_name}_{self.branch}"
+        self.collection_name = f"{base_collection_name}_{sanitized_branch}"
         logger.info("Indexer targeting collection", collection_name=self.collection_name)
         
         self.db_client = chromadb.PersistentClient(path=str(self.index_path))
