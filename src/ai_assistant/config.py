@@ -65,7 +65,6 @@ class ShellToolConfig(BaseModel):
 
 class ToolsConfig(BaseModel):
     git: GitToolConfig
-    # --- ADDED: Shell tool config is now part of the main ToolsConfig ---
     shell: ShellToolConfig
 
 class DeepSeekDiscountConfig(BaseModel):
