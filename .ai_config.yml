@@ -11,13 +11,12 @@ general:
     - "AGENTS.md"
 
 rag:
-  # The URL of your deployed Librarian service (Corrected format).
-  librarian_url: "http://138.2.183.131:8000"
+  # Reference the LIBRARIAN_API_URL from your .env file
+  librarian_url: ${LIBRARIAN_API_URL}
 
-  # The API key for the Librarian service.
-  # This will be read from the LIBRARIAN_API_KEY environment variable.
+  # Reference the LIBRARIAN_API_KEY from your .env file
   librarian_api_key: ${LIBRARIAN_API_KEY}
-
+  
   # The number of final context chunks to request from the Librarian.
   rerank_top_n: 5
 
