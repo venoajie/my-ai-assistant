@@ -1,6 +1,3 @@
-I have updated the installation commands to reflect the new `[client]` and `[indexing]` optional dependency groups, guiding users and contributors to the correct setup.
-
-```markdown
 # Installation Guide
 
 This guide provides the recommended installation methods for the AI Assistant.
