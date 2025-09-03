@@ -7,8 +7,21 @@ from typing import Dict, Optional, List, Any
 from pydantic import BaseModel, Field, model_validator
 from importlib import resources
 import structlog  
+import re 
 
 logger = structlog.get_logger(__name__)
+
+def expand_env_vars(config: Any) -> Any:
+    """Recursively expands environment variables in a loaded YAML config."""
+    if isinstance(config, dict):
+        return {k: expand_env_vars(v) for k, v in config.items()}
+    elif isinstance(config, list):
+        return [expand_env_vars(i) for i in config]
+    elif isinstance(config, str):
+        # This regex finds all ${VAR_NAME} patterns
+        return re.sub(r'\$\{(.*?)\}', lambda m: os.getenv(m.group(1), ''), config)
+    else:
+        return config
 
 # --- Pydantic Models for Type-Safe Configuration ---
 class ModelSelectionConfig(BaseModel):
@@ -174,7 +187,7 @@ class AIConfig(BaseModel):
     providers: Dict[str, ProviderConfig]
     paths: PathsConfig
 
-# --- Configuration Loading Logic
+# --- Configuration Loading Logic    
 def load_ai_settings() -> AIConfig:
     """Loads and merges config from package defaults, user config, and project config"""
     try:
@@ -203,6 +216,9 @@ def load_ai_settings() -> AIConfig:
             logger.info("Applying project-level configuration override.", path=str(project_config_path)) 
             config_data = deep_merge(config_data, project_config)
     
+    # After all configs are merged, expand environment variables
+    config_data = expand_env_vars(config_data)
+
     # 1. First, calculate all runtime paths based on the merged config dictionary.
     project_root = Path.cwd()
     general_config = config_data.get("general", {})
