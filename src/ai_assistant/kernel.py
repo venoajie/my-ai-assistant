@@ -169,13 +169,17 @@ async def orchestrate_agent_run(
     rag_content = ""
     system_note = None
     try:
+        
+        # We now instantiate the plugin directly to call it
+        from .plugins.rag_plugin import RAGContextPlugin
         rag_plugin = RAGContextPlugin(project_root=Path.cwd())
-        success, rag_content_result = rag_plugin.get_context(effective_query, [])
-                
+        
+        # The kernel now correctly awaits the async method
+        success, rag_content_result = await rag_plugin.get_context_async(effective_query, [])
         if success and rag_content_result:
             rag_content = rag_content_result
             logger.info("Injecting RAG context into planning history.")
-            system_note = f"<SystemNote>The following context was retrieved from the RAG system to aid in planning:\n{rag_content}</SystemNote>"
+            system_note = f"<SystemNote>The following context was retrieved from the RAG system to aid in planning:\n{rag_content}</SystemNote>"        
         elif not success:
             print(f"{Colors.YELLOW}⚠️  RAG Warning: {rag_content_result}{Colors.RESET}", file=sys.stderr)
             system_note = f"<SystemNote>CRITICAL: The RAG context retrieval system failed with the following error: {rag_content_result}. You must proceed without this information.</SystemNote>"
