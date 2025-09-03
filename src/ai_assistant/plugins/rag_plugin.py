@@ -55,45 +55,42 @@ class RAGContextPlugin(ContextPluginBase):
                 response.raise_for_status()
                 return await response.json()
 
-    def get_context(self, query: str, files: List[str]) -> Tuple[bool, str]:
-        """Synchronously fetches context from the Librarian service."""
+    async def get_context_async(self, query: str) -> Tuple[bool, str]:        
+        """Asynchronously fetches context from the Librarian service."""
         if not self.is_ready:
             return False, self.message
+        
+        context_url = f"{self.librarian_url.rstrip('/')}/api/v1/context"
         try:
-            # Bridge async call in sync method
-            return asyncio.run(self._async_get_context(query))
+            payload = {
+                "query": query,
+                "max_results": ai_settings.rag.rerank_top_n,
+            }
+            headers = {"X-API-Key": ai_settings.rag.librarian_api_key}
+
+            logger.info("Querying Librarian service for RAG context...", url=context_url)
+            async with aiohttp.ClientSession() as session:
+                async with session.post(context_url, json=payload, headers=headers, timeout=30) as response:
+                    if response.status != 200:
+                        error_detail = await response.text()
+                        logger.error(
+                            "Librarian service returned an error",
+                            status=response.status,
+                            detail=error_detail,
+                        )
+                        return False, f"Librarian service error ({response.status}): {error_detail}"
+
+                    data = await response.json()
+                    context_chunks = data.get("context", [])
+
+                    if not context_chunks:
+                        return True, "<Context>No relevant documents found in the codebase for the query.</Context>"
+
+                    context_str = "\n\n---\n\n".join(
+                        f"<ContextChunk source=\"{chunk.get('metadata', {}).get('source', 'unknown')}\">\n{chunk['content']}\n</ContextChunk>"
+                        for chunk in context_chunks
+                    )
+                    return True, context_str
         except Exception as e:
             logger.error("RAG context retrieval failed", error=str(e), exc_info=True)
             return False, f"Failed to get context from Librarian service: {e}"
-
-    async def _async_get_context(self, query: str) -> Tuple[bool, str]:
-        context_url = f"{self.librarian_url.rstrip('/')}/api/v1/context"
-        payload = {
-            "query": query,
-            "max_results": ai_settings.rag.rerank_top_n,
-        }
-        headers = {"X-API-Key": ai_settings.rag.librarian_api_key}
-
-        logger.info("Querying Librarian service for RAG context...", url=context_url)
-        async with aiohttp.ClientSession() as session:
-            async with session.post(context_url, json=payload, headers=headers, timeout=30) as response:
-                if response.status != 200:
-                    error_detail = await response.text()
-                    logger.error(
-                        "Librarian service returned an error",
-                        status=response.status,
-                        detail=error_detail,
-                    )
-                    return False, f"Librarian service error ({response.status}): {error_detail}"
-
-                data = await response.json()
-                context_chunks = data.get("context", [])
-
-                if not context_chunks:
-                    return True, "<Context>No relevant documents found in the codebase for the query.</Context>"
-
-                context_str = "\n\n---\n\n".join(
-                    f"<ContextChunk source=\"{chunk.get('metadata', {}).get('source', 'unknown')}\">\n{chunk['content']}\n</ContextChunk>"
-                    for chunk in context_chunks
-                )
-                return True, context_str
