@@ -24,7 +24,7 @@ from ..reranker import get_reranker, Reranker
 
 logger = structlog.get_logger()
 
-def _get_oci_client() -> Optional[oci.object_storage.ObjectStorageClient]:
+def _get_oci_client() -> Optional['oci.object_storage.ObjectStorageClient']:
     if not oci: return None
     try:
         config = oci.config.from_file()
