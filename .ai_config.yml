@@ -1,7 +1,9 @@
-# .ai_config.yml
+
+# .ai_config.yml (Corrected Version)
 
 general:
-  # We want to store session files in a custom directory for this project.
+  # This is a good practice for project-specific session management.
+  # Remember to add 'my_custom_sessions/' to your .gitignore file.
   sessions_directory: "my_custom_sessions"
 
   auto_inject_files:
@@ -9,19 +11,20 @@ general:
     - "AGENTS.md"
 
 rag:
-  enable_branch_awareness: true
-  oracle_cloud:
-    namespace: frpowqeyehes
-    bucket: bucket-20230107-0704
-    region: eu-frankfurt-1
-  enable_reranking: true
-  # Optional: You can tune these parameters
-  # retrieval_n_results: 30 # Retrieve more to start
-  # rerank_top_n: 7         # Return more to the LLM
+  # The URL of your deployed Librarian service (Corrected format).
+  librarian_url: "http://138.2.183.131:8000"
 
+  # The API key for the Librarian service.
+  # This will be read from the LIBRARIAN_API_KEY environment variable.
+  librarian_api_key: ${LIBRARIAN_API_KEY}
+
+  # The number of final context chunks to request from the Librarian.
+  rerank_top_n: 5
 
 tools:
   shell:
+    # A safe, curated list of allowed commands.
+    # CRITICAL: 'python' and 'pytest' have been removed to prevent RCE vulnerabilities.
     allowed_commands:
       - ls
       - git
@@ -29,5 +32,3 @@ tools:
       - find
       - cat
       - echo
-      - pytest
-      - python
