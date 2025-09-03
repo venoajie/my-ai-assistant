@@ -55,7 +55,8 @@ class RAGContextPlugin(ContextPluginBase):
                 response.raise_for_status()
                 return await response.json()
 
-    async def get_context_async(self, query: str) -> Tuple[bool, str]:        
+    async def get_context_async(self, query: str, files: List[str]) -> Tuple[bool, str]:
+
         """Asynchronously fetches context from the Librarian service."""
         if not self.is_ready:
             return False, self.message
