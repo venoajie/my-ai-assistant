@@ -53,14 +53,25 @@ indexing = [
     "my-ai-assistant[rag-base]",
     "sentence-transformers==5.1.0",
     "torch==2.8.0 ",
-    "oci",
-]
-# For lightweight developer environments that only query the remote index
-client = [
-    "my-ai-assistant[rag-base]",
-    "oci",
+    "oci-cli",
 ]
 
+# For a developer's machine (the AI Assistant client)
+# Separate the core client from the heavy ML libs
+client-base = [
+    "oci", # For downloading the index from the old RAG workflow
+]
+
+# A new extra specifically for the CPU-based ML features on the client
+client-rag-cpu = [
+    "my-ai-assistant[client-base]", # Inherits the base client deps
+    "chromadb",
+    "sentence-transformers",
+    "torch --extra-index-url https://download.pytorch.org/whl/cpu",
+]
+
+# An alias for convenience
+client = ["my-ai-assistant[client-rag-cpu]"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
