@@ -56,11 +56,11 @@ source .venv/bin/activate
 ```
 
 **Step 2: Install the Assistant**
-This command installs the client version of the tool with CPU-optimized libraries for the RAG feature, ensuring a smaller and faster installation.
+This command uses the modern, PEP 508 compliant syntax to install the lightweight "client" version of the tool. This is all you need to run prompts and connect to a central Librarian RAG service.
 
 ```bash
 # Make sure your virtual environment is active!
-pip install "my-ai-assistant[client-rag-cpu]@git+https://github.com/venoajie/my-ai-assistant.git@develop"
+pip install "my-ai-assistant[client]@git+https://github.com/venoajie/my-ai-assistant.git@develop"
 ```
 The `ai`, `ai-execute`, and `ai-index` commands are now available as long as this virtual environment is active.
 

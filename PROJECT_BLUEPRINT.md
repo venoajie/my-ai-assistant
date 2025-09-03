@@ -1,31 +1,37 @@
 # PROJECT BLUEPRINT: AI Assistant
 
-<!-- Version: 2.7 -->
-<!-- Change Summary (v2.7): Documented the hybrid client-server RAG architecture and the use of optional dependencies for flexible, environment-specific installations. -->
+<!-- Version: 3.0 -->
+<!-- Change Summary (v3.0): Major architectural revision. Formalized the Three-Tiered Ecosystem, decoupling the RAG pipeline into a standalone "Librarian" service. This change transitions the AI Assistant to a "thin client" model, significantly reducing its local resource footprint and centralizing knowledge management. -->
 
 ## 1. System Overview and Core Purpose
 
-This document is the canonical source of truth for the architectural principles and governance of the AI Assistant project. It serves as a "constitution" for human developers and a "README for the AI," ensuring that all development and AI-driven actions are aligned with the core design philosophy.
+## 1. System Overview and Core Purpose
 
-The system is a command-line-native, persona-driven agent designed to assist with software development and other knowledge-work tasks. Its primary purpose is to provide a safe, reliable, and extensible framework for leveraging Large Language Models to perform complex, multi-step operations, **now enhanced with a codebase-aware RAG pipeline for deep project analysis.**
+This document is the canonical source of truth for the architectural principles and governance of the AI Assistant ecosystem. It serves as a "constitution" for human developers and a "README for the AI," ensuring that all development and AI-driven actions are aligned with the core design philosophy.
+
+The system is a **Three-Tiered Development Ecosystem** designed to assist with software development. Its primary purpose is to provide a safe, reliable, and extensible framework for leveraging Large Language Models to perform complex, multi-step operations.
+
+The ecosystem consists of:
+1.  **The Product:** The target application being developed (e.g., a trading app).
+2.  **The Conductor (AI Assistant):** A lightweight, command-line-native agent that orchestrates development tasks.
+3.  **The Librarian (RAG Service):** A centralized, production-grade service that provides codebase-aware context to the Conductor.
 
 ---
 
 ## 2. Core Architectural Principles
 
-The architecture is built on three foundational principles:
+The architecture is built on four foundational principles:
 
-### 2.1. Persona-First Operation
-The primary interface for quality and control is the **Persona System**. All complex tasks should be initiated through a specialized persona. This ensures that AI behavior is constrained, predictable, and follows a proven operational protocol.
+### 2.1. The Three-Tiered Ecosystem
+The system is explicitly designed as three decoupled components with clear responsibilities:
+-   **The Product (The Subject):** The application whose source code is being analyzed and modified. It is passive and unaware of the other tiers.
+-   **The Conductor (The AI Assistant - This Project):** The user-facing tool. It is a **thin client** responsible for managing personas, orchestrating workflows (Plan -> Critique -> Execute), and interacting with LLMs. It **MUST NOT** contain any direct RAG logic.
+-   **The Librarian (The RAG Service):** A separate, standalone service. It is the sole owner of the RAG pipeline, responsible for loading models, managing the index, and serving context via a secure API.
 
 ### 2.2. Decoupled Thinking and Doing
-A strict separation is maintained between **AI-driven analysis (thinking)** and **deterministic execution (doing)**. This principle is enforced through two primary operational modes:
-
--   **Live Execution Mode:** This is the default interactive workflow. The `kernel` orchestrates the entire process: planning, adversarial validation, and step-by-step execution of deterministic tools. It includes a critical safety gate where the user **MUST** provide explicit confirmation before any risky action (e.g., writing a file) is performed.
-
--   **Output-First Mode:** This workflow is designed for generating reviewable change packages, ideal for asynchronous or automated environments. The AI's final output is a standardized "Output Package" containing a manifest of deterministic actions (`manifest.json`) and all necessary files. A separate, non-AI `executor` script (`ai-execute`) is then used to safely and predictably apply these changes to the system.
-
-Both modes rely on the same underlying planning and validation chain to ensure consistency.
+A strict separation is maintained between **AI-driven analysis (thinking)** and **deterministic execution (doing)**. This principle is enforced through two primary operational modes within the Conductor:
+-   **Live Execution Mode:** The default interactive workflow.
+-   **Output-First Mode:** For generating reviewable change packages.
 
 #### 2.2.1. Adversarial Validation
 To enhance the safety of the "thinking" phase, the system employs an Adversarial Validation Chain. After an initial execution plan is generated, it is passed to a specialized, skeptical "critic" persona. This critic's sole purpose is to identify potential flaws, unstated assumptions, and risks in the plan. This principle acts as an automated "red team" review for the AI's own logic.
@@ -93,7 +99,7 @@ This pattern provides three major architectural advantages:
 
 ## 5. Extensibility: The Knowledge and Context Architecture
 
-To enhance the AI's domain-specific knowledge, the system uses a modular, two-tiered architecture for context injection.
+The system's knowledge architecture is now fully realized in the Three-Tiered model.
 
 ### 5.1. The Context Plugin System (Static Knowledge)
 This system is for injecting pre-defined, static knowledge based on simple triggers.
@@ -106,18 +112,17 @@ This system is for injecting pre-defined, static knowledge based on simple trigg
     -   **Automatic Loading:** A persona from `domains/<name>/...` automatically triggers loading of a plugin named `domains-<name>`.
     -   **Manual Override:** The `--context` CLI flag overrides any automatically selected plugin.
 
-### 5.2. The RAG Pipeline (Dynamic Knowledge)
-This system provides the assistant with deep, codebase-aware knowledge by dynamically retrieving the most relevant information from a project-specific knowledge base. It is designed for a robust, automated, and scalable team environment.
+### 5.2. The RAG Pipeline (Dynamic Knowledge via The Librarian Service)
+This system provides the Conductor with deep, codebase-aware knowledge. The architecture is a **CI/CD-driven, centralized service model.**
 
--   **Architecture:** The system uses a **CI/CD-driven, cloud-cached model**. A central, automated process builds the knowledge base, which is then distributed to lightweight clients via cloud object storage. This decouples the resource-intensive indexing process from the day-to-day client usage.
--   **Indexing (CI/CD via GitHub Actions):** The `ai-index` command is executed within a CI/CD pipeline (e.g., GitHub Actions) upon every code push. It scans the project, chunks source code, and creates a branch-specific vector database. This index is then packaged and uploaded to a shared cloud object store (e.g., OCI Object Storage).
--   **Retrieval, Reranking, and Caching (Client-Side):** The built-in `RAGContextPlugin` is activated automatically. The client-side process involves multiple stages for maximum accuracy and performance:
-    1.  **Smart Caching:** On first run, or when its local cache is expired, the client automatically downloads the latest index for the current branch from the cloud. Subsequent runs use the local cache for speed.
-    2.  **Initial Retrieval:** The plugin performs a broad semantic search against the local vector database, retrieving a larger set of potentially relevant documents (`retrieval_n_results`).
-    3.  **Second-Stage Reranking:** To improve precision, these initial results are passed to a more sophisticated CrossEncoder model (`reranker.py`). This model re-evaluates and re-scores the documents specifically against the user's query, pushing the most relevant results to the top.
-    4.  **Final Selection:** The system selects the top N documents (`rerank_top_n`) from the reranked list.
--   **Injection:** The final, highly-relevant code chunks are automatically injected into the prompt, providing the AI with on-the-fly context for its analysis.
--   **Curation:** The knowledge base can be precisely controlled by adding file and directory patterns to a project-local `.aiignore` file, which is respected by the CI/CD indexing process.
+-   **Architecture:** The resource-intensive indexing process is decoupled from consumption. A CI/CD pipeline builds the knowledge base, which is then served to all thin clients by the central Librarian service.
+-   **Indexing (CI/CD via GitHub Actions):** The `ai-index` command (part of the Conductor package) is executed within a CI/CD pipeline. It scans a Product's source code, builds a vector database, and uploads the packaged index to a shared cloud object store (OCI Object Storage).
+-   **Retrieval (The Librarian Service):** The standalone Librarian service is responsible for the entire retrieval pipeline:
+    1.  **Index Consumption:** On startup, it downloads the latest index from OCI.
+    2.  **Model Loading:** It loads the necessary embedding and reranking models into memory.
+    3.  **API Endpoint:** It exposes a secure `/api/v1/context` endpoint.
+    4.  **Query Processing:** When it receives a query from a client, it performs the vectorization, initial retrieval, and second-stage reranking.
+-   **Client-Side Consumption (The Conductor):** The Conductor's built-in `RAGContextPlugin` is now a simple, lightweight API client. It makes an authenticated HTTP request to the Librarian service to fetch context. It contains **no models or database clients.**
 
 ---
 
@@ -135,40 +140,25 @@ For making changes to the local file system via a sandboxed "Output Package" and
 For preparing changes to be executed by a powerful, external agent.
 
 ### 6.4. Codebase-Aware Analysis Workflow (RAG)
-For performing complex analysis on a large codebase. The standard flow is now fully automated:
-1.  **Index (Automated):** A developer pushes a commit. The CI/CD pipeline automatically runs `ai-index` and uploads the branch-specific knowledge base to cloud storage.
-2.  **Configure (One-Time Setup):** A developer configures their local `.ai_config.yml` to point to the shared cloud storage bucket.
-3.  **Query (Any Machine):** A developer runs an `ai "..."` command. The `RAGContextPlugin` automatically ensures a fresh, local copy of the index is present (downloading it if necessary) and injects the relevant context into the prompt.
+The standard flow is now fully automated and decoupled:
+1.  **Index (Automated):** A developer pushes a commit to a Product repository. The CI/CD pipeline runs `ai-index` and uploads the knowledge base to cloud storage.
+2.  **Serve (Automated):** The Librarian service, running in a production environment, automatically downloads and serves the latest index.
+3.  **Query (Any Machine):** A developer runs an `ai "..."` command. The `RAGContextPlugin` in the Conductor makes a lightweight API call to the Librarian service, which returns the relevant context for injection into the prompt.
 
 #### 6.5. The RAG Index Data Lifecycle
+The lifecycle is now split between the Producer (CI/CD) and the Consumer (Librarian).
 
-The codebase-aware RAG system operates on a robust, automated data lifecycle that ensures all clients have access to a fresh, relevant index without manual intervention. The flow is triggered by developer actions in Git and managed by the CI/CD pipeline.
-
-The lifecycle consists of five distinct stages:
-
-**Stage 1: Local Development (Developer's Machine)**
-*   A developer writes or modifies code in their local Git repository. This is the source of all new information.
-
-**Stage 2: The Trigger (Git Push)**
-*   The entire automated workflow is triggered when a developer executes a `git push` to a tracked branch on the remote repository (e.g., GitHub).
+**Stage 1 & 2: Local Development & Git Push (The Trigger)**
+*(These stages remain the same)*
 
 **Stage 3: Indexing (CI/CD Environment)**
-*   The push event activates the `smart-indexing.yml` GitHub Actions workflow.
-*   The CI/CD runner checks out the specific commit.
-*   It runs the `ai-index` command, which scans the repository, chunks the code, and builds a complete, self-contained vector database in the `.ai_rag_index/` directory.
+*   The `ai-index` command builds the complete vector database.
 
 **Stage 4: Centralization (Cloud Object Storage)**
-*   The CI/CD workflow compresses the entire `.ai_rag_index/` directory into a `index.tar.gz` file.
-*   This archive is uploaded to the central OCI Object Storage bucket. Two copies are stored:
-    1.  `indexes/<branch>/latest/index.tar.gz`: This file is **overwritten** on every push, always representing the absolute latest version for that branch.
-    2.  `indexes/<branch>/archive/<timestamp>_<commit>.tar.gz`: A new, timestamped file is created for **historical auditing and debugging**. These are automatically deleted after a set period by a bucket lifecycle policy.
+*   The CI/CD workflow compresses and uploads the `index.tar.gz` archive to the central OCI bucket.
 
-**Stage 5: Consumption (Client Machine)**
-*   A developer runs an `ai "..."` command on their local machine.
-*   The `RAGContextPlugin` activates and checks its local cache (`.ai_rag_index/.cache_state.json`).
-*   **If the cache is fresh** (within the configured TTL), it uses the existing local database instantly.
-*   **If the cache is stale or missing**, the plugin connects to OCI, downloads `latest/index.tar.gz` for the current Git branch, unpacks it, and updates its cache state.
-*   The plugin then queries this fresh, local database to provide context to the LLM.
+**Stage 5: Consumption (Librarian Service)**
+*   On startup, the Librarian service connects to OCI, downloads the latest `index.tar.gz`, unpacks it, and loads it into its local ChromaDB instance. It keeps this index in memory to serve requests.
 
 ---
 
@@ -189,18 +179,12 @@ The `PROJECT_STATE.md` file is the single source of truth for a long-running, mu
 The project adheres to modern Python packaging standards using `pyproject.toml`.
 
 ### 8.1. Packaging of Non-Python Data
-To ensure absolute build and installation reliability for non-Python data files (e.g., personas, schemas), this project uses the `[tool.setuptools.package-data]` directive within `pyproject.toml`. This is a deliberate engineering choice to use modern, standardized packaging practices for explicit and deterministic control over packaged data.
+*(This section remains the same)*
 
-**Canonical Rule:** Any new non-Python data files that must be accessible by the installed package **MUST** be added to the `[tool.setuptools.package-data]` configuration in `pyproject.toml` to guarantee their inclusion.
-
-### 8.2. Optional Dependencies for Flexibility
-
-To support different operational environments (e.g., a powerful indexing server vs. a developer laptop), the project uses **optional dependencies**.
-
--   **`[project.optional-dependencies].indexing`:** This group includes heavy libraries required for creating the RAG index (e.g., `torch`, `sentence-transformers`). It should only be installed on the machine responsible for indexing.
--   **`[project.optional-dependencies].client`:** This group includes libraries for querying a remote RAG index. This is the recommended installation for most users.
-
-**Architectural Note:** The current `[client]` installation is not fully "lightweight" as it requires `sentence-transformers` (and its dependency, `torch`) to perform query embedding and reranking on the client machine. While this ensures maximum flexibility, it introduces a significant installation footprint. A future architectural goal is to offload query embedding to a remote service, which would allow for a truly minimal client dependency set.
+### 8.2. Optional Dependencies for a Decoupled World
+The packaging philosophy now reflects the Three-Tiered architecture.
+-   **Standard Installation (`pip install .`):** This installs the **thin client** Conductor. It is lightweight and does not include any heavy ML or database libraries. This is the standard for all developers.
+-   **`[project.optional-dependencies].indexing`:** This group is for the **CI/CD environment only**. It installs the base Conductor package *plus* all the heavy libraries (`torch`, `sentence-transformers`, `chromadb`, `oci`) required for the `ai-index` command to build the knowledge base.
 ---
 
 ## 9. Project Management & State

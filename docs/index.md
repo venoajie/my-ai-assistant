@@ -13,7 +13,7 @@ Welcome to the official documentation for the AI Assistant. This site provides i
 
 ### Advanced Workflows
 -   **[Project-Specific Configuration](./project_configuration.md):** **(Highly Recommended)** Learn how to use `.ai_config.yml` to create a powerful, project-aware workflow.
--   **[Setting Up Codebase-Aware RAG](./rag_workflow.md):** The most powerful workflow. Make the assistant aware of your entire codebase.
+-   **[Setting Up Codebase-Aware RAG](./rag_workflow.md):** The most powerful workflow. Learn how to connect the assistant to a central **Librarian service** to make it aware of your entire codebase.
 -   **[Orchestrating Multi-Agent Projects](./orchestrating_projects.md):** Use the Project Manager persona to manage complex, multi-stage projects.
 -   **[Safe Multi-Stage Refactoring](./multi_stage_refactoring.md):** The official guide for performing complex, multi-step file modifications safely and reliably.
 -   **[Performing Live System Checks](./live_system_checks.md):** Learn how to safely use live mode for read-only diagnostics.
