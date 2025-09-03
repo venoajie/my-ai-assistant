@@ -238,6 +238,18 @@ The project-level `.aiignore` file is a powerful tool for curation, but it carri
 ### 10.3. CI Sanity Checks
 To protect against silent failures from overly aggressive ignore patterns, the CI workflow **MUST** include a "Sanity Check" step after a successful indexing run. This step will parse the final `state.json` and fail the build if the total number of indexed files falls below a project-specific, reasonable threshold. This ensures that a misconfiguration cannot result in an empty or incomplete knowledge base being deployed.
 
+
+### 10.4. The Index Manifest as the Integration Contract
+
+To prevent configuration drift between the Producer (CI/CD) and the Consumer (Librarian), the system **MUST** treat the `index_manifest.json` file as the immutable, single source of truth for a given index artifact.
+
+The Producer (`ai-index`) is responsible for writing the following critical metadata into the manifest:
+*   `embedding_model`: The exact name of the sentence-transformer model used.
+*   `chroma_collection_name`: The exact name of the ChromaDB collection created within the index.
+*   `branch`: The source control branch the index was built from.
+
+The Consumer (Librarian) **MUST** read these values from the manifest upon startup and use them to configure its runtime behavior. It **MUST** prioritize the manifest's values over its own local environment variables for these specific settings to guarantee compatibility with the downloaded artifact. This pattern makes the index a self-describing, portable artifact and eliminates a critical class of integration failures.
+
 ## 11. Governance for RAG Pipeline Integrity & Testing
 
 The project formally recognizes that ensuring the health and effectiveness of the RAG pipeline is a distinct engineering discipline, separate from traditional software testing. A successful execution of the Python codebase (e.g., passing all unit tests) does not guarantee the success or relevance of the knowledge base it produces.
