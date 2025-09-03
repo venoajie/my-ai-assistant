@@ -43,35 +43,17 @@ test = [
      "my-ai-assistant[client]",
 ]
 
-rag-base = [
-    "chromadb==1.0.20",
-    "sentence-transformers==5.1.0", # Reranking is client-side
-    ]
-
-# For the production/indexing environment
+# For the production/indexing environment, which requires heavy ML libraries.
 indexing = [
-    "my-ai-assistant[rag-base]",
+    "chromadb==1.0.20",
     "sentence-transformers==5.1.0",
-    "torch==2.8.0 ",
+    "torch==2.8.0",
     "oci-cli",
+    "oci",
 ]
 
-# For a developer's machine (the AI Assistant client)
-# Separate the core client from the heavy ML libs
-client-base = [
-    "oci", # For downloading the index from the old RAG workflow
-]
-
-# A new extra specifically for the CPU-based ML features on the client
-client-rag-cpu = [
-    "my-ai-assistant[client-base]", # Inherits the base client deps
-    "chromadb",
-    "sentence-transformers",
-    "torch --extra-index-url https://download.pytorch.org/whl/cpu",
-]
-
-# An alias for convenience
-client = ["my-ai-assistant[client-rag-cpu]"]
+# The default client installation is now free of ML dependencies.
+client = []
 
 [tool.setuptools]
 package-dir = {"" = "src"}
