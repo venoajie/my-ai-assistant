@@ -8,6 +8,9 @@ from pydantic import BaseModel, Field, model_validator
 from importlib import resources
 import structlog  
 import re 
+from dotenv import load_dotenv 
+
+load_dotenv()
 
 logger = structlog.get_logger(__name__)
 
