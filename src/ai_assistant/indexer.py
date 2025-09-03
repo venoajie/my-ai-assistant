@@ -93,16 +93,22 @@ class Indexer:
         if ai_settings.rag.chroma_server_host:
             raise ConnectionError("Indexer is configured to connect to a remote server, which is not allowed.")
 
-        # --- MODIFIED: Simplified provider logic ---
         # The indexer's contract is to ONLY build with a local provider to ensure client compatibility.
-        # This check is now the primary guard.
+        # This check is the primary guard.
         if embedding_provider != "local":
             raise ValueError(
                 "FATAL: The indexer is configured to use a non-local embedding provider "
                 f"('{embedding_provider}'), but the client-side RAG plugin only supports indexes built with a 'local' provider. "
                 "Halting to prevent creation of an incompatible index."
             )
-
+        
+        # Initialize the provider directly and fail fast if there's an issue.
+        try:
+            self.active_provider = EmbeddingProvider(embedding_provider)
+            logger.info(f"Successfully initialized '{embedding_provider}' as the embedding provider.")
+        except (ImportError, ValueError) as e:
+            raise RuntimeError(f"FATAL: Could not initialize the required '{embedding_provider}' embedding provider. Reason: {e}")
+            
         self.branch = branch_override or get_normalized_branch_name(
             self.project_root, 
             ai_settings.rag.default_branch,
@@ -118,27 +124,9 @@ class Indexer:
         self.db_client = chromadb.PersistentClient(path=str(self.index_path))
         self.collection = self.db_client.get_or_create_collection(self.collection_name)
         
-        # The complex fallback mechanism has been removed. We now initialize directly and fail fast.
-        try:
-            self.active_provider = EmbeddingProvider(embedding_provider)
-            logger.info(f"Successfully selected '{embedding_provider}' as the embedding provider.")
-        except (ImportError, ValueError) as e:
-            raise RuntimeError(f"FATAL: Could not initialize the required '{embedding_provider}' embedding provider. Reason: {e}")
-        
         self.state = self._load_state()
         self.ignore_patterns = self._load_ignore_patterns()
         
-    def _select_active_provider(self, provider_names: List[str]) -> Optional[EmbeddingProvider]:
-        """Tries to initialize providers in order and returns the first successful one."""
-        for name in provider_names:
-            try:
-                provider = EmbeddingProvider(name)
-                logger.info(f"Successfully selected '{name}' as the embedding provider for this run.")
-                return provider
-            except (ImportError, ValueError) as e:
-                logger.warning(f"Could not initialize provider '{name}', trying next.", reason=str(e))
-        return None
-
     def _load_state(self) -> Dict[str, str]:
         if self.state_path.exists():
             with open(self.state_path, 'r') as f: return json.load(f)
@@ -362,7 +350,8 @@ class Indexer:
             "commit_sha": self._get_current_commit_sha(),
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
             "embedding_provider": self.active_provider.provider_name,
-            "embedding_model": self.active_provider.model_name
+            "embedding_model": self.active_provider.model_name,
+            "chroma_collection_name": self.collection_name  # <-- ADD THIS LINE
         }
         try:
             manifest_path.write_text(json.dumps(manifest_data, indent=2))
