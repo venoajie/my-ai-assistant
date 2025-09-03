@@ -1,35 +1,32 @@
+
 # Guide: Setting Up Codebase-Aware Context (RAG)
 
 The AI Assistant's Retrieval-Augmented Generation (RAG) pipeline is its most powerful feature for working with large, complex projects. It transforms the assistant from a tool that knows about a few manually attached files into an expert that is aware of your **entire codebase**.
 
-This guide will walk you through setting up this workflow for your own project.
+This guide will walk you through setting up this modern, scalable workflow for your own project.
 
 ## The Problem RAG Solves
 
 Manually attaching files with the `-f` flag is great for targeted tasks, but it doesn't scale. If you want to ask a broad question like, "How does our authentication system work?" you would need to find and attach every relevant file yourself.
 
-RAG solves this by creating a searchable **knowledge base** of your project. When you ask a question, the assistant first searches this knowledge base to find the most relevant code snippets and documents, then automatically injects them into its context before contacting the AI.
+RAG solves this by creating a searchable **knowledge base** of your project. When you ask a question, the assistant first queries this knowledge base to find the most relevant code snippets and documents, then automatically injects them into its context before contacting the AI.
 
 ---
 
-## How It Works: The Two-Phase System
+## How It Works: The Three-Tiered Ecosystem
 
-The RAG pipeline is designed for a robust team environment and operates in two distinct phases:
+The RAG pipeline is a distributed system designed for a robust team environment. It consists of three decoupled components:
 
-1.  **Phase 1: Index Production (Automated via CI/CD)**
-    This is the "heavy lifting" phase, typically handled by an automated process like GitHub Actions. On every `git push`, the CI/CD system checks out the code, scans it, and uses powerful machine learning models to create a vector database—the "index"—of your project for that specific branch. This index is then packaged and uploaded to a shared cloud object store (like OCI Object Storage).
+1.  **The Producer (Automated via CI/CD):**
+    This is the "heavy lifting" phase, handled by an automated process like GitHub Actions. On every `git push`, the CI/CD system checks out the code, scans it, and creates a vector database—the "index"—of your project for that specific branch. This index is then packaged and uploaded to a shared cloud object store (like OCI Object Storage).
 
-2.  **Phase 2: Index Consumption (Automatic on Your Machine)**
-    This is the lightweight phase that happens when you run the `ai` command. It now includes an intelligent pre-processing step.
+2.  **The Consumer (The Librarian Service):**
+    This is a centralized, long-running API service that you deploy. On startup, it downloads the latest index for a specific branch from the cloud, loads it into memory, and exposes a secure API endpoint for querying it. It is the single source of truth for codebase context.
 
-    **A. Intelligent Query Expansion (New)**
-    Before searching, the system uses the high-level documents defined in your project's `auto_inject_files` (see the **[Configuration Guide](./project_configuration.md)**) to transform your simple query into a project-specific one. This bridges the gap between your intent and the technical keywords in the code.
+3.  **The Client (Your `ai` Command):**
+    This is the lightweight phase that happens on your machine. When you run the `ai` command, the RAG plugin no longer performs heavy local processing. Instead, it securely connects to the Librarian service, sends your query, and receives the most relevant context snippets. This context is then injected into your prompt.
 
-    **B. Retrieval and Caching**
-    The RAG plugin uses the expanded query to search the knowledge base. It automatically detects your current project and branch, checks for a local copy of the index, and if it's missing or out of date, downloads the latest version from shared cloud storage.
-
-    **C. Optional Reranking**
-    To maximize accuracy, you can enable a **reranker**. After the initial search finds a broad set of documents, the reranker uses a powerful cross-encoder model to re-order them based on true contextual relevance. This ensures only the absolute best snippets are sent to the AI.
+This architecture ensures that all team members get fast, consistent, and up-to-date context without needing powerful local machines or managing local indexes.
 
 ---
 
@@ -37,88 +34,66 @@ The RAG pipeline is designed for a robust team environment and operates in two d
 
 Follow these steps to configure your project to use the RAG pipeline.
 
-### Prerequisite: Installation
+### Prerequisite: A Deployed Librarian Service
 
-Ensure you have the client-side dependencies installed in your project's virtual environment.
-
-```bash
-pip install "my-ai-assistant[client]@git+https://github.com/venoajie/my-ai-assistant.git@develop"
-```
+Before your team can use the RAG workflow, an administrator must deploy an instance of the **Librarian RAG Service**. The service's URL and an API key must be distributed to the team.
 
 ### Step 1: Configure the Client (`.ai_config.yml`)
 
-Create a `.ai_config.yml` file in your project's root. This tells the assistant how to find the shared index and which files to use for query expansion.
+Create or update the `.ai_config.yml` file in your project's root. This tells the `ai` command how to connect to the central Librarian service.
 
 ```yaml
 # .ai_config.yml
-general:
-  # These files power the intelligent query expansion.
-  auto_inject_files:
-    - "PROJECT_BLUEPRINT.md"
-    - "AGENTS.md"
 
 rag:
-  # Enable branch-specific indexes (highly recommended for team workflows)
-  enable_branch_awareness: true
-  
-  # Configure the connection to your shared OCI bucket
-  oracle_cloud:
-    namespace: "your-oci-namespace"
-    bucket: "your-oci-bucket-name"
-    region: "your-oci-region"
+  # The URL of your deployed Librarian service.
+  librarian_url: "http://your-librarian-service-host:8000"
 
-  # --- Optional: Enable and configure the reranker for higher precision results ---
-  enable_reranking: true
-  retrieval_n_results: 25
-  rerank_top_n: 5
+  # The API key for authenticating with the Librarian service.
+  # It is HIGHLY recommended to set this via the LIBRARIAN_API_KEY environment variable
+  # instead of committing it to the file.
+  librarian_api_key: ${LIBRARIAN_API_KEY}
+
+  # --- Optional: Configure the number of results to request ---
+  max_results: 5
 ```
-Commit this file to your repository so the entire team shares the same configuration.
+Commit this file to your repository. The API key should be managed securely by each developer as an environment variable.
 
 ### Step 2: Curate the Knowledge Base (`.aiignore`)
-(This section remains the same)
 
-### Step 3: Produce the Index
-(This section remains the same)
+To ensure the RAG index is clean and relevant, create a `.aiignore` file in your project root. This file works exactly like `.gitignore` and tells the CI/CD **Producer** which files and directories to exclude from the knowledge base.
+
+**Example `.aiignore`:**
+```
+# .aiignore
+
+# Exclude version control, virtual environments, and caches
+.git/
+.venv/
+__pycache__/
+
+# Exclude build artifacts and local configurations
+dist/
+build/
+*.egg-info/
+.vscode/
+
+# Exclude large data files that aren't source code
+*.csv
+/data/
+```
+
+### Step 3: Produce the Index (CI/CD)
+
+This step is automated. Your project's repository should be configured with a CI/CD workflow (like the provided `smart-indexing.yml`) that runs the `ai-index` command on every push. This automatically builds and uploads the fresh index that the Librarian service will consume.
 
 ### Step 4: Usage
-(This section remains the same)
 
----
+Once configured, using RAG is automatic and transparent. Simply run any `ai` command from within your project directory. The RAG plugin will activate, connect to the Librarian, fetch context, and add it to your prompt behind the scenes. You don't need any special flags.
 
-## Example in Action: The Power of Layered Intelligence
-
-**Scenario:** You want to understand your project's custom error handling. Your codebase contains `utils/error_handling.py` (current) and `utils/legacy_errors.py` (old, deprecated). Your `PROJECT_BLUEPRINT.md` states, "Error handling must use the `CustomAPIException` class."
-
-*   **Before RAG:**
-    *   **Prompt:** `ai "How should I handle exceptions?"`
-    *   **Result:** A generic, textbook answer about Python's `try...except`. Not project-specific.
-
-*   **With Basic RAG (No Expansion or Reranker):**
-    *   **Prompt:** `ai "How should I handle exceptions?"`
-    *   **Result:** The RAG plugin finds both `error_handling.py` and `legacy_errors.py`. The AI gets a mixed, confusing context and might suggest using the deprecated legacy class.
-
-*   **With RAG + Query Expansion + Reranker (Recommended):**
-    *   **Prompt:** `ai "How should I handle exceptions?"`
-    *   **Result:**
-        1.  **Expansion:** The system reads `PROJECT_BLUEPRINT.md` and expands your query to something like: *"best practices for exception handling using the CustomAPIException class"*.
-        2.  **Retrieval:** This specific query strongly favors `utils/error_handling.py`.
-        3.  **Reranking:** The reranker confirms that `utils/error_handling.py` is far more relevant to the expanded query than the legacy file.
-    *   **AI Response:** "Based on your project's blueprint, all exceptions should be handled using the `CustomAPIException` class defined in `utils/error_handling.py`..." This answer is clean, precise, and actionable.
-
-## Maintenance and Troubleshooting
-
-### Forcing a Full Re-Index
-
-If you find that RAG is returning poor or stale results, or if you have made significant changes to your `.aiignore` file, your local index may be out of date or incomplete. You can force the system to delete the old index and build a fresh one from scratch.
-
-**Command:**
-```bash
-# Run this from your project's root directory
-# This will delete the existing index and create a new one for the specified branch
-ai-index . --force-reindex --branch <your-branch-name>
-```
 **Example:**
 ```bash
-ai-index . --force-reindex --branch develop
+# The RAG plugin will automatically find context related to authentication
+# before sending the prompt to the AI.
+ai --persona domains/programming/python-developer-1 "Explain the authentication flow in this project."
 ```
-This is the best first step for resolving most RAG-related issues.
