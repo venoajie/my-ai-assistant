@@ -130,8 +130,12 @@ This system provides the Conductor with deep, codebase-aware knowledge. The arch
     2.  **Model Loading:** It loads the necessary embedding and reranking models into memory.
     3.  **API Endpoint:** It exposes a secure `/api/v1/context` endpoint.
     4.  **Query Processing:** When it receives a query from a client, it performs the vectorization, initial retrieval, and second-stage reranking.
--   **Client-Side Consumption (The Conductor):** The Conductor's built-in `RAGContextPlugin` is now a simple, lightweight API client. It makes an authenticated HTTP request to the Librarian service to fetch context. It contains **no models or database clients.**
-
+-   **Client-Side Consumption (The Conductor):** The Conductor's built-in `RAGContextPlugin` acts as an intelligent, lightweight API client. Its responsibilities are:
+    1.  **Formulating the Query:** It takes the user's raw input.
+    2.  **Determining Filter Criteria:** Based on the active persona or user intent, it constructs a `filters` dictionary to narrow the search space (e.g., `{"language": "python", "is_test_file": false}`).
+    3.  **Making the API Call:** It makes an authenticated HTTP request to the Librarian service, sending both the query and the filter criteria.
+    
+    Crucially, the Conductor contains **no models or database clients**; it delegates all heavy processing to the Librarian, embodying its role as a thin client.
 ---
 
 ## 6. Workflows
