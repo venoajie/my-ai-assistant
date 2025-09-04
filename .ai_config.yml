@@ -1,5 +1,4 @@
-
-# .ai_config.yml (Corrected Version)
+# .ai_config.yml
 
 general:
   # This is a good practice for project-specific session management.
