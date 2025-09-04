@@ -5,8 +5,6 @@
 
 ## 1. System Overview and Core Purpose
 
-## 1. System Overview and Core Purpose
-
 This document is the canonical source of truth for the architectural principles and governance of the AI Assistant ecosystem. It serves as a "constitution" for human developers and a "README for the AI," ensuring that all development and AI-driven actions are aligned with the core design philosophy.
 
 The system is a **Three-Tiered Development Ecosystem** designed to assist with software development. Its primary purpose is to provide a safe, reliable, and extensible framework for leveraging Large Language Models to perform complex, multi-step operations.
@@ -16,6 +14,16 @@ The ecosystem consists of:
 2.  **The Conductor (AI Assistant):** A lightweight, command-line-native agent that orchestrates development tasks.
 3.  **The Librarian (RAG Service):** A centralized, production-grade service that provides codebase-aware context to the Conductor.
 
+### 1.1. Ecosystem Glossary
+
+This glossary defines the core components and concepts of the Three-Tiered Development Ecosystem.
+
+-   **Three-Tiered Ecosystem:** The overarching architecture composed of three decoupled components: The Product, The Conductor, and The Librarian.
+-   **The Product:** The target application being developed. It is the passive subject of analysis and modification.
+-   **The Conductor (AI Assistant):** The lightweight, user-facing CLI tool. It orchestrates development workflows, manages personas, and interacts with LLMs. It is a **thin client** that offloads all RAG operations to the Librarian.
+-   **The Librarian (RAG Service):** The centralized, standalone, production-grade service responsible for the entire RAG pipeline. It ingests indexes, loads ML models, and serves codebase-aware context via a secure API.
+-   **Index Manifest (`index_manifest.json`):** The immutable integration contract created by the indexer. It is a self-describing file within the index archive that specifies the exact embedding model and collection name used, ensuring perfect compatibility between the index artifact and the Librarian service.
+-   **Kernel:** The core logic engine within the Conductor responsible for intercepting high-level workflow steps (e.g., `execute_refactoring_workflow`) and expanding them into a deterministic sequence of granular tool calls.
 ---
 
 ## 2. Core Architectural Principles

@@ -11,6 +11,50 @@ This document is the canonical tracker for known architectural and implementatio
 ## Active Issues
 ---
 
+Excellent. Capturing this feature regression as formal technical debt is the correct project management step. It ensures the capability isn't forgotten and can be prioritized in future work.
+
+Here is the formal technical debt analysis and the improved, final prompt for our next session.
+
+---
+
+### **Technical Debt Analysis: RAG Query Expansion Relocation**
+
+**Technical Debt Item:** Server-Side RAG Query Expansion
+
+**1. Problem Statement (The "Debt")**
+
+The critical `RAG-REFACTOR-001` initiative successfully moved all core ML processing from the `ai-assistant` client to the `librarian` service. A side effect of this refactoring was the **temporary removal of the "RAG Query Expansion" feature**. Previously, the client used the content of `auto_inject_files` to expand user queries for better semantic search results. The new "thin client" no longer has this capability, and the Librarian service is not yet equipped to perform this function.
+
+This represents a feature regression and a debt against the system's "intelligence." The RAG system is now less effective at interpreting vague user queries, placing a higher burden on the user to provide specific, technical search terms.
+
+**2. Proposal: Repay the Debt by Re-implementing Query Expansion on the Server**
+
+Restore and improve the query expansion feature by implementing it in the architecturally correct location: the `librarian` service.
+
+*   **Librarian Service Changes:**
+    1.  **New Endpoint:** Create a new, optional `POST /api/v1/project_context/{branch_name}` endpoint. This endpoint will accept a JSON payload containing the concatenated content of a project's high-level documents (e.g., `PROJECT_BLUEPRINT.md`).
+    2.  **Context Caching:** The Librarian will store this text content in its Redis cache, keyed by the branch name (e.g., `project_context:develop`). This context is expected to change infrequently.
+    3.  **Enhanced `/context` Logic:** The primary `/api/v1/context` endpoint will be modified. Before embedding the user's query, it will first check Redis for any cached project context for the current index's branch. If context exists, it will perform an LLM call to expand the user's query with that context. It will then proceed with the embedding and retrieval process using the *expanded* query.
+*   **CI/CD Producer Changes (`smart-indexing.yml`):**
+    1.  **New Step:** After a successful indexing run, the CI/CD workflow will add a new step.
+    2.  **Context Upload:** This step will read the project's `.ai_config.yml`, find the `auto_inject_files` list, concatenate the content of those files, and `POST` it to the Librarian's new `/api/v1/project_context/{branch_name}` endpoint. This ensures the high-level context is kept in sync with the codebase.
+
+**3. Cost-Benefit Analysis**
+
+| Aspect | Cost of Repayment (Effort to Implement) | Benefit of Repayment (Value Gained) |
+| :--- | :--- | :--- |
+| **Development Effort** | **Medium.** Requires one new Librarian endpoint, modification of an existing endpoint, and adding a step to the CI/CD workflow. Estimated effort: **3-4 developer days.** | **High.** Restores a key "smart" feature of the RAG system, significantly improving the quality and relevance of search results for non-technical or vague queries. |
+| **User Experience** | **Zero.** The user-facing command remains identical. | **High.** Users will notice a marked improvement in the RAG system's ability to "understand" their intent, reducing the need for them to guess the correct technical keywords. |
+| **Performance** | **Low.** Adds one LLM call to the RAG pipeline on the server-side, slightly increasing latency for the first query. Subsequent identical queries will be served from the Librarian's existing cache. | **N/A** |
+| **Operational Cost** | **Low.** Incurs a small, additional cost for the query expansion LLM calls on the Librarian service. | **Medium.** Reduces "failed searches" and user frustration, leading to higher productivity and better adoption of the RAG feature. |
+| **Architectural Integrity** | **Zero.** | **High.** Fully realizes the vision of a centralized, intelligent RAG service. It correctly places all business logic and ML computation on the server, where it belongs. |
+
+**4. Final Verdict & Recommendation**
+
+This technical debt represents a clear regression in functionality. While the initial refactor was necessary for stability, restoring this feature is critical for maximizing the RAG system's value.
+
+**Recommendation: Approve and schedule this work.** This should be treated as a high-priority feature enhancement to be addressed in an upcoming development cycle.
+
 ## TD-001: Lack of Automated RAG Quality Assurance
 
 **Date Identified:** 2025-08-30
@@ -104,17 +148,7 @@ This document is a consolidated list of identified technical debt, architectural
 
 This is the area with the most critical technical debt. The current implementation diverges significantly from the blueprint's architectural goals, impacting portability, user experience, and adherence to the "Single Source of Truth" principle.
 
-### 1.1. Heavy Client Dependencies Contradict Cloud-Cached Design (Critical)
-
-**The Flaw:** The `[client]` optional dependency forces the installation of heavy ML libraries (`sentence-transformers`, `torch`) on every machine that consumes the RAG index. This directly contradicts the blueprint's goal of a "lightweight client" and nullifies the benefits of the cloud-cached design. It increases the installation footprint on all machines (developer laptops, cloud servers), creates a maintenance burden, and forces redundant computation for query embedding and reranking.
-
-**The Fix:** Architecturally pivot to a centralized RAG service model.
-1.  Create a dedicated, network-accessible microservice (e.g., using FastAPI) that is the *only* component with `sentence-transformers` and `torch` dependencies. This service will handle all query embedding and reranking.
-2.  Secure this service for consumption by the 2 cloud machines and 1 laptop using standard infrastructure patterns (e.g., private networking within the cloud, with VPN or a secure API Gateway for laptop access).
-3.  Refactor the client-side `RAGContextPlugin` to make a simple API call to this service, removing all local ML model logic.
-4.  Update `pyproject.toml` to make the `[client]` dependency truly lightweight (e.g., `oci`, `aiohttp`) and create a new `[rag-service]` dependency for the new service.
-
-### 1.2. RAG Client-Index Provider Incompatibility (Critical)
+### 1.1. RAG Client-Index Provider Incompatibility (Critical)
 
 **The Flaw:** The client-side `rag_plugin.py` is hard-coded to only support indexes built with the `"local"` embedding provider. If an index is built in a CI/CD environment using the `"openai"` provider (as supported by `indexer.py`), the client will fail to load it. This breaks the portability of indexes and undermines the entire CI/CD-driven RAG architecture.
 
