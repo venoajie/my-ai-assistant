@@ -10,6 +10,7 @@ from typing import List, Dict, Any, Optional, Generator
 import fnmatch
 import subprocess
 from datetime import datetime, timezone
+import ast
 
 try:
     import chromadb
@@ -33,6 +34,15 @@ logger = structlog.get_logger()
 EMBEDDING_BATCH_SIZE = 16
 DEFAULT_IGNORE_PATTERNS = [".git/", ".venv/", "venv/", "__pycache__/", "*.pyc", "*.log", ".DS_Store", "node_modules/", "build/", "dist/", ".idea/", ".vscode/", "*.egg-info/", "src/ai_assistant/personas/", ".ai/personas/", "src/ai_assistant/internal_data/"]
 
+# Centralized, maintainable language mapping
+LANGUAGE_MAP = {
+    '.py': 'python', '.js': 'javascript', '.ts': 'typescript', '.md': 'markdown', 
+    '.java': 'java', '.go': 'go', '.rs': 'rust', '.html': 'html', '.css': 'css',
+    '.cpp': 'cpp', '.c': 'c', '.cs': 'csharp', '.rb': 'ruby', '.php': 'php',
+    '.swift': 'swift', '.kt': 'kotlin', '.sh': 'bash', '.sql': 'sql',
+    '.yaml': 'yaml', '.yml': 'yaml', '.json': 'json'
+}
+
 class EmbeddingProvider:
     def __init__(self, provider_name: str = "local"):
         self.provider_name = provider_name
@@ -51,7 +61,7 @@ class EmbeddingProvider:
             if not api_key:
                 raise ValueError("OPENAI_API_KEY environment variable is not set.")
             self.client = OpenAI(api_key=api_key)
-            self.model_name = "text-embedding-3-large" # Using the high-quality model
+            self.model_name = "text-embedding-3-large"
             logger.info("Using OpenAI embedding provider", model_name=self.model_name)
         else:
             raise ValueError(f"Unsupported embedding provider: {provider_name}")
@@ -93,8 +103,6 @@ class Indexer:
         if ai_settings.rag.chroma_server_host:
             raise ConnectionError("Indexer is configured to connect to a remote server, which is not allowed.")
 
-        # The indexer's contract is to ONLY build with a local provider to ensure client compatibility.
-        # This check is the primary guard.
         if embedding_provider != "local":
             raise ValueError(
                 "FATAL: The indexer is configured to use a non-local embedding provider "
@@ -102,7 +110,6 @@ class Indexer:
                 "Halting to prevent creation of an incompatible index."
             )
         
-        # Initialize the provider directly and fail fast if there's an issue.
         try:
             self.active_provider = EmbeddingProvider(embedding_provider)
             logger.info(f"Successfully initialized '{embedding_provider}' as the embedding provider.")
@@ -114,7 +121,6 @@ class Indexer:
             ai_settings.rag.default_branch,
             )
         
-        # Sanitize the branch name to make it compatible with ChromaDB collection naming rules.
         sanitized_branch = self.branch.replace('/', '-')
         
         base_collection_name = ai_settings.rag.collection_name
@@ -153,46 +159,26 @@ class Indexer:
         logger.info("Loaded ignore patterns", count=len(patterns))
         return patterns
 
-
     def _is_ignored(self, path: Path) -> bool:
-        """
-        Checks if a given path should be ignored based on the loaded patterns.
-        """
         rel_path_str = os.path.normpath(str(path.relative_to(self.project_root)))
         for pattern in self.ignore_patterns:
             norm_pattern = os.path.normpath(pattern)
-            # Check for directory patterns (e.g., "my-dir/")
             if norm_pattern.endswith(os.sep):
                 if (rel_path_str + os.sep).startswith(norm_pattern):
-                    logger.debug("Ignoring path due to directory pattern", path=rel_path_str, pattern=norm_pattern)
                     return True
-            # Check for file/glob patterns (e.g., "*.pyc")
             elif fnmatch.fnmatch(rel_path_str, norm_pattern):
-                logger.debug("Ignoring path due to file/glob pattern", path=rel_path_str, pattern=norm_pattern)
                 return True
         return False
 
     def _walk_project(self) -> Generator[Path, None, None]:
-        """
-        Walks the project directory, yielding non-ignored files.
-        """
         for root, dirs, files in os.walk(self.project_root, topdown=True):
             root_path = Path(root)
-
-            # If the entire directory we are in is ignored, clear the subdirectories
-            # list to stop os.walk from going deeper, and continue to the next item.
             if root_path != self.project_root and self._is_ignored(root_path):
                 dirs.clear() 
                 continue
-
-            # Filter the list of subdirectories in-place. os.walk will only visit
-            # the directories that remain in this list.
             dirs[:] = [d for d in dirs if not self._is_ignored(root_path / d)]
-            
-            # Now, yield the files from this valid (non-ignored) directory.
             for name in files:
                 file_path = root_path / name
-                # We still need to check individual files against file-specific patterns (e.g., *.pyc)
                 if not self._is_ignored(file_path):
                     yield file_path
                         
@@ -210,23 +196,59 @@ class Indexer:
         if chunk.count('\x00') > 0 or chunk.count('\ufffd') > 0: return False
         return True
 
-    def _chunk_text(self, text: str, file_path: Path) -> List[str]:
-        file_ext = file_path.suffix.lower()
-        if file_ext == '.py':
-            chunks = re.split(r'(^\s*class\s|^\s*def\s)', text, flags=re.MULTILINE)
-            combined_chunks = [chunks[i] + chunks[i+1] for i in range(1, len(chunks), 2)]
-            return combined_chunks if combined_chunks else [text]
-        if file_ext == '.md':
-            chunks = re.split(r'(^#+\s)', text, flags=re.MULTILINE)
-            combined_chunks = [chunks[i] + chunks[i+1] for i in range(1, len(chunks), 2)]
-            return combined_chunks if combined_chunks else [text]
-        chunk_size, overlap = 1000, 200
-        return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size - overlap)]
+    def _extract_file_metadata(self, file_path: Path) -> Dict[str, Any]:
+        """Extracts robust, path-based metadata from a file path."""
+        metadata = {}
+        rel_path_str = str(file_path.relative_to(self.project_root))
+        
+        metadata['language'] = LANGUAGE_MAP.get(file_path.suffix.lower(), 'unknown')
+        metadata['is_test_file'] = ('/tests/' in rel_path_str or '/test/' in rel_path_str or file_path.name.startswith('test_'))
+        
+        service_match = re.search(r'src/(?:services/)?([^/]+)/', rel_path_str)
+        metadata['service_name'] = service_match.group(1) if service_match else 'unknown'
+        
+        return metadata
+
+    def _chunk_file(self, text: str, file_path: Path) -> List[Dict[str, Any]]:
+        """Chunks a file's content, using AST for Python and fallback for others."""
+        chunks_with_metadata = []
+        
+        if file_path.suffix.lower() == '.py':
+            try:
+                tree = ast.parse(text)
+                # Process only top-level function and class definitions
+                for node in tree.body:
+                    if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+                        chunk_text = ast.get_source_segment(text, node)
+                        if chunk_text:
+                            chunks_with_metadata.append({
+                                "text": chunk_text,
+                                "metadata": {
+                                    "entity_type": "function" if isinstance(node, ast.FunctionDef) else "class",
+                                    "name": node.name
+                                }
+                            })
+                # If no functions/classes found, or if parsing fails, the whole file is one chunk.
+                if not chunks_with_metadata:
+                    raise SyntaxError("No top-level entities found, using fallback.")
+            except (SyntaxError, ValueError) as e:
+                logger.debug("AST processing failed or found no entities, using file-level fallback", file=str(file_path), reason=str(e))
+                chunks_with_metadata = [{"text": text, "metadata": {"entity_type": "file", "name": file_path.name}}]
+        else:
+            # Fallback for non-python or simple text-based splitting
+            chunk_size, overlap = 1000, 200
+            simple_chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size - overlap)]
+            for chunk_text in simple_chunks:
+                chunks_with_metadata.append({
+                    "text": chunk_text,
+                    "metadata": {"entity_type": "file", "name": file_path.name}
+                })
+                
+        return chunks_with_metadata
 
     def run(self, force_reindex: bool = False):
         logger.info("Starting indexer for project", project_root=self.project_root, active_provider=self.active_provider.provider_name)
         
-        # Ensures that any dynamically created .aiignore file (like in CI) is respected.
         self.ignore_patterns = self._load_ignore_patterns()
 
         if force_reindex:
@@ -275,15 +297,22 @@ class Indexer:
         for file_path, new_hash in files_to_index:
             rel_path_str = str(file_path.relative_to(self.project_root))
             try:
+                file_metadata = self._extract_file_metadata(file_path)
                 content = file_path.read_text(encoding='utf-8', errors='ignore')
-                chunks = self._chunk_text(content, file_path)
+                chunks_with_metadata = self._chunk_file(content, file_path)
                 
                 valid_chunks = []
-                for i, chunk in enumerate(chunks):
-                    if self._is_chunk_valid(chunk):
+                for i, chunk_data in enumerate(chunks_with_metadata):
+                    chunk_text = chunk_data['text']
+                    if self._is_chunk_valid(chunk_text):
                         chunk_id = f"{rel_path_str}:{i}"
-                        metadata = {"source": rel_path_str, "chunk_index": i}
-                        valid_chunks.append({"id": chunk_id, "document": chunk, "metadata": metadata})
+                        final_metadata = {
+                            "source": rel_path_str,
+                            "chunk_index": i,
+                            **file_metadata,
+                            **chunk_data['metadata']
+                        }
+                        valid_chunks.append({"id": chunk_id, "document": chunk_text, "metadata": final_metadata})
                 
                 if valid_chunks:
                     total_chunks_to_embed.extend(valid_chunks)
@@ -299,7 +328,6 @@ class Indexer:
 
         logger.info("Total valid chunks to process", count=len(total_chunks_to_embed))  
 
-        # --- Batch processing loop with a single, pre-selected provider ---
         for i in range(0, len(total_chunks_to_embed), EMBEDDING_BATCH_SIZE):
             batch = total_chunks_to_embed[i:i+EMBEDDING_BATCH_SIZE]
             batch_texts = [item['document'] for item in batch]
@@ -309,7 +337,6 @@ class Indexer:
             try:
                 embeddings = self.active_provider.get_embeddings(batch_texts)
                 if not embeddings:
-                    # This is a hard failure. Halt the entire run.
                     raise RuntimeError(f"Provider '{self.active_provider.provider_name}' returned no embeddings for batch starting with chunk '{batch[0]['id']}'.")
 
                 self.collection.upsert(
@@ -328,7 +355,6 @@ class Indexer:
                     batch_start_id=batch[0]['id'],
                     error=str(e)
                 )
-                # Re-raise to stop the entire indexing process immediately.
                 raise
 
         self._save_state()
@@ -351,7 +377,7 @@ class Indexer:
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
             "embedding_provider": self.active_provider.provider_name,
             "embedding_model": self.active_provider.model_name,
-            "chroma_collection_name": self.collection_name  # <-- ADD THIS LINE
+            "chroma_collection_name": self.collection_name
         }
         try:
             manifest_path.write_text(json.dumps(manifest_data, indent=2))
@@ -373,7 +399,6 @@ def main():
     )
     args = parser.parse_args()
     
-    # keep the path relative.
     project_path = Path(args.directory)
 
     if not project_path.is_dir():
