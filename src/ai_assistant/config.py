@@ -110,14 +110,17 @@ class OracleCloudConfig(BaseModel):
     
 class RAGConfig(BaseModel):
     """Configuration for the RAG subsystem."""
+    # Primary configuration items.
+    # They should be set via environment variables in the project's .env file.
     librarian_url: Optional[str] = Field(
         None, 
-        description="URL of the centralized Librarian RAG service."
+        description="URL of the centralized Librarian RAG service for the CURRENT project. Set via LIBRARIAN_URL env var."
     )
     librarian_api_key: Optional[str] = Field(
         None, 
-        description="API key for the Librarian service. Best set via env var."
+        description="API key for the Librarian service. Set via LIBRARIAN_API_KEY env var."
     )
+    
     embedding_model_name: str = 'BAAI/bge-large-en-v1.5'
     collection_name: str = Field("codebase_collection", description="Default collection name for ChromaDB.")
     chroma_server_host: Optional[str] = Field(None, description="Hostname of the ChromaDB server.")
