@@ -245,45 +245,57 @@ class Indexer:
 
     def run(self, force_reindex: bool = False):
         logger.info("Starting indexer", project_root=self.project_root, db_table=self.table_name)
-        self._setup_database_table()
-
-        if force_reindex:
-            logger.warning("Forcing re-index of all files and clearing table.")
-            self.state = {}
-            with self.engine.begin() as conn:
-                conn.execute(text(f"TRUNCATE TABLE {self.table_name};"))
-
-        current_files = {str(p.relative_to(self.project_root)): p for p in self._walk_project()}
-        indexed_files = set(self.state.keys())
-        deleted_files = indexed_files - set(current_files.keys())
         
-        if deleted_files:
-            logger.info("Found orphaned files to remove from index", count=len(deleted_files))
-            with self.engine.begin() as conn:
-                for file_path_str in deleted_files:
-                    conn.execute(text(f"DELETE FROM {self.table_name} WHERE metadata->>'source' = :file_path"), {"file_path": file_path_str})
-                    self.state.pop(file_path_str, None)
+        try:
+            self._setup_database_table()
 
-        files_to_index = []
-        for rel_path_str, file_path in current_files.items():
+            if force_reindex:
+                logger.warning("Forcing re-index of all files and clearing table.")
+                self.state = {}
+                with self.engine.begin() as conn:
+                    conn.execute(text(f"TRUNCATE TABLE {self.table_name};"))
+
+            current_files = {str(p.relative_to(self.project_root)): p for p in self._walk_project()}
+            indexed_files = set(self.state.keys())
+            deleted_files = indexed_files - set(current_files.keys())
+            
+            if deleted_files:
+                logger.info("Found orphaned files to remove from index", count=len(deleted_files))
+                with self.engine.begin() as conn:
+                    for file_path_str in deleted_files:
+                        conn.execute(text(f"DELETE FROM {self.table_name} WHERE metadata->>'source' = :file_path"), {"file_path": file_path_str})
+                        self.state.pop(file_path_str, None)
+
+            files_to_index = []
+            for rel_path_str, file_path in current_files.items():
+                try:
+                    new_hash = self._calculate_hash(file_path)
+                    if self.state.get(rel_path_str) != new_hash:
+                        files_to_index.append((file_path, new_hash))
+                except Exception as e:
+                    logger.error("Could not process file, skipping.", file=rel_path_str, error=str(e))
+            
+            if not files_to_index:
+                logger.info("No new or modified files to index. Project is up to date.")
+            else:
+                logger.info("Found new or modified files to index", count=len(files_to_index))
+                self._process_files(files_to_index)
+
+        finally:
+            # This guarantees that our artifact files are always created.
+            logger.info("Finalizing run: saving state and creating manifest.")
+            self._save_state()
+            self._create_manifest()
+            
+            # Only attempt upload if the main logic didn't crash before OCI config was checked.
             try:
-                new_hash = self._calculate_hash(file_path)
-                if self.state.get(rel_path_str) != new_hash:
-                    files_to_index.append((file_path, new_hash))
+                self._upload_artifacts_to_oci()
+                logger.info("Indexing process and artifact upload complete.")
             except Exception as e:
-                logger.error("Could not process file, skipping.", file=rel_path_str, error=str(e))
-        
-        if not files_to_index:
-            logger.info("No new or modified files to index. Project is up to date.")
-        else:
-            logger.info("Found new or modified files to index", count=len(files_to_index))
-            self._process_files(files_to_index)
-
-        self._save_state()
-        self._create_manifest()
-        self._upload_artifacts_to_oci()
-        logger.info("Indexing process complete. Manifest and state uploaded.")
-
+                logger.critical("Artifact upload failed. The CI job should fail.", error=str(e))
+                # Re-raise the exception to ensure the CI step fails.
+                raise
+            
     def _process_files(self, files_to_process: List[tuple[Path, str]]):
         chunks_by_file = defaultdict(list)
         file_hashes_to_update = {}
