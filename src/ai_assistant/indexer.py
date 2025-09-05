@@ -100,8 +100,15 @@ class Indexer:
         if not db_url:
             raise ValueError("DATABASE_URL is not configured via command-line, settings, or environment variables.")
                 
-        self.engine = create_engine(db_url)
-        
+        # --- Configure the engine for connection pooling and resilience ---
+        self.engine = create_engine(
+            db_url,
+            pool_size=5,          # Maintain a pool of 5 connections
+            max_overflow=10,      # Allow 10 more connections under heavy load
+            pool_recycle=1800,    # Recycle connections after 30 minutes (1800s)
+            pool_pre_ping=True
+        )       
+         
         if embedding_provider != "local":
             raise ValueError("FATAL: The indexer only supports 'local' embedding provider for production RAG.")
         
