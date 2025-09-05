@@ -408,14 +408,17 @@ def main():
     parser.add_argument("directory", nargs="?", default=".", help="The project directory to index.")
     parser.add_argument("--force-reindex", action="store_true", help="Force re-indexing of all files.")
     parser.add_argument("--branch", help="The git branch being indexed (for CI/CD). Overrides local git detection.")
+    parser.add_argument(
+        "--database-url",
+        help="The PostgreSQL connection URL. Overrides any value from config files or .env."
+    )
     args = parser.parse_args()
     
     try:
         indexer = Indexer(
-            Path(args.directory), 
+            project_root=Path(args.directory), 
             branch_override=args.branch,
-            # Pass the command-line arg. It will be None if not provided.
-            database_url_override=args.database_url 
+            database_url_override=args.database_url # Use the parsed arg here
         )
         indexer.run(force_reindex=args.force_reindex)
     except (ValueError, RuntimeError) as e:
