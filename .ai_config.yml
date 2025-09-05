@@ -5,6 +5,9 @@ general:
   # Remember to add 'my_custom_sessions/' to your .gitignore file.
   sessions_directory: "my_custom_sessions"
 
+  # This is the most powerful feature for project-specific work.
+  # These files will be automatically attached to EVERY prompt you run
+  # from within this project directory.
   auto_inject_files:
     - "PROJECT_BLUEPRINT.md"
     - "AGENTS.md"
