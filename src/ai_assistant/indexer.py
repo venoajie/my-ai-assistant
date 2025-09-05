@@ -210,42 +210,67 @@ class Indexer:
         return metadata
 
     def _chunk_file(self, text: str, file_path: Path) -> List[Dict[str, Any]]:
-        """Chunks a file's content, using AST for Python and fallback for others."""
+        """
+        Chunks a file's content, using a robust AST walker for Python 
+        and a fallback for other languages.
+        """
         chunks_with_metadata = []
         
         if file_path.suffix.lower() == '.py':
             try:
                 tree = ast.parse(text)
-                # Process only top-level function and class definitions
-                for node in tree.body:
-                    if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-                        chunk_text = ast.get_source_segment(text, node)
-                        if chunk_text:
+                source_lines = text.splitlines()
+
+                # Use ast.walk to find ALL function and class definitions, not just top-level ones.
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                        # ast.get_source_segment is good but can fail. A manual slice is more robust.
+                        start_line = node.lineno - 1
+                        end_line = node.end_lineno
+                        
+                        # Ensure we don't go out of bounds
+                        if end_line is None or end_line > len(source_lines):
+                            # Find the end of the node by walking its children
+                            end_line = max((child.end_lineno for child in ast.walk(node) if hasattr(child, 'end_lineno') and child.end_lineno is not None), default=start_line + 1)
+
+                        chunk_text = "\n".join(source_lines[start_line:end_line])
+                        
+                        if chunk_text and self._is_chunk_valid(chunk_text):
+                            entity_type = "function"
+                            if isinstance(node, ast.ClassDef):
+                                entity_type = "class"
+                            
                             chunks_with_metadata.append({
                                 "text": chunk_text,
                                 "metadata": {
-                                    "entity_type": "function" if isinstance(node, ast.FunctionDef) else "class",
-                                    "name": node.name
+                                    "entity_type": entity_type,
+                                    "name": node.name,
+                                    "start_line": node.lineno,
+                                    "end_line": end_line
                                 }
                             })
-                # If no functions/classes found, or if parsing fails, the whole file is one chunk.
+                
                 if not chunks_with_metadata:
-                    raise SyntaxError("No top-level entities found, using fallback.")
+                    # If after walking the whole tree, we find nothing, then use the fallback.
+                    raise SyntaxError("No functions or classes found in AST, using file-level fallback.")
+
             except (SyntaxError, ValueError) as e:
-                logger.debug("AST processing failed or found no entities, using file-level fallback", file=str(file_path), reason=str(e))
+                logger.debug("AST processing failed, using file-level fallback", file=str(file_path), reason=str(e))
+                # Fallback for files that are not valid Python or have no functions/classes
                 chunks_with_metadata = [{"text": text, "metadata": {"entity_type": "file", "name": file_path.name}}]
         else:
-            # Fallback for non-python or simple text-based splitting
+            # Fallback for non-python files (unchanged)
             chunk_size, overlap = 1000, 200
             simple_chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size - overlap)]
             for chunk_text in simple_chunks:
-                chunks_with_metadata.append({
-                    "text": chunk_text,
-                    "metadata": {"entity_type": "file", "name": file_path.name}
-                })
+                if self._is_chunk_valid(chunk_text):
+                    chunks_with_metadata.append({
+                        "text": chunk_text,
+                        "metadata": {"entity_type": "file", "name": file_path.name}
+                    })
                 
         return chunks_with_metadata
-
+    
     def run(self, force_reindex: bool = False):
         logger.info("Starting indexer for project", project_root=self.project_root, active_provider=self.active_provider.provider_name)
         
