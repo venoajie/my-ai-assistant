@@ -134,11 +134,6 @@ jobs:
 
       - name: Run Indexer
         id: indexer_run
-        run: |
-          set -o pipefail
-          
-      - name: Run Indexer
-        id: indexer_run
         # --- FIX: Pass the secret via a step-level environment variable ---
         # This is the safest way to handle secrets with special characters.
         env:
@@ -159,7 +154,7 @@ jobs:
             --branch "${{ env.BRANCH_NAME }}" \
             --database-url "$DB_URL_SECRET" \
             $INDEXER_ARGS 2>&1 | tee indexer_run.log
-            
+
       - name: Sanity Check Indexing Results
         if: steps.indexer_run.outcome == 'success'
         run: |
