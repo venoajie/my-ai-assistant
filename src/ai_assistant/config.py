@@ -112,9 +112,17 @@ class RAGConfig(BaseModel):
     """Configuration for the RAG subsystem."""
     # Primary configuration items.
     # They should be set via environment variables in the project's .env file.
+    database_url: Optional[str] = Field(
+        None, 
+        description="Connection URL for the central PostgreSQL RAG database. Set via DATABASE_URL env var."
+    )    
     librarian_url: Optional[str] = Field(
         None, 
         description="URL of the centralized Librarian RAG service for the CURRENT project. Set via LIBRARIAN_URL env var."
+    )
+    librarian_api_key: Optional[str] = Field(
+        None, 
+        description="API key for the Librarian service. Set via LIBRARIAN_API_KEY env var."
     )
     librarian_api_key: Optional[str] = Field(
         None, 
