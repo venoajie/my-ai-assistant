@@ -256,7 +256,7 @@ The Producer (`ai-index`) is responsible for writing the following critical meta
 
 The Consumer (Librarian) **MUST** read these values from the manifest upon startup and use them to configure its runtime behavior.
 
-### 10.5. Data Isolation in the Central Database (NEW)
+### 10.5. Data Isolation in the Central Database
 To support multiple projects concurrently, data isolation is mandatory.
 
 -   **Table Naming Convention:** The `ai-index` script **MUST** generate a unique table name for each project and each branch. The canonical naming scheme is: `<base_collection_name>_<sanitized_project_name>_<sanitized_branch_name>`.
