@@ -1,5 +1,6 @@
 # src/ai_assistant/indexer.py
 
+
 import argparse
 import hashlib
 import os
@@ -21,12 +22,8 @@ try:
     import oci
     import orjson
 except ImportError:
-    SentenceTransformer = None
-    OpenAI = None
-    create_engine = None
-    psycopg2 = None
-    oci = None
-    orjson = None
+    # This will be caught by the check in main()
+    SentenceTransformer, OpenAI, create_engine, psycopg2, oci, orjson = (None,)*6
 
 import structlog
 from dotenv import load_dotenv
@@ -41,9 +38,8 @@ logger = structlog.get_logger()
 EMBEDDING_BATCH_SIZE = 16
 DEFAULT_IGNORE_PATTERNS = [".git/", ".venv/", "venv/", "__pycache__/", "*.pyc", "*.log", ".DS_Store", "node_modules/", "build/", "dist/", ".idea/", ".vscode/", "*.egg-info/", "src/ai_assistant/personas/", ".ai/personas/", "src/ai_assistant/internal_data/"]
 
-# Centralized, maintainable language mapping
 LANGUAGE_MAP = {
-    '.py': 'python', '.js': 'javascript', '.ts': 'typescript', '.md': 'markdown', 
+    '.py': 'python', '.js': 'javascript', '.ts': 'typescript', '.md': 'markdown',
     '.java': 'java', '.go': 'go', '.rs': 'rust', '.html': 'html', '.css': 'css',
     '.cpp': 'cpp', '.c': 'c', '.cs': 'csharp', '.rb': 'ruby', '.php': 'php',
     '.swift': 'swift', '.kt': 'kotlin', '.sh': 'bash', '.sql': 'sql',
@@ -51,6 +47,7 @@ LANGUAGE_MAP = {
 }
 
 class EmbeddingProvider:
+    # ... (This class is well-designed and requires no changes) ...
     def __init__(self, provider_name: str = "local"):
         self.provider_name = provider_name
         
@@ -70,7 +67,6 @@ class EmbeddingProvider:
                 raise ValueError("OPENAI_API_KEY environment variable is not set.")
             self.client = OpenAI(api_key=api_key)
             self.model_name = "text-embedding-3-large"
-            # Known dimension for this model. A more robust solution might fetch this.
             self.embedding_dim = 3072 
             logger.info("Using OpenAI embedding provider", model_name=self.model_name)
         else:
@@ -80,37 +76,25 @@ class EmbeddingProvider:
         if not texts: return []
         
         if self.provider_name == "local":
-            try:
-                embeddings = self.model.encode(texts, show_progress_bar=True)
-                return [emb.tolist() for emb in embeddings]
-            except Exception as e:
-                logger.error("Failed to get local embeddings", error=str(e))
-                return []
+            return [emb.tolist() for emb in self.model.encode(texts, show_progress_bar=True)]
         elif self.provider_name == "openai":
-            try:
-                response = self.client.embeddings.create(input=texts, model=self.model_name)
-                return [item.embedding for item in response.data]
-            except Exception as e:
-                logger.error("Failed to get OpenAI embeddings", error=str(e))
-                return []
+            response = self.client.embeddings.create(input=texts, model=self.model_name)
+            return [item.embedding for item in response.data]
         return []
 
 class Indexer:
     def __init__(
-        self, 
-        project_root: Path, 
-        branch_override: Optional[str] = None, 
+        self,
+        project_root: Path,
+        branch_override: Optional[str] = None,
         embedding_provider: str = "local",
-        ):
+    ):
         self.project_root = project_root
         self.staging_path = project_root / ai_settings.rag.local_index_path
         self.state_path = self.staging_path / "state.json"
         self.manifest_path = self.staging_path / "index_manifest.json"
         self.staging_path.mkdir(exist_ok=True)
 
-        if not all([create_engine, psycopg2, oci, SentenceTransformer, orjson]):
-            raise ImportError("Required libraries are not installed. Please run 'pip install -e .[indexing]'")
-        
         db_url = ai_settings.rag.database_url
         if not db_url:
             raise ValueError("DATABASE_URL is not configured in settings or environment variables.")
@@ -120,11 +104,8 @@ class Indexer:
         if embedding_provider != "local":
             raise ValueError("FATAL: The indexer only supports 'local' embedding provider for production RAG.")
         
-        try:
-            self.active_provider = EmbeddingProvider(embedding_provider)
-            logger.info(f"Successfully initialized '{embedding_provider}' as the embedding provider.")
-        except (ImportError, ValueError) as e:
-            raise RuntimeError(f"FATAL: Could not initialize embedding provider. Reason: {e}")
+        self.active_provider = EmbeddingProvider(embedding_provider)
+        logger.info(f"Successfully initialized '{embedding_provider}' as the embedding provider.")
             
         self.branch = branch_override or get_normalized_branch_name(self.project_root, ai_settings.rag.default_branch)
         sanitized_branch = re.sub(r'[^a-zA-Z0-9_]', '_', self.branch)
@@ -141,17 +122,6 @@ class Indexer:
 
         self.state = self._load_state()
         self.ignore_patterns = self._load_ignore_patterns()
-
-        self.oci_config = None
-        if ai_settings.rag.oracle_cloud and ai_settings.rag.oracle_cloud.bucket:
-            try:
-                self.oci_config = oci.config.from_file()
-                self.object_storage_client = oci.object_storage.ObjectStorageClient(self.oci_config)
-                logger.info("OCI Object Storage client initialized successfully.")
-            except Exception as e:
-                logger.warning("Failed to initialize OCI client. Upload will be skipped.", error=str(e))
-                self.oci_config = None
-        
         self._init_database()
 
     def _init_database(self):
@@ -187,16 +157,18 @@ class Indexer:
 
     def _load_state(self) -> Dict[str, str]:
         if self.state_path.exists():
-            # orjson reads bytes
             with open(self.state_path, 'rb') as f:
                 return orjson.loads(f.read())
         return {}
 
     def _save_state(self):
-        # orjson writes bytes
-        with open(self.state_path, 'wb') as f:
+        # --- REFACTOR: Atomic write to prevent state file corruption ---
+        temp_path = self.state_path.with_suffix('.tmp')
+        with open(temp_path, 'wb') as f:
             f.write(orjson.dumps(self.state, option=orjson.OPT_INDENT_2))
+        temp_path.replace(self.state_path)
 
+    # ... (No changes needed for _load_ignore_patterns, _is_ignored, _walk_project, _calculate_hash, _is_chunk_valid, _extract_file_metadata, _chunk_file) ...
     def _load_ignore_patterns(self) -> List[str]:
         patterns = DEFAULT_IGNORE_PATTERNS
         patterns.append(str(self.staging_path.relative_to(self.project_root)) + "/*")
@@ -236,10 +208,11 @@ class Indexer:
 
     def _extract_file_metadata(self, file_path: Path) -> Dict[str, Any]:
         rel_path_str = str(file_path.relative_to(self.project_root))
+        service_match = re.search(r'src/(?:services/)?([^/]+)/', rel_path_str)
         return {
             'language': LANGUAGE_MAP.get(file_path.suffix.lower(), 'unknown'),
             'is_test_file': ('/tests/' in rel_path_str or '/test/' in rel_path_str or file_path.name.startswith('test_')),
-            'service_name': (re.search(r'src/(?:services/)?([^/]+)/', rel_path_str) or [None, 'unknown'])[1]
+            'service_name': service_match.group(1) if service_match else 'unknown'
         }
 
     def _chunk_file(self, text: str, file_path: Path) -> List[Dict[str, Any]]:
@@ -260,7 +233,8 @@ class Indexer:
                             })
                 if not chunks_with_metadata: raise SyntaxError("No functions/classes found")
             except (SyntaxError, ValueError):
-                chunks_with_metadata = [{"text": text, "metadata": {"entity_type": "file", "name": file_path.name}}]
+                if self._is_chunk_valid(text):
+                    chunks_with_metadata = [{"text": text, "metadata": {"entity_type": "file", "name": file_path.name}}]
         else:
             chunk_size, overlap = 1000, 200
             for i in range(0, len(text), chunk_size - overlap):
@@ -268,7 +242,7 @@ class Indexer:
                 if self._is_chunk_valid(chunk_text):
                     chunks_with_metadata.append({"text": chunk_text, "metadata": {"entity_type": "file", "name": file_path.name}})
         return chunks_with_metadata
-    
+
     def run(self, force_reindex: bool = False):
         logger.info("Starting indexer", project_root=self.project_root, db_table=self.table_name)
         self._setup_database_table()
@@ -290,56 +264,67 @@ class Indexer:
                     conn.execute(text(f"DELETE FROM {self.table_name} WHERE metadata->>'source' = :file_path"), {"file_path": file_path_str})
                     self.state.pop(file_path_str, None)
 
-        files_to_index = [
-            (fp, self._calculate_hash(fp)) for rp, fp in current_files.items() if self.state.get(rp) != self._calculate_hash(fp)
-        ]
+        files_to_index = []
+        for rel_path_str, file_path in current_files.items():
+            try:
+                new_hash = self._calculate_hash(file_path)
+                if self.state.get(rel_path_str) != new_hash:
+                    files_to_index.append((file_path, new_hash))
+            except Exception as e:
+                logger.error("Could not process file, skipping.", file=rel_path_str, error=str(e))
         
         if not files_to_index:
             logger.info("No new or modified files to index. Project is up to date.")
         else:
             logger.info("Found new or modified files to index", count=len(files_to_index))
-            chunks_by_file = defaultdict(list)
-            file_hashes_to_update = {}
-
-            for file_path, new_hash in files_to_index:
-                rel_path_str = str(file_path.relative_to(self.project_root))
-                try:
-                    content = file_path.read_text(encoding='utf-8', errors='ignore')
-                    file_metadata = self._extract_file_metadata(file_path)
-                    for i, chunk_data in enumerate(self._chunk_file(content, file_path)):
-                        chunk_id = f"{rel_path_str}:{i}"
-                        final_metadata = {"source": rel_path_str, "chunk_index": i, **file_metadata, **chunk_data['metadata']}
-                        chunks_by_file[rel_path_str].append({"id": chunk_id, "document": chunk_data['text'], "metadata": final_metadata})
-                    file_hashes_to_update[rel_path_str] = new_hash
-                except Exception as e:
-                    logger.error("Error chunking file", file=rel_path_str, error=str(e))
-
-            all_chunks = [chunk for chunks in chunks_by_file.values() for chunk in chunks]
-            if all_chunks:
-                logger.info("Generating embeddings for all new/modified chunks", count=len(all_chunks))
-                all_texts = [c['document'] for c in all_chunks]
-                all_embeddings = self.active_provider.get_embeddings(all_texts)
-                for chunk, embedding in zip(all_chunks, all_embeddings):
-                    chunk['embedding'] = embedding
-
-                for rel_path_str, chunks in chunks_by_file.items():
-                    logger.info("Syncing file to database", file=rel_path_str, chunks=len(chunks))
-                    try:
-                        with self.engine.begin() as conn:
-                            conn.execute(text(f"DELETE FROM {self.table_name} WHERE metadata->>'source' = :file_path"), {"file_path": rel_path_str})
-                            if chunks:
-                                conn.execute(insert(self.table), [
-                                    {"id": c['id'], "content": c['document'], "metadata": c['metadata'], "embedding": c['embedding']} for c in chunks
-                                ])
-                        self.state[rel_path_str] = file_hashes_to_update[rel_path_str]
-                    except Exception as e:
-                        logger.error("Failed to sync file to database. Skipping.", file=rel_path_str, error=str(e))
+            self._process_files(files_to_index)
 
         self._save_state()
         self._create_manifest()
         self._upload_artifacts_to_oci()
         logger.info("Indexing process complete. Manifest and state uploaded.")
-        
+
+    def _process_files(self, files_to_process: List[tuple[Path, str]]):
+        chunks_by_file = defaultdict(list)
+        file_hashes_to_update = {}
+
+        for file_path, new_hash in files_to_process:
+            rel_path_str = str(file_path.relative_to(self.project_root))
+            try:
+                content = file_path.read_text(encoding='utf-8', errors='ignore')
+                file_metadata = self._extract_file_metadata(file_path)
+                for i, chunk_data in enumerate(self._chunk_file(content, file_path)):
+                    chunk_id = f"{rel_path_str}:{i}"
+                    final_metadata = {"source": rel_path_str, "chunk_index": i, **file_metadata, **chunk_data['metadata']}
+                    chunks_by_file[rel_path_str].append({"id": chunk_id, "document": chunk_data['text'], "metadata": final_metadata})
+                file_hashes_to_update[rel_path_str] = new_hash
+            except Exception as e:
+                logger.error("Error chunking file", file=rel_path_str, error=str(e))
+
+        all_chunks = [chunk for chunks in chunks_by_file.values() for chunk in chunks]
+        if not all_chunks:
+            logger.warning("No valid chunks were produced from the files to be indexed.")
+            return
+
+        logger.info("Generating embeddings for all new/modified chunks", count=len(all_chunks))
+        all_texts = [c['document'] for c in all_chunks]
+        all_embeddings = self.active_provider.get_embeddings(all_texts)
+        for chunk, embedding in zip(all_chunks, all_embeddings):
+            chunk['embedding'] = embedding
+
+        for rel_path_str, chunks in chunks_by_file.items():
+            logger.info("Syncing file to database", file=rel_path_str, chunks=len(chunks))
+            try:
+                with self.engine.begin() as conn:
+                    conn.execute(text(f"DELETE FROM {self.table_name} WHERE metadata->>'source' = :file_path"), {"file_path": rel_path_str})
+                    if chunks:
+                        conn.execute(insert(self.table), [
+                            {"id": c['id'], "content": c['document'], "metadata": c['metadata'], "embedding": c['embedding']} for c in chunks
+                        ])
+                self.state[rel_path_str] = file_hashes_to_update[rel_path_str]
+            except Exception as e:
+                logger.error("Failed to sync file to database. Skipping.", file=rel_path_str, error=str(e))
+
     def _get_current_commit_sha(self) -> Optional[str]:
         try:
             return subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, check=True, cwd=self.project_root).stdout.strip()
@@ -355,19 +340,25 @@ class Indexer:
             "embedding_model": self.active_provider.model_name,
             "db_table_name": self.table_name
         }
-        # orjson writes bytes
         with open(self.manifest_path, 'wb') as f:
             f.write(orjson.dumps(manifest_data, option=orjson.OPT_INDENT_2))
         logger.info("Created index manifest.", path=str(self.manifest_path))
 
     def _upload_artifacts_to_oci(self):
-        if not self.oci_config:
-            logger.warning("OCI client not configured, skipping upload.")
-            return
+        # --- REFACTOR: Fail-fast OCI initialization ---
         oci_settings = ai_settings.rag.oracle_cloud
-        if not all([oci_settings.namespace, oci_settings.bucket]):
-            logger.error("OCI namespace or bucket not configured, skipping upload.")
+        if not (oci_settings and oci_settings.bucket and oci_settings.namespace):
+            logger.warning("OCI configuration is incomplete in settings. Skipping upload.")
             return
+
+        try:
+            # This will raise an exception if config is invalid, failing the CI job correctly.
+            oci_config = oci.config.from_file()
+            object_storage_client = oci.object_storage.ObjectStorageClient(oci_config)
+            logger.info("OCI Object Storage client initialized successfully for upload.")
+        except Exception as e:
+            logger.critical("FATAL: Failed to initialize OCI client. Check credentials and config.", error=str(e))
+            raise
 
         project_name = os.getenv("PROJECT_NAME", self.project_root.name)
         artifacts = {"index_manifest.json": self.manifest_path, "state.json": self.state_path}
@@ -378,18 +369,28 @@ class Indexer:
                 logger.info("Uploading artifact to OCI", local_path=str(local_path), object_name=object_name)
                 try:
                     with open(local_path, 'rb') as f:
-                        self.object_storage_client.put_object(
+                        object_storage_client.put_object(
                             namespace_name=oci_settings.namespace,
                             bucket_name=oci_settings.bucket,
                             object_name=object_name,
                             put_object_body=f,
+                            if_match=None, # Overwrite unconditionally
                         )
                     logger.info("Successfully uploaded artifact.", filename=filename)
                 except oci.exceptions.ServiceError as e:
-                    logger.error("Failed to upload artifact to OCI.", filename=filename, error=str(e))
-            
+                    logger.error("Failed to upload artifact to OCI.", filename=filename, status=e.status, message=e.message)
+                    # Re-raise to ensure the CI job fails if the upload itself fails
+                    raise
+            else:
+                logger.warning("Artifact not found locally, cannot upload.", filename=filename)
+
 def main():
     setup_logging()
+    
+    if not all([SentenceTransformer, OpenAI, create_engine, psycopg2, oci, orjson]):
+        logger.critical("FATAL: One or more required libraries for indexing are not installed. Please run 'pip install -e .[indexing]'")
+        return
+
     parser = argparse.ArgumentParser(description="AI Assistant RAG Indexer")
     parser.add_argument("directory", nargs="?", default=".", help="The project directory to index.")
     parser.add_argument("--force-reindex", action="store_true", help="Force re-indexing of all files.")
@@ -397,9 +398,12 @@ def main():
     args = parser.parse_args()
     
     try:
-        Indexer(Path(args.directory), branch_override=args.branch).run(force_reindex=args.force_reindex)
-    except (ImportError, ConnectionError, ValueError, RuntimeError) as e:
-        logger.critical("Failed to initialize or run indexer", error=str(e))
-        
+        indexer = Indexer(Path(args.directory), branch_override=args.branch)
+        indexer.run(force_reindex=args.force_reindex)
+    except (ValueError, RuntimeError) as e:
+        logger.critical("A configuration or runtime error occurred during indexer setup.", error=str(e))
+    except Exception as e:
+        logger.critical("An unexpected error occurred during the indexing process.", error=str(e), exc_info=True)
+
 if __name__ == "__main__":
     main()

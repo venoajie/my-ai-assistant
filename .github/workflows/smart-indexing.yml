@@ -93,21 +93,29 @@ jobs:
         run: |
           STAGING_DIR=".ai_rag_index"
           mkdir -p "${STAGING_DIR}"
+          STATE_FILE="${STAGING_DIR}/state.json"
+          
           echo "Attempting to download previous state.json..."
           
-          oci os object get \
+          # Attempt download. If it fails (e.g., 404), the 'oci' command will return non-zero.
+          # We capture the exit code to decide if it was successful.
+          if oci os object get \
             --namespace "${OCI_NAMESPACE}" \
             --bucket-name "${OCI_BUCKET}" \
             --name "indexes/${PROJECT_NAME}/${BRANCH_NAME}/latest/state.json" \
-            --file "${STAGING_DIR}/state.json" \
-            --auth api_key || echo "No previous state.json found. A full re-index will be performed."
-
-          if [ -f "${STAGING_DIR}/state.json" ]; then
-            echo "✅ state.json found. Incremental indexing is possible."
+            --file "${STATE_FILE}" \
+            --auth api_key; then
+            
+            echo "✅ Previous state.json downloaded successfully."
             echo "state_exists=true" >> "$GITHUB_OUTPUT"
           else
+            # OCI command failed (e.g., 404). This is expected for a new index.
+            echo "No previous state.json found or download failed. A full re-index will be performed."
             echo "state_exists=false" >> "$GITHUB_OUTPUT"
+            # Ensure the file is not present if download failed
+            rm -f "${STATE_FILE}"
           fi
+        shell: /usr/bin/bash -e {0}
 
       - name: Determine Indexing Mode
         id: mode
