@@ -20,6 +20,11 @@ rag:
   
   # The number of final context chunks to request from the Librarian.
   rerank_top_n: 5
+  
+  oracle_cloud:
+    namespace: ${OCI_NAMESPACE}
+    bucket: ${OCI_BUCKET}
+    region: ${OCI_REGION}
 
 tools:
   shell:
