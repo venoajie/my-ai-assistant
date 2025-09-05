@@ -28,15 +28,29 @@ For teams using the [Codebase-Aware RAG Workflow](./rag_workflow.md), this file 
 
 rag:
   # The URL of your deployed Librarian service.
-  librarian_url: "http://your-librarian-service-host:8000"
+  librarian_url: ${LIBRARIAN_API_URL}
 
   # The API key for authenticating with the Librarian service.
-  # It is HIGHLY recommended to set this via the LIBRARIAN_API_KEY environment variable
-  # instead of committing it to the file.
   librarian_api_key: ${LIBRARIAN_API_KEY}
 
-  # The number of final context chunks to request from the Librarian.
-  rerank_top_n: 5
+  
+### 2. Configuring the RAG Indexer (for CI/CD)
+
+For projects that are being indexed, this file tells the `ai-index` command how to connect to the central database and cloud storage. This configuration is used by the CI/CD pipeline.
+
+```yaml
+# .ai_config.yml (for an indexed project)
+
+rag:
+  # The connection URL for the central PostgreSQL database.
+  database_url: ${DATABASE_URL}
+
+  # Configuration for OCI Object Storage where manifests are stored.
+  oracle_cloud:
+    namespace: ${OCI_NAMESPACE}
+    bucket: ${OCI_BUCKET}
+    region: ${OCI_REGION}
+
 ```
 
 ### 2. Automating Context with `auto_inject_files`

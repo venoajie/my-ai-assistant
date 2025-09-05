@@ -43,7 +43,7 @@ Git can automatically change line endings (LF vs. CRLF). This causes the SHA256 
 
 ## Method 1: Standard User Installation (Recommended)
 
-This method is for developers who want to use the AI Assistant on their own projects. It installs the tool directly from its Git repository into your current environment.
+This method is for developers who want to use the AI Assistant on their own projects. It installs the lightweight "client" version of the tool. This is all you need to run prompts and connect to a central Librarian RAG service.
 
 **Step 1: Activate Your Project's Virtual Environment**
 ```bash
@@ -56,21 +56,19 @@ source .venv/bin/activate
 ```
 
 **Step 2: Install the Assistant**
-This command uses the modern, PEP 508 compliant syntax to install the lightweight "client" version of the tool. This is all you need to run prompts and connect to a central Librarian RAG service.
-
 ```bash
 # Make sure your virtual environment is active!
 pip install "my-ai-assistant[client]@git+https://github.com/venoajie/my-ai-assistant.git@develop"
 ```
-The `ai`, `ai-execute`, and `ai-index` commands are now available as long as this virtual environment is active.
+The `ai` and `ai-execute` commands are now available.
 
 ---
 
 ## Method 2: Contributor Installation
 
-This method is for developers who want to contribute to the AI Assistant itself. It requires cloning the repository locally.
+This method is for developers contributing to the AI Assistant itself, or for setting up a CI/CD environment that needs to run the **`ai-index`** command.
 
-**Step 1: Clone the Repository**
+**Step 1: Clone the Repository (for local development)**
 ```bash
 git clone https://github.com/venoajie/my-ai-assistant.git
 cd my-ai-assistant
@@ -79,11 +77,12 @@ cd my-ai-assistant
 **Step 2: Create a Virtual Environment and Install**
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .env/bin/activate
 
-# Install in editable mode with all dependencies for testing and development
+# Install in editable mode with all dependencies for indexing and testing
 pip install -e ".[indexing,test]"
 ```
+This installs all dependencies, including `torch`, `sqlalchemy`, `psycopg2-binary`, `pgvector`, and `oci`.
 
 ---
 
@@ -118,7 +117,7 @@ ai --version
 
 ## Method 3: Project Bootstrap (Automated Setup)
 
-The fastest way to configure your project is to use the provided `Makefile`. This will interactively prompt you for necessary details and create all the required configuration files for you, perfectly setting up the secure two-file model.
+The fastest way to configure your project for **RAG indexing** is to use the provided `Makefile`. This will create all the required configuration files for you.
 
 1.  **Copy the Makefile:** Copy the `Makefile` from the AI Assistant repository into the root of your project.
 2.  **Run the Setup Command:**
@@ -128,9 +127,8 @@ The fastest way to configure your project is to use the provided `Makefile`. Thi
     ```
 
 This command will:
-*   Ask for your project name and the URL for its dedicated Librarian service.
-*   Create a `.ai_config.yml` file that references the environment variables.
-*   Create a template `.env` file for you to fill in with your secrets (like `LIBRARIAN_API_KEY`).
-*   Create a `.gitignore` entry to ensure the `.env` file is not committed.
+*   Ask for your project name.
+*   Create a `.ai_config.yml` file that references the necessary environment variables (`DATABASE_URL`, `OCI_...`).
+*   Create a `.gitignore` entry to ensure your local `.env` file is not committed.
 *   Create a `.aiignore` file to control what gets indexed.
-*   Create a `.github/workflows/smart-indexing.yml` file tailored for your project.
+*   Create a template `.github/workflows/smart-indexing.yml` file for you to adapt.
