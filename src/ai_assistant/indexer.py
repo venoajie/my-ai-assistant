@@ -88,6 +88,7 @@ class Indexer:
         project_root: Path,
         branch_override: Optional[str] = None,
         embedding_provider: str = "local",
+        database_url_override: Optional[str] = None,
     ):
         self.project_root = project_root
         self.staging_path = project_root / ai_settings.rag.local_index_path
@@ -95,10 +96,10 @@ class Indexer:
         self.manifest_path = self.staging_path / "index_manifest.json"
         self.staging_path.mkdir(exist_ok=True)
 
-        db_url = ai_settings.rag.database_url
+        db_url = database_url_override or ai_settings.rag.database_url
         if not db_url:
-            raise ValueError("DATABASE_URL is not configured in settings or environment variables.")
-        
+            raise ValueError("DATABASE_URL is not configured via command-line, settings, or environment variables.")
+                
         self.engine = create_engine(db_url)
         
         if embedding_provider != "local":
@@ -410,12 +411,17 @@ def main():
     args = parser.parse_args()
     
     try:
-        indexer = Indexer(Path(args.directory), branch_override=args.branch)
+        indexer = Indexer(
+            Path(args.directory), 
+            branch_override=args.branch,
+            # Pass the command-line arg. It will be None if not provided.
+            database_url_override=args.database_url 
+        )
         indexer.run(force_reindex=args.force_reindex)
     except (ValueError, RuntimeError) as e:
         logger.critical("A configuration or runtime error occurred during indexer setup.", error=str(e))
     except Exception as e:
         logger.critical("An unexpected error occurred during the indexing process.", error=str(e), exc_info=True)
-
+        
 if __name__ == "__main__":
     main()

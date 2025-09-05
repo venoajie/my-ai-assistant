@@ -135,9 +135,8 @@ jobs:
       - name: Run Indexer
         id: indexer_run
         run: |
-          # --- Ensure that a failure in the python script fails the entire step ---
           set -o pipefail
-
+          
           INDEXER_ARGS=""
           if [[ "${{ steps.mode.outputs.mode }}" == "full" ]]; then
             INDEXER_ARGS="--force-reindex"
@@ -146,8 +145,13 @@ jobs:
             echo "::notice::Starting indexer in DELTA (incremental) mode."
           fi
           
-          python -m ai_assistant.indexer . --branch "${{ env.BRANCH_NAME }}" $INDEXER_ARGS 2>&1 | tee indexer_run.log
-          
+          # --- Pass the DATABASE_URL secret directly as a command-line argument ---
+          # This is the most reliable method and bypasses any shell environment issues.
+          python -m ai_assistant.indexer . \
+            --branch "${{ env.BRANCH_NAME }}" \
+            --database-url "${{ secrets.DATABASE_URL }}" \
+            $INDEXER_ARGS 2>&1 | tee indexer_run.log
+
       - name: Sanity Check Indexing Results
         if: steps.indexer_run.outcome == 'success'
         run: |
