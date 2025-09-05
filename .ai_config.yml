@@ -10,10 +10,12 @@ general:
     - "AGENTS.md"
 
 rag:
+  # Explicitly load the DATABASE_URL from the environment ---
+  # This ensures the YAML merge doesn't discard the value.
+  database_url: ${DATABASE_URL}
+
   # Reference the LIBRARIAN_API_URL from your .env file
   librarian_url: ${LIBRARIAN_API_URL}
-
-  # Reference the LIBRARIAN_API_KEY from your .env file
   librarian_api_key: ${LIBRARIAN_API_KEY}
   
   # The number of final context chunks to request from the Librarian.
