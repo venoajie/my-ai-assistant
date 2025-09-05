@@ -108,9 +108,16 @@ class Indexer:
         self.active_provider = EmbeddingProvider(embedding_provider)
         logger.info(f"Successfully initialized '{embedding_provider}' as the embedding provider.")
             
+        # --- Get the project name from the environment, default to repo name ---
+        project_name = os.getenv("PROJECT_NAME", self.project_root.name)
+        sanitized_project = re.sub(r'[^a-zA-Z0-9_]', '_', project_name)
+
         self.branch = branch_override or get_normalized_branch_name(self.project_root, ai_settings.rag.default_branch)
         sanitized_branch = re.sub(r'[^a-zA-Z0-9_]', '_', self.branch)
-        self.table_name = f"{ai_settings.rag.collection_name}_{sanitized_branch}"
+        
+        # --- Make the table name unique per project AND per branch ---
+        self.table_name = f"{ai_settings.rag.collection_name}_{sanitized_project}_{sanitized_branch}"
+        
         logger.info("Indexer targeting database table", table_name=self.table_name)
 
         self.table = table(
