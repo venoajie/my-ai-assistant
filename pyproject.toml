@@ -8,16 +8,17 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
       "aiohttp==3.12.7",
-      "pyyaml==6.0.2",
-      "pydantic>=2.8.0",
-      "structlog==25.4 ",
+      "click==8.0.4",
+      "google-generativeai>=0.8", 
       "instructor==1.10.0",
       "openai==1.101.0",    
-      "google-generativeai>=0.8", 
-      "tiktoken==0.11.0",
-      "python-dotenv==1.1.1",
       "protobuf<6.0",
-      "click==8.0.4",
+      "pyyaml==6.0.2",
+      "pydantic>=2.8.0",
+      "pydantic-settings==2.3.0",
+      "python-dotenv==1.1.1",
+      "structlog==25.4 ",
+      "tiktoken==0.11.0",
       ]
 
 [build-system]
