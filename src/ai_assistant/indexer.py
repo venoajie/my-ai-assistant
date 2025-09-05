@@ -144,18 +144,31 @@ class Indexer:
                 embedding VECTOR({self.active_provider.embedding_dim})
             );
         """)
+        
         create_index_sql = text(f"""
-            CREATE INDEX IF NOT EXISTS ON {self.table_name} USING hnsw (embedding vector_cosine_ops);
+            CREATE INDEX ON {self.table_name} USING hnsw (embedding vector_cosine_ops);
         """)
+        
         try:
             with self.engine.begin() as conn:
                 conn.execute(create_table_sql)
-                conn.execute(create_index_sql)
+                # We wrap the index creation in its own try/except block
+                # to gracefully handle the case where it already exists.
+                try:
+                    conn.execute(create_index_sql)
+                    logger.info("Successfully created HNSW index.", table=self.table_name)
+                except Exception as e:
+                    # Check if the error is because the index already exists
+                    if "already exists" in str(e):
+                        logger.info("HNSW index already exists, skipping creation.", table=self.table_name)
+                    else:
+                        # If it's a different error, we should raise it
+                        raise
             logger.info("Database table and HNSW index are ready.", table=self.table_name)
         except Exception as e:
             logger.critical("Failed to create database table or index.", table=self.table_name, error=str(e))
             raise
-
+        
     def _load_state(self) -> Dict[str, str]:
         if self.state_path.exists():
             with open(self.state_path, 'rb') as f:
