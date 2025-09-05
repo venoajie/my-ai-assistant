@@ -45,12 +45,15 @@ test = [
 
 # For the production/indexing environment, which requires heavy ML libraries.
 indexing = [
-    "chromadb==1.0.20",
     "sentence-transformers==5.1.0",
     "torch==2.8.0",
     "oci-cli",
     "oci",
-]
+    "sqlalchemy==2.0.43",
+    "psycopg2-binary==2.9.10",
+    "pgvector==0.4.1",
+    "orjson==3.11.3",
+    ]
 
 # The default client installation is now free of ML dependencies.
 client = []
