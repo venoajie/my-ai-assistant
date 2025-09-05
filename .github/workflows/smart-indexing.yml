@@ -137,6 +137,15 @@ jobs:
         run: |
           set -o pipefail
           
+      - name: Run Indexer
+        id: indexer_run
+        # --- FIX: Pass the secret via a step-level environment variable ---
+        # This is the safest way to handle secrets with special characters.
+        env:
+          DB_URL_SECRET: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -o pipefail
+          
           INDEXER_ARGS=""
           if [[ "${{ steps.mode.outputs.mode }}" == "full" ]]; then
             INDEXER_ARGS="--force-reindex"
@@ -145,13 +154,12 @@ jobs:
             echo "::notice::Starting indexer in DELTA (incremental) mode."
           fi
           
-          # --- Pass the DATABASE_URL secret directly as a command-line argument ---
-          # This is the most reliable method and bypasses any shell environment issues.
+          # The shell now passes the variable without interpreting its content.
           python -m ai_assistant.indexer . \
             --branch "${{ env.BRANCH_NAME }}" \
-            --database-url "${{ secrets.DATABASE_URL }}" \
+            --database-url "$DB_URL_SECRET" \
             $INDEXER_ARGS 2>&1 | tee indexer_run.log
-
+            
       - name: Sanity Check Indexing Results
         if: steps.indexer_run.outcome == 'success'
         run: |
