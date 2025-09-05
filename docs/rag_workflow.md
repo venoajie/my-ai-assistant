@@ -1,4 +1,3 @@
-
 # Guide: Setting Up Codebase-Aware Context (RAG)
 
 The AI Assistant's Retrieval-Augmented Generation (RAG) pipeline is its most powerful feature for working with large, complex projects. It transforms the assistant from a tool that knows about a few manually attached files into an expert that is aware of your **entire codebase**.
@@ -15,51 +14,65 @@ RAG solves this by creating a searchable **knowledge base** of your project. Whe
 
 ## How It Works: The Three-Tiered Ecosystem
 
-The RAG pipeline is a distributed system designed for a robust team environment. It consists of three decoupled components:
+The RAG pipeline is a distributed system designed for a robust team environment. It consists of three decoupled components, with a dedicated set of services for **each project**.
 
 1.  **The Producer (Automated via CI/CD):**
-    This is the "heavy lifting" phase, handled by an automated process like GitHub Actions. On every `git push`, the CI/CD system checks out the code, scans it, and creates a vector database—the "index"—of your project for that specific branch. This index is then packaged and uploaded to a shared cloud object store (like OCI Object Storage).
+    This is the "heavy lifting" phase, handled by an automated process like GitHub Actions in **your project's repository**. On every `git push`, the CI/CD system creates a vector index of your project, tagged with the **project name** and **branch name**. This index is then uploaded to a shared cloud object store.
 
-2.  **The Consumer (The Librarian Service):**
-    This is a centralized, long-running API service that you deploy. On startup, it downloads the latest index for a specific branch from the cloud, loads it into memory, and exposes a secure API endpoint for querying it. It is the single source of truth for codebase context.
+2.  **The Consumer (A Dedicated Librarian Service):**
+    For each project (e.g., `trading-app`), a dedicated, long-running **Librarian API service** is deployed. It is configured to download and serve *only* the index for its specific project and branch. This ensures strict data isolation between projects.
 
 3.  **The Client (Your `ai` Command):**
-    This is the lightweight phase that happens on your machine. When you run the `ai` command, the RAG plugin no longer performs heavy local processing. Instead, it securely connects to the Librarian service, sends your query, and receives the most relevant context snippets. This context is then injected into your prompt.
+    This is the lightweight phase on your machine. When you run the `ai` command from within your project directory, it reads your local configuration to find the URL of the correct Librarian service. It then securely connects, sends your query, and receives relevant context snippets **only from your project's knowledge base**.
 
-This architecture ensures that all team members get fast, consistent, and up-to-date context without needing powerful local machines or managing local indexes.
+This architecture ensures that all team members get fast, consistent, and correctly-scoped context for the project they are actively working on.
 
 ---
 
 ## Setup Guide: Making Your Project RAG-Aware
 
-Follow these steps to configure your project to use the RAG pipeline.
+Follow these steps to configure your project to use its dedicated RAG pipeline.
 
-### Prerequisite: A Deployed Librarian Service
+### Prerequisite: A Deployed Librarian Service for Your Project
 
-Before your team can use the RAG workflow, an administrator must deploy an instance of the **Librarian RAG Service**. The service's URL and an API key must be distributed to the team.
+Before your team can use the RAG workflow, an administrator must deploy an instance of the **Librarian RAG Service** specifically for your project (e.g., a "Librarian for trading-app"). The service's unique URL and API key must be distributed to the team.
 
-### Step 1: Configure the Client (`.ai_config.yml`)
+### Step 1: Configure the Client Environment (`.env`)
 
-Create or update the `.ai_config.yml` file in your project's root. This tells the `ai` command how to connect to the central Librarian service.
+In your project's root directory, create a `.env` file. This file is for secrets and environment-specific URLs and **must not be committed to Git**.
+
+```bash
+# .env (in your project's root, e.g., /path/to/trading-app/.env)
+
+# The URL of the Librarian service DEDICATED to this project.
+LIBRARIAN_API_URL="http://librarian-for-trading-app.com:8000"
+
+# The secret API key for THAT specific Librarian instance.
+LIBRARIAN_API_KEY="your-secret-key-goes-here"
+```
+
+### Step 2: Reference the Environment in `.ai_config.yml`
+
+Now, create or update the `.ai_config.yml` file in your project's root. This file **is committed to Git** and tells the `ai` command *how* to use the secrets from your local `.env` file.
 
 ```yaml
 # .ai_config.yml
 
 rag:
-  # The URL of your deployed Librarian service.
-  librarian_url: "http://your-librarian-service-host:8000"
+  # This tells the assistant to get the URL from the LIBRARIAN_API_URL
+  # variable in your local .env file.
+  librarian_url: ${LIBRARIAN_API_URL}
 
-  # The API key for authenticating with the Librarian service.
-  # It is HIGHLY recommended to set this via the LIBRARIAN_API_KEY environment variable
-  # instead of committing it to the file.
+  # This tells the assistant to get the API key from the LIBRARIAN_API_KEY
+  # variable in your local .env file.
   librarian_api_key: ${LIBRARIAN_API_KEY}
 
-  # --- Optional: Configure the number of results to request ---
+  # The number of final context chunks to request from the Librarian.
   max_results: 5
 ```
-Commit this file to your repository. The API key should be managed securely by each developer as an environment variable.
+This two-file system is a security best practice: the configuration is shared, but the secrets are kept local.
 
-### Step 2: Curate the Knowledge Base (`.aiignore`)
+### Step 3: Curate the Knowledge Base (`.aiignore`)
 
 To ensure the RAG index is clean and relevant, create a `.aiignore` file in your project root. This file works exactly like `.gitignore` and tells the CI/CD **Producer** which files and directories to exclude from the knowledge base.
 
@@ -83,11 +96,11 @@ build/
 /data/
 ```
 
-### Step 3: Produce the Index (CI/CD)
+### Step 4: Produce the Index (CI/CD)
 
 This step is automated. Your project's repository should be configured with a CI/CD workflow (like the provided `smart-indexing.yml`) that runs the `ai-index` command on every push. This automatically builds and uploads the fresh index that the Librarian service will consume.
 
-### Step 4: Usage
+### Step 5: Usage
 
 Once configured, using RAG is automatic and transparent. Simply run any `ai` command from within your project directory. The RAG plugin will activate, connect to the Librarian, fetch context, and add it to your prompt behind the scenes. You don't need any special flags.
 

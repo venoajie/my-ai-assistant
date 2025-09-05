@@ -118,7 +118,7 @@ ai --version
 
 ## Method 3: Project Bootstrap (Automated Setup)
 
-The fastest way to configure your project is to use the provided `Makefile`. This will interactively prompt you for necessary details and create all the required configuration files for you.
+The fastest way to configure your project is to use the provided `Makefile`. This will interactively prompt you for necessary details and create all the required configuration files for you, perfectly setting up the secure two-file model.
 
 1.  **Copy the Makefile:** Copy the `Makefile` from the AI Assistant repository into the root of your project.
 2.  **Run the Setup Command:**
@@ -128,10 +128,9 @@ The fastest way to configure your project is to use the provided `Makefile`. Thi
     ```
 
 This command will:
-*   Ask for your project name and OCI details.
-*   Create a `.ai_config.yml` file configured for the RAG workflow.
+*   Ask for your project name and the URL for its dedicated Librarian service.
+*   Create a `.ai_config.yml` file that references the environment variables.
+*   Create a template `.env` file for you to fill in with your secrets (like `LIBRARIAN_API_KEY`).
+*   Create a `.gitignore` entry to ensure the `.env` file is not committed.
 *   Create a `.aiignore` file to control what gets indexed.
-*   Create a `.github/workflows/smart-indexing.yml` file tailored for a project that uses the AI Assistant as a separate tool.
-*   Create the `.ai/personas` and `.ai/plugins` directories to encourage best practices.
-
-After running the command, your project is configured. The next step is to provide the CI/CD system with the necessary secrets.
+*   Create a `.github/workflows/smart-indexing.yml` file tailored for your project.

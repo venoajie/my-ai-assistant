@@ -1,8 +1,21 @@
-# Guide: Project-Specific Configuration (.ai_config.yml)
+# Guide: Project-Specific Configuration
 
-The `ai-assistant` becomes most powerful when it is deeply integrated with your project. The `.ai_config.yml` file is the key to this integration. By creating this file in your project's root directory, you can customize the assistant's behavior for everyone on your team.
+The `ai-assistant` uses a powerful two-file system for configuration that separates behavior from secrets.
 
-This file acts as your project's **Configuration Manifest**, telling the assistant how to behave whenever it's run from within that directory.
+### The Configuration Model: `.env` and `.ai_config.yml`
+
+1.  **`.env` (The Secrets File):**
+    -   This file lives in your project root and contains secrets, API keys, and environment-specific URLs.
+    -   It **MUST** be added to your `.gitignore` and should never be committed.
+    -   It defines the **"what" and "where"** (e.g., `LIBRARIAN_API_URL`, `OPENAI_API_KEY`).
+
+2.  **`.ai_config.yml` (The Behavior File):**
+    -   This file also lives in your project root and defines the assistant's behavior for this project.
+    -   It **SHOULD** be committed to your repository so the whole team shares the same settings.
+    -   It defines the **"how"** (e.g., `auto_inject_files`, `allowed_commands`) and **references** secrets from the `.env` file using the `${...}` syntax.
+
+This model provides a secure and flexible way to manage project-wide settings.
+
 
 ## Core Use Cases
 
