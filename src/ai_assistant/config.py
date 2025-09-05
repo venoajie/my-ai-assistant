@@ -5,6 +5,7 @@ import yaml
 from pathlib import Path
 from typing import Dict, Optional, List, Any
 from pydantic import BaseModel, Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from importlib import resources
 import structlog  
 import re 
@@ -110,24 +111,15 @@ class OracleCloudConfig(BaseModel):
     
 class RAGConfig(BaseModel):
     """Configuration for the RAG subsystem."""
+    
+    # This tells Pydantic to look for env vars without a prefix
+    model_config = SettingsConfigDict(env_prefix='', extra='ignore')
+    
     # Primary configuration items.
-    # They should be set via environment variables in the project's .env file.
-    database_url: Optional[str] = Field(
-        None, 
-        description="Connection URL for the central PostgreSQL RAG database. Set via DATABASE_URL env var."
-    )    
-    librarian_url: Optional[str] = Field(
-        None, 
-        description="URL of the centralized Librarian RAG service for the CURRENT project. Set via LIBRARIAN_URL env var."
-    )
-    librarian_api_key: Optional[str] = Field(
-        None, 
-        description="API key for the Librarian service. Set via LIBRARIAN_API_KEY env var."
-    )
-    librarian_api_key: Optional[str] = Field(
-        None, 
-        description="API key for the Librarian service. Set via LIBRARIAN_API_KEY env var."
-    )
+    database_url: Optional[str] = Field(None, alias='DATABASE_URL')
+
+    librarian_url: Optional[str] = Field(None, alias='LIBRARIAN_URL')
+    librarian_api_key: Optional[str] = Field(None, alias='LIBRARIAN_API_KEY')
     
     embedding_model_name: str = 'BAAI/bge-large-en-v1.5'
     collection_name: str = Field("codebase_collection", description="Default collection name for ChromaDB.")
@@ -152,25 +144,11 @@ class RAGConfig(BaseModel):
         description="Path for the local ChromaDB index, relative to project root.",
         )
     
-    # --- SETTINGS FOR RERANKING ---
-    enable_reranking: bool = Field(
-        False, 
-        description="Enable a second-stage reranker for more accurate RAG results."
-    )
-    reranker_model_name: str = Field(
-        'cross-encoder/ms-marco-MiniLM-L-6-v2',
-        description="The CrossEncoder model to use for reranking."
-    )
-    retrieval_n_results: int = Field(
-        25,
-        description="How many documents to initially retrieve from ChromaDB before reranking."
-    )
-    rerank_top_n: int = Field(
-        5,
-        description="How many of the top documents to return after the reranking step."
-    )
+    enable_reranking: bool = Field(False)
+    reranker_model_name: str = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
+    retrieval_n_results: int = 25
+    rerank_top_n: int = 5
 
-    # --- NEW: Add the validator to enforce the configuration contract ---
     @model_validator(mode='after')
     def validate_reranking_counts(self) -> 'RAGConfig':
         if self.enable_reranking and self.rerank_top_n > self.retrieval_n_results:
@@ -179,8 +157,6 @@ class RAGConfig(BaseModel):
                 f"'retrieval_n_results' ({self.retrieval_n_results})."
             )
         return self
-
-
 
 class ProviderConfig(BaseModel):
     api_key_env: str
