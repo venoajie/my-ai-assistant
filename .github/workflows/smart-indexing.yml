@@ -98,8 +98,6 @@ jobs:
           
           echo "Attempting to download previous state.json..."
           
-          # Attempt download. If it fails (e.g., 404), the 'oci' command will return non-zero.
-          # We capture the exit code to decide if it was successful.
           if oci os object get \
             --namespace "${OCI_NAMESPACE}" \
             --bucket-name "${OCI_BUCKET}" \
@@ -110,10 +108,8 @@ jobs:
             echo "✅ Previous state.json downloaded successfully."
             echo "state_exists=true" >> "$GITHUB_OUTPUT"
           else
-            # OCI command failed (e.g., 404). This is expected for a new index.
             echo "No previous state.json found or download failed. A full re-index will be performed."
             echo "state_exists=false" >> "$GITHUB_OUTPUT"
-            # Ensure the file is not present if download failed
             rm -f "${STATE_FILE}"
           fi
         shell: /usr/bin/bash -e {0}
@@ -132,11 +128,37 @@ jobs:
             echo "mode=full" >> $GITHUB_OUTPUT
           fi
 
+      # --- NEW: Setup SSH Tunnel to Private Database ---
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BASTION_SSH_PRIVATE_KEY }}
+
+      - name: Establish SSH Tunnel via Bastion
+        run: |
+          echo "Starting SSH tunnel in the background..."
+          # -N: Do not execute a remote command, just forward ports.
+          # -L: Forward local port 5432 to the DB's private IP and port.
+          # -f: Go into the background.
+          # -o StrictHostKeyChecking=no: Avoids host key verification prompt in CI.
+          ssh -N -f -L 5432:${{ secrets.DB_PRIVATE_IP }}:5432 ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} -o StrictHostKeyChecking=no
+          
+          echo "Waiting for tunnel to establish..."
+          sleep 5 # Give the tunnel a moment to connect
+          
+          # Verify that the local port is listening
+          if ss -lnt | grep -q ':5432'; then
+            echo "✅ SSH tunnel established successfully. Port 5432 is listening locally."
+          else
+            echo "::error::Failed to establish SSH tunnel. Local port 5432 is not listening."
+            exit 1
+          fi
+      # --- END NEW STEPS ---
+
       - name: Run Indexer
         id: indexer_run
-        # --- FIX: Pass the secret via a step-level environment variable ---
-        # This is the safest way to handle secrets with special characters.
         env:
+          # The DATABASE_URL secret now points to localhost, which the tunnel forwards.
           DB_URL_SECRET: ${{ secrets.DATABASE_URL }}
         run: |
           set -o pipefail
@@ -149,7 +171,6 @@ jobs:
             echo "::notice::Starting indexer in DELTA (incremental) mode."
           fi
           
-          # The shell now passes the variable without interpreting its content.
           python -m ai_assistant.indexer . \
             --branch "${{ env.BRANCH_NAME }}" \
             --database-url "$DB_URL_SECRET" \
