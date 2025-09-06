@@ -1,6 +1,5 @@
 # src/ai_assistant/indexer.py
 
-
 import argparse
 import hashlib
 import os
@@ -47,7 +46,7 @@ LANGUAGE_MAP = {
 }
 
 class EmbeddingProvider:
-    # ... (This class is well-designed and requires no changes) ...
+
     def __init__(self, provider_name: str = "local"):
         self.provider_name = provider_name
         
@@ -190,13 +189,12 @@ class Indexer:
         return {}
 
     def _save_state(self):
-        # --- REFACTOR: Atomic write to prevent state file corruption ---
+        # --- Atomic write to prevent state file corruption ---
         temp_path = self.state_path.with_suffix('.tmp')
         with open(temp_path, 'wb') as f:
             f.write(orjson.dumps(self.state, option=orjson.OPT_INDENT_2))
         temp_path.replace(self.state_path)
 
-    # ... (No changes needed for _load_ignore_patterns, _is_ignored, _walk_project, _calculate_hash, _is_chunk_valid, _extract_file_metadata, _chunk_file) ...
     def _load_ignore_patterns(self) -> List[str]:
         patterns = DEFAULT_IGNORE_PATTERNS
         patterns.append(str(self.staging_path.relative_to(self.project_root)) + "/*")
@@ -385,7 +383,7 @@ class Indexer:
         logger.info("Created index manifest.", path=str(self.manifest_path))
 
     def _upload_artifacts_to_oci(self):
-        # --- REFACTOR: Fail-fast OCI initialization ---
+        # --- Fail-fast OCI initialization ---
         oci_settings = ai_settings.rag.oracle_cloud
         if not (oci_settings and oci_settings.bucket and oci_settings.namespace):
             logger.warning("OCI configuration is incomplete in settings. Skipping upload.")
