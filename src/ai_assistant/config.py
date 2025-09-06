@@ -77,13 +77,11 @@ class ContextOptimizerConfig(BaseModel):
 class GitToolConfig(BaseModel):
     branch_prefix: str
 
-# --- NEW: Configuration model for the shell tool ---
 class ShellToolConfig(BaseModel):
     allowed_commands: List[str] = Field(default_factory=list)
 
 class ToolsConfig(BaseModel):
     git: GitToolConfig
-    # --- ADDED: Shell tool config is now part of the main ToolsConfig ---
     shell: ShellToolConfig
 
 class DeepSeekDiscountConfig(BaseModel):
